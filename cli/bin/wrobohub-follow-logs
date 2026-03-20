@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# Very simple for now
+journalctl -f

@@ -1,0 +1,8 @@
+#!/bin/sh
+
+(
+    cd /home/denis/src/openclaw || exit 1
+    pnpm run gateway:build
+)
+
+echo "✅ Openclaw gateway built successfully"
