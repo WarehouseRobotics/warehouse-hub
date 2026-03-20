@@ -1,0 +1,27 @@
+#!/bin/sh
+
+COMMAND="$1"
+
+case "$COMMAND" in
+  help|"")
+    echo "wrobo - WroboHub control CLI"
+    echo ""
+    echo "Usage: wrobo <command>"
+    echo ""
+    echo "Commands:"
+    echo "  help       Show this help message"
+    echo "  gateway    Restart the Openclaw gateway (wrobohub-openclaw-restart)"
+    echo "  logs       Follow live system logs (wrobohub-follow-logs)"
+    ;;
+  gateway)
+    wrobohub-openclaw-restart
+    ;;
+  logs)
+    wrobohub-follow-logs
+    ;;
+  *)
+    echo "Unknown command: $COMMAND"
+    echo "Run 'wrobo help' for usage."
+    exit 1
+    ;;
+esac

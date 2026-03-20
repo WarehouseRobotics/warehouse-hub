@@ -7,6 +7,10 @@ echo $SCRIPT_DIR
 
 echo "Linking CLI scripts to /usr/bin"
 
+echo "  Linking $SCRIPT_DIR/cli/bin/wrobo to /usr/bin/wrobo ..."
+unlink /usr/bin/wrobo
+ln -s "$SCRIPT_DIR/cli/bin/wrobo" /usr/bin/wrobo
+
 echo "  Linking $SCRIPT_DIR/cli/bin/wrobohub-follow-log to /usr/bin/wrobohub-follow-logs ..."
 unlink /usr/bin/wrobohub-follow-logs
 ln -s "$SCRIPT_DIR/cli/bin/wrobohub-follow-logs" /usr/bin/wrobohub-follow-logs
@@ -21,6 +25,7 @@ ln -s "$SCRIPT_DIR/cli/bin/wrobohub-openclaw-build" /usr/bin/wrobohub-openclaw-b
 
 echo "Done"
 echo "You can now use the following commands:"
-echo "  wrobohub-follow-logs"
-echo "  wrobohub-openclaw-restart"
-echo "  wrobohub-openclaw-build"
+echo "  wrobo - main control script"
+echo "  wrobohub-follow-logs - follow live system logs"
+echo "  wrobohub-openclaw-restart - restart the Openclaw gateway"
+echo "  wrobohub-openclaw-build - build the Openclaw gateway"
