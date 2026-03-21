@@ -13,7 +13,7 @@ We're running openclaw from source, it's located outside of the workspace, in us
 
 Rebuilding the gateway can be done via `pnpm run gateway:build` in the source folder.
 
-After rebuilding, or when not running, the gateway service can be restart with `systemctl --user restart openclaw-gateway`.
+After rebuilding, or when not running, the gateway service can be restart with a global cli command `wrobo gateway`.
 
 
 ## Extra Platform Configuration Details
