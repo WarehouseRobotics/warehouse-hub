@@ -1,4 +1,4 @@
-# File Manager App
+# File Manager App Initial Specs
 
 This app is part of our agentic CRM platform platform. The File Manager web app that allows managing files of the host system. Allows browsing up to the home folder of the user, hosting the openclaw setup and makes it easy to browse per-agent workspaces and other files used by the platform to operate.
 
@@ -8,10 +8,16 @@ Users will use it for:
 * modify some files to collaborate, when working with agents
 * expert users can will also access and edit platform configuration files
 
+For example, a user might ask to edit a file directly and the agent will send a File Manager link
+that will allow the user to collaborate on the current version of the file. It could be even a group of files from 
+different physical locations, presented as tabs.
 
 ## Main features
 
-* Reads the openclaw config (and reloads it periodically), so it is aware of agent settings
+* File browsing
+* Text/code/doc/spreadsheet file editing interface
+* Can present a group of files as tabs
+* Comments, associated with files and selected text/line numbers
 * Browsing of files
     * General
     * Per agent
@@ -25,6 +31,7 @@ Users will use it for:
     * Show bound listening network ports  
     * Show connected USB devices
 * Settings view (for managing settings from the `~/file-manager.conf` file)
+* Reads local Openclaw config (and reloads it periodically), so it is aware of agent settings
 
 ## Architecture
 
@@ -34,12 +41,29 @@ Vite React app, Typescript, Tailwind.CSS, vitest for tests.
 ## Browsing acope and access restriction
 
 
-## Forbidden Files
+## Editing functions
 
-Some special files will be protected from modification and deletion.
+TODO
 
 
-## Visual Design
+## Comments
+
+TODO
+
+
+## Dynamic Custom Artefacts
+
+Openclaw agents will be instructed to create temporary dynamic artefacts. Agents will send links to these artefacts that can be viewed as static SPA apps.
+
+## Forbidden files
+
+Some special files will be protected from modification and deletion. This can be configured in the config file. 
+
+When the user tries to edit critical config files (like the ones that control file access), additional authantication 
+will be required.
+
+
+## Visual design
 
 TODO
 
@@ -51,6 +75,13 @@ Authentication: login with the Openclaw master token from ~/.openclaw/openclaw.j
 Runs as a user scope service, via systemctl
 
 
-## File Manager App Configuration
+## File manager app configuration
 
 There should be config file in user's home dir (e.g. `~/file-manager.conf`)
+
+
+## CLI script for agentic tool calls
+
+This CLI script 
+
+TODO
