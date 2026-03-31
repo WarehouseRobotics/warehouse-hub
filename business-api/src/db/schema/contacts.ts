@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { index, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { type AnySQLiteColumn, index, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const contacts = sqliteTable(
   "contacts",
   {
     id: text("id").primaryKey(),
     slug: text("slug").notNull().unique(),
-    parentContactId: text("parent_contact_id").references(() => contacts.id),
+    parentContactId: text("parent_contact_id").references((): AnySQLiteColumn => contacts.id),
     type: text("type", { enum: ["person", "company"] }).notNull(),
     roles: text("roles").notNull(),
     displayName: text("display_name").notNull(),

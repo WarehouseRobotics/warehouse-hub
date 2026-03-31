@@ -29,14 +29,17 @@ contactsRouter.post("/", validateBody(contactInputSchema), (request, response) =
 });
 
 contactsRouter.get("/:id", (request, response) => {
-  response.json(getContact(request.params.id));
+  const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
+  response.json(getContact(id));
 });
 
 contactsRouter.patch("/:id", validateBody(contactPatchSchema), (request, response) => {
-  response.json(updateContact(request.params.id, request.body));
+  const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
+  response.json(updateContact(id, request.body));
 });
 
 contactsRouter.delete("/:id", (request, response) => {
-  softDeleteContact(request.params.id);
+  const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
+  softDeleteContact(id);
   response.status(204).send();
 });
