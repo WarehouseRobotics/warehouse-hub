@@ -5,10 +5,10 @@ CMD=$1
 
 case "$CMD" in
   build)
-    docker compose up --build -d
+    docker compose up --build
     ;;
   start)
-    docker compose up -d
+    docker compose up
     ;;
   stop)
     docker compose down
