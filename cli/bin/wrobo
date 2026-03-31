@@ -13,6 +13,9 @@ case "$COMMAND" in
     echo "  gateway    Restart the Openclaw gateway (wrobohub-openclaw-restart)"
     echo "  logs       Follow live system logs (wrobohub-follow-logs)"
     ;;
+  build)
+    wrobohub-openclaw-build
+    ;;
   gateway)
     wrobohub-openclaw-restart
     ;;
