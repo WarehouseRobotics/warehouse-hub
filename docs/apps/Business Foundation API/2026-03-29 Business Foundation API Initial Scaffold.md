@@ -41,14 +41,17 @@ Set up the Node.js/TypeScript project inside `business-api/`.
 
 **Runtime:**
 - `express` + `@types/express`
-- `better-sqlite3` + `@types/better-sqlite3`
-- `zod` for request/response validation
+- `better-sqlite3` + `@types/better-sqlite3` (underlying driver)
+- `drizzle-orm` + `drizzle-orm/better-sqlite3` for type-safe schema, queries and migrations
+- `sqlite-vec` (`@anthropic-ai/sqlite-vec` or built from `asg017/sqlite-vec`) for vector storage
+- `zod` for API request/response validation (separate from Drizzle schema — zod validates HTTP payloads, Drizzle defines DB shape)
 - `multer` for file uploads
 - `nanoid` for internal ID generation (prefixed IDs like `ct_`, `exp_`, `deal_`, etc.)
 - `dotenv`
 
 **Dev:**
 - `typescript`, `tsx` (for dev server)
+- `drizzle-kit` for migration generation and management
 - `vitest`
 - `eslint`, `prettier`
 
@@ -72,14 +75,25 @@ business-api/
       validate.ts         # zod validation middleware
       error-handler.ts    # centralized error handler
     db/
-      connection.ts       # SQLite connection singleton
-      migrate.ts          # migration runner
-      migrations/         # SQL migration files (ordered)
+      connection.ts       # SQLite connection + sqlite-vec extension loader
+      schema/             # Drizzle table definitions
+        company-card.ts
+        contacts.ts
+        documents.ts
+        expenses.ts
+        deals.ts
+        sales-invoices.ts
+        projects.ts
+        tasks.ts
+        embeddings.ts     # shared vector embedding tables
+        index.ts          # barrel export
+      seed.ts             # optional dev seed data
     lib/
       ids.ts              # prefixed nanoid generators
       slug-ids.ts         # dictionary-based word ID generator, like 'blue-jazzy-train-lake'
       errors.ts           # AppError class
       money.ts            # string-based money helpers
+      embeddings.ts       # embedding helpers: compute, store, query nearest
     routes/
       company-card.ts
       contacts.ts
@@ -117,7 +131,9 @@ business-api/
 
 ## Phase 2: Database Schema
 
-A single migration file creates all MVP tables. We use `TEXT` for money columns and prefixed string IDs. Every entity also carries a human-friendly `slug` column (see Phase 5.2).
+Tables are defined as Drizzle schema files in `src/db/schema/`. Migrations are generated with `drizzle-kit generate` and applied on startup via `drizzle-kit migrate`. We use `TEXT` for money columns and prefixed string IDs. Every entity also carries a human-friendly `slug` column (see Phase 5.2).
+
+The sqlite-vec extension is loaded at connection time to enable vector columns and nearest-neighbor queries. Embedding storage uses a dedicated virtual table (see 2.3).
 
 ### 2.1 Tables
 
@@ -232,11 +248,59 @@ Projects are always linked to an entity (company or person). On first company ca
 - `created_at`, `updated_at`
 - `deleted_at` TEXT (nullable, soft delete)
 
+### 2.2 Drizzle / zod boundary
+
+- **Drizzle schema** (`src/db/schema/*.ts`) defines the database tables, columns, types, defaults and relations. It is the source of truth for the DB shape and is used to generate migrations.
+- **Zod schemas** (`src/schemas/*.ts`) validate incoming HTTP request bodies and shape outgoing API responses. They are deliberately separate from Drizzle because the API contract does not always mirror the DB 1:1 (e.g. nested address objects in API vs flat columns in DB, JSON fields parsed into typed objects, computed fields omitted from input).
+- Services bridge the two: they accept zod-validated input, map it to Drizzle insert/update shapes, and map query results back to API response shapes.
+
+### 2.3 Vector embeddings (sqlite-vec)
+
+Entities that benefit from semantic search get vector embeddings. For this iteration, the following entities are embedding-enabled:
+
+- **company_card** — find the company by natural-language description
+- **contacts** — semantic search over contact names, notes, roles
+- **documents** — search over OCR text / document metadata (prepared for future OCR pipeline)
+- **deals** — search deals by title, description, line item content
+- **tasks** — search tasks by title and description
+
+**entity_embeddings** (sqlite-vec virtual table + metadata)
+
+Metadata table (regular):
+- `id` TEXT PK (prefix `emb_`)
+- `entity_type` TEXT (`company_card` | `contact` | `document` | `deal` | `task`)
+- `entity_id` TEXT (FK to the source entity)
+- `content_hash` TEXT (hash of the text that was embedded, to skip re-embedding unchanged content)
+- `model` TEXT (embedding model identifier, e.g. `text-embedding-3-small`)
+- `created_at`
+
+UNIQUE constraint on (`entity_type`, `entity_id`).
+
+Vector table (sqlite-vec virtual table):
+- `rowid` INTEGER (matches the rowid of the metadata table)
+- `embedding` FLOAT[N] (dimension depends on model; scaffold for 1536-dim for now)
+
+Created via:
+```sql
+CREATE VIRTUAL TABLE vec_embeddings USING vec0(
+  rowid INTEGER PRIMARY KEY,
+  embedding float[1536]
+);
+```
+
+**Embedding workflow for this iteration:**
+
+For now we'll use **stub embeddings**. The embedding pipeline is scaffolded but not fully automated yet:
+1. A helper in `lib/embeddings.ts` exposes `computeEmbeddingText(entityType, entity)` which builds a plain-text representation for each entity type (e.g. for a contact: `"{displayName} {legalName} {roles} {notes}"`).
+2. For now we just use stub emedding vectors. A service function `upsertEmbedding(entityType, entityId, text)` hashes the text, calls an embedding provider (stubbed/configurable), and inserts into both tables.
+3. A query helper `findSimilar(entityType, queryEmbedding, limit)` runs a sqlite-vec nearest-neighbor search filtered by entity type.
+4. For this iteration, embedding generation can be triggered manually via CLI (`wrobo biz embeddings sync`) or as a future background job. Services should call `upsertEmbedding` on create/update so the pipeline is wired but the actual embedding provider can be swapped in later.
+
 ---
 
 ## Phase 3: API Routes and Services
 
-Each resource gets a route file, a zod schema file, and a service file. Services talk to SQLite directly via `better-sqlite3` prepared statements. All endpoints require API key authentication (see Phase 5.6). All list queries exclude soft-deleted records by default.
+Each resource gets a route file, a zod schema file, and a service file. Services use Drizzle ORM for all database operations (queries, inserts, updates). Zod schemas validate HTTP input/output at the route layer. All endpoints require API key authentication (see Phase 5.6). All list queries exclude soft-deleted records by default.
 
 ### 3.1 Company Card
 
@@ -430,8 +494,8 @@ The dictionary should contain ~200-300 adjectives and ~200-300 nouns, providing 
 
 ### 6.1 Test strategy
 
-- Use Vitest with an in-memory SQLite database
-- Each test file gets a fresh database with migrations applied
+- Use Vitest with an in-memory SQLite database (with sqlite-vec loaded)
+- Each test file gets a fresh database with Drizzle migrations applied
 - Focus on service-level tests first (business logic), then route-level integration tests
 
 ### 6.2 Priority test cases
@@ -445,6 +509,7 @@ The dictionary should contain ~200-300 adjectives and ~200-300 nouns, providing 
 7. **Slug IDs:** uniqueness within table, collision retry, lookup by slug
 8. **Auth:** reject missing/invalid API key, accept valid key
 9. **Soft delete:** verify deleted records excluded from lists, verify GET-by-id returns 404 for deleted records
+10. **Embeddings:** text builder produces expected content per entity type, upsert stores to vec table, nearest-neighbor returns correct matches
 
 ---
 
@@ -455,7 +520,7 @@ The recommended order minimizes blocked dependencies:
 | Step | What | Depends on |
 |------|------|------------|
 | 1 | Project bootstrap (Phase 1) | nothing |
-| 2 | Database schema + migration runner (Phase 2) | Step 1 |
+| 2 | Drizzle schema + sqlite-vec connection + initial migration (Phase 2) | Step 1 |
 | 3 | Shared infra: IDs, slug IDs, errors, money, auth, validation middleware (Phase 5) | Step 1 |
 | 4 | Company card service + route + test | Steps 2-3 |
 | 5 | Contacts service + route + test (incl. nesting) | Steps 2-3 |
@@ -464,10 +529,11 @@ The recommended order minimizes blocked dependencies:
 | 8 | Deals service + route + test | Step 5 |
 | 9 | Sales invoices service + route + test | Steps 4, 5, 8 |
 | 10 | Projects + Tasks service + route + test | Steps 2-3 |
-| 11 | CLI scaffolding (Phase 4) | Steps 4-10 |
-| 12 | Docker setup | Step 1 |
+| 11 | Embedding scaffolding: helpers, vec table, CLI sync command (Phase 2.3) | Steps 2, 4-5, 8, 10 |
+| 12 | CLI scaffolding (Phase 4) | Steps 4-11 |
+| 13 | Docker setup | Step 1 |
 
-Steps 4-6 can run in parallel. Steps 7-8 can run in parallel. Step 11 and 12 can start as soon as the API routes are in place.
+Steps 4-6 can run in parallel. Steps 7-8 can run in parallel. Step 11 can begin once the core services it embeds are in place. Steps 12 and 13 can start as soon as the API routes are ready.
 
 ---
 
@@ -475,7 +541,9 @@ Steps 4-6 can run in parallel. Steps 7-8 can run in parallel. Step 11 and 12 can
 
 - [ ] Express.js app boots and responds to health check
 - [ ] API key authentication enforced on all endpoints
-- [ ] SQLite database created with all MVP tables on startup
+- [ ] Drizzle schema defined for all MVP tables
+- [ ] SQLite database created with all tables via Drizzle migration on startup
+- [ ] sqlite-vec extension loaded and vec_embeddings virtual table created
 - [ ] Slug ID generator working with collision handling
 - [ ] All entities addressable by internal ID or slug
 - [ ] Company card GET/PUT working
@@ -490,6 +558,8 @@ Steps 4-6 can run in parallel. Steps 7-8 can run in parallel. Step 11 and 12 can
 - [ ] Projects and tasks CRUD working
 - [ ] Subtask nesting working
 - [ ] Soft delete on all entities, excluded from list queries
+- [ ] Embedding scaffolding: text builder, upsert, nearest-neighbor query helpers
+- [ ] `wrobo biz embeddings sync` CLI command (with stubbed/configurable provider)
 - [ ] CLI `wrobo biz` subcommands calling the API (shell delegates to Node.js)
 - [ ] Vitest suite passing for all services
 - [ ] Docker compose running the API
