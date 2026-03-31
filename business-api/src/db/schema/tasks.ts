@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { type AnySQLiteColumn, index, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { projects } from "./projects.js";
 
@@ -11,7 +11,7 @@ export const tasks = sqliteTable(
     projectId: text("project_id")
       .notNull()
       .references(() => projects.id),
-    parentTaskId: text("parent_task_id").references(() => tasks.id),
+    parentTaskId: text("parent_task_id").references((): AnySQLiteColumn => tasks.id),
     title: text("title").notNull(),
     description: text("description"),
     status: text("status").notNull().default("open"),
