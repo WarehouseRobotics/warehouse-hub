@@ -1,3 +1,9 @@
+---
+type: core-spec
+description: Describes the core of the Business API stack - foundational business management infrastructure for the Warehouse Hub
+frozen: true
+---
+
 # Warehouse Hub Business API Stack
 
 The Business API stack is designed to be used as an underlying infrastructure tool for business management and CRM AI agents of the Warehouse Hub platform. Humans can interact with it via a webapp GUI too, but the API, MCP and CLI parts are designed with agent tool usage in mind.
