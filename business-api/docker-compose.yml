@@ -1,0 +1,13 @@
+services:
+  business-api:
+    build:
+      context: .
+    ports:
+      - "3100:3100"
+    environment:
+      PORT: 3100
+      DATABASE_PATH: /data/business-api.sqlite
+      UPLOAD_DIR: /data/uploads
+      API_KEY: change-me
+    volumes:
+      - ./data:/data
