@@ -1,7 +1,10 @@
 ---
 type: core-spec
 description: Describes the core of the Business API stack - foundational business management infrastructure for the Warehouse Hub
-frozen: true
+project_dir: business-api
+frozen: false
+see_also:
+  - docs/architecture/Business API Architecture.md
 ---
 
 # Warehouse Hub Business API Stack

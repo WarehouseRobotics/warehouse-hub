@@ -1,3 +1,12 @@
+---
+type: core-spec
+description: Describes design principles of the Business API stack - foundational business management infrastructure for the Warehouse Hub
+project_dir: business-api
+frozen: false
+see_also:
+  - docs/apps/Business Foundation API.md
+---
+
 # Business API Architecture
 
 * Node.js (Typescript)

@@ -1,3 +1,10 @@
+---
+type: core-aspect-spec
+description: 
+apps: business-api, dashboard
+frozen: false
+---
+
 # Accounting Assistance
 
 Accounting assistance is provided via an AI agent, empowered with an ERP toolset (accounting + CRM, kind of like Hubspot, but designed to be used primarily by AI agents in collaboration with humans). The API and CLI tool wrappers are the foundation and the UI is just a thin client. Most human operations will come through chat messages.
