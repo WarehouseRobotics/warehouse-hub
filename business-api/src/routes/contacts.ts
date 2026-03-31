@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { validateBody } from "../middleware/validate.js";
-import { contactInputSchema, contactPatchSchema } from "../schemas/contact.js";
+import { contactInputSchema, contactPatchSchema, type ContactType } from "../schemas/contact.js";
 import {
   createContact,
   getContact,
@@ -12,12 +12,16 @@ import {
 
 export const contactsRouter = Router();
 
+function parseContactType(value: unknown): ContactType | undefined {
+  return value === "person" || value === "company" ? value : undefined;
+}
+
 contactsRouter.get("/", (request, response) => {
   response.json(
     listContacts({
       query: typeof request.query.query === "string" ? request.query.query : undefined,
       role: typeof request.query.role === "string" ? request.query.role : undefined,
-      type: typeof request.query.type === "string" ? request.query.type : undefined,
+      type: parseContactType(request.query.type),
       parentContactId:
         typeof request.query.parentContactId === "string" ? request.query.parentContactId : undefined,
     }),

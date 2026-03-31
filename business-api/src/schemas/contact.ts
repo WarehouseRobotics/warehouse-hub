@@ -24,3 +24,4 @@ export const contactPatchSchema = contactInputSchema.partial();
 
 export type ContactInput = z.infer<typeof contactInputSchema>;
 export type ContactPatch = z.infer<typeof contactPatchSchema>;
+export type ContactType = ContactInput["type"];

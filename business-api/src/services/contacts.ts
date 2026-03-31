@@ -5,7 +5,7 @@ import { contacts } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { ContactInput, ContactPatch } from "../schemas/contact.js";
+import type { ContactInput, ContactPatch, ContactType } from "../schemas/contact.js";
 
 function parseRoles(raw: string): string[] {
   try {
@@ -91,7 +91,7 @@ export function createContact(data: ContactInput) {
 export function listContacts(filters: {
   query?: string;
   role?: string;
-  type?: string;
+  type?: ContactType;
   parentContactId?: string;
 } = {}) {
   const conditions = [isNull(contacts.deletedAt)];

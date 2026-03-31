@@ -15,6 +15,15 @@ function ensureParentDirectory(filePath: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
+function resolveMigrationsDir(): string {
+  const bundledMigrationsDir = path.resolve(import.meta.dirname, "migrations");
+  if (fs.existsSync(bundledMigrationsDir)) {
+    return bundledMigrationsDir;
+  }
+
+  return path.resolve(import.meta.dirname, "../../../src/db/migrations");
+}
+
 export function getDatabase(): Database.Database {
   if (!databaseInstance) {
     ensureParentDirectory(config.databasePath);
@@ -36,10 +45,7 @@ export function getOrm() {
 
 export function initializeDatabase(): { appliedMigrations: string[] } {
   fs.mkdirSync(config.uploadDir, { recursive: true });
-  const appliedMigrations = applyMigrations(
-    getDatabase(),
-    path.resolve(import.meta.dirname, "migrations"),
-  );
+  const appliedMigrations = applyMigrations(getDatabase(), resolveMigrationsDir());
 
   return { appliedMigrations };
 }
