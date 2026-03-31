@@ -3,7 +3,7 @@
 * Node.js (Typescript)
 * Express.js
 * SQLite for database with asg017/sqlite-vec for vector storage
-* zod
+* Drizzle ORM and zod
 * MCP SDK
 
 ## API and CLI conventions for MVP
