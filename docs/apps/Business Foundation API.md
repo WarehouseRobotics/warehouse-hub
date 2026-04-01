@@ -88,7 +88,7 @@ Tasks help agents (and internal human users) organize, plan and structure the wo
 
 * tasks are associated with projects and projects are linked to companies. 
 * internal tasks are tasks for projects that belong to the owner entity (company or sole trader)
-
+* tasks can be nested, but one level depth only, for simplicity: tasks with a parent task cannot have child tasks
 
 ## Documents
 
