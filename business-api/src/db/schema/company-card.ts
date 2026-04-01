@@ -7,6 +7,7 @@ export const companyCard = sqliteTable("company_card", {
   legalName: text("legal_name").notNull(),
   displayName: text("display_name").notNull(),
   taxId: text("tax_id"),
+  vatId: text("vat_id"),
   email: text("email"),
   phone: text("phone"),
   website: text("website"),

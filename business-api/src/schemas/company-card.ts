@@ -15,6 +15,7 @@ export const companyCardInputSchema = z
     legalName: z.string().min(1),
     displayName: z.string().min(1),
     taxId: z.string().optional(),
+    vatId: z.string().optional(),
     email: z.string().email().optional(),
     phone: z.string().optional(),
     website: z.string().url().optional(),

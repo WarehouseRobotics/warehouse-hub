@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS company_card (
   legal_name TEXT NOT NULL,
   display_name TEXT NOT NULL,
   tax_id TEXT,
+  vat_id TEXT,
   email TEXT,
   phone TEXT,
   website TEXT,
@@ -56,6 +57,7 @@ CREATE INDEX IF NOT EXISTS contacts_display_name_idx ON contacts(display_name);
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
+  company_card_id TEXT NOT NULL REFERENCES company_card(id),
   kind TEXT NOT NULL,
   source TEXT,
   original_filename TEXT NOT NULL,
@@ -71,6 +73,7 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS expenses (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
+  company_card_id TEXT NOT NULL REFERENCES company_card(id),
   supplier_contact_id TEXT NOT NULL REFERENCES contacts(id),
   document_id TEXT REFERENCES documents(id),
   invoice_number TEXT,
@@ -94,6 +97,7 @@ CREATE INDEX IF NOT EXISTS expenses_supplier_contact_id_idx ON expenses(supplier
 CREATE TABLE IF NOT EXISTS deals (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
+  company_card_id TEXT NOT NULL REFERENCES company_card(id),
   customer_contact_id TEXT NOT NULL REFERENCES contacts(id),
   title TEXT NOT NULL,
   stage TEXT NOT NULL,
@@ -112,8 +116,8 @@ CREATE TABLE IF NOT EXISTS deals (
 CREATE TABLE IF NOT EXISTS sales_invoices (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
-  invoice_number TEXT NOT NULL UNIQUE,
-  seller_company_id TEXT NOT NULL REFERENCES company_card(id),
+  company_card_id TEXT NOT NULL REFERENCES company_card(id),
+  invoice_number TEXT NOT NULL UNIQUE,  
   customer_contact_id TEXT NOT NULL REFERENCES contacts(id),
   deal_id TEXT REFERENCES deals(id),
   issue_date TEXT NOT NULL,

@@ -4,7 +4,7 @@ import { lineItemSchema } from "./deal.js";
 
 export const salesInvoiceInputSchema = z
   .object({
-    sellerCompanyId: z.string().min(1),
+    companyCardId: z.string().min(1),
     customerContactId: z.string().min(1),
     dealId: z.string().optional(),
     issueDate: z.string().min(1),

@@ -11,6 +11,7 @@ export const lineItemSchema = z
 
 export const dealInputSchema = z
   .object({
+    companyCardId: z.string().min(1),
     customerContactId: z.string().min(1),
     title: z.string().min(1),
     stage: z.string().min(1),

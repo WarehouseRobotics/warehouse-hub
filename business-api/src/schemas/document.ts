@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const documentInputSchema = z
   .object({
+    companyCardId: z.string().min(1),
     kind: z.enum(["expense_invoice", "sales_invoice_pdf", "contract", "other"]),
     source: z.string().optional(),
     originalFilename: z.string().min(1),

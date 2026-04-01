@@ -10,6 +10,7 @@ export const taxLineSchema = z
 
 export const expenseInputSchema = z
   .object({
+    companyCardId: z.string().min(1),
     supplierContactId: z.string().min(1),
     documentId: z.string().optional(),
     invoiceNumber: z.string().optional(),

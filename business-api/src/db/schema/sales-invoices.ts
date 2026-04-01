@@ -10,7 +10,7 @@ export const salesInvoices = sqliteTable("sales_invoices", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull().unique(),
   invoiceNumber: text("invoice_number").notNull().unique(),
-  sellerCompanyId: text("seller_company_id")
+  companyCardId: text("company_card_id")
     .notNull()
     .references(() => companyCard.id),
   customerContactId: text("customer_contact_id")

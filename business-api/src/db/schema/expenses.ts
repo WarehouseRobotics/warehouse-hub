@@ -3,12 +3,16 @@ import { index, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { contacts } from "./contacts.js";
 import { documents } from "./documents.js";
+import { companyCard } from "./company-card.js";
 
 export const expenses = sqliteTable(
   "expenses",
   {
     id: text("id").primaryKey(),
     slug: text("slug").notNull().unique(),
+    companyCardId: text("company_card_id")
+      .notNull()
+      .references(() => companyCard.id),
     supplierContactId: text("supplier_contact_id")
       .notNull()
       .references(() => contacts.id),

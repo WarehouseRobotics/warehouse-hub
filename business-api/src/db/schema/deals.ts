@@ -2,10 +2,14 @@ import { sql } from "drizzle-orm";
 import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { contacts } from "./contacts.js";
+import { companyCard } from "./company-card.js";
 
 export const deals = sqliteTable("deals", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull().unique(),
+  companyCardId: text("company_card_id")
+    .notNull()
+    .references(() => companyCard.id),
   customerContactId: text("customer_contact_id")
     .notNull()
     .references(() => contacts.id),
