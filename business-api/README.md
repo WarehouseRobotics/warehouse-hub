@@ -18,18 +18,22 @@ The initial iteration now includes:
 
 # Docker container
 
-For security, we build and run the app stack in a Docker container during development.
+For security, we run the app stack in a Docker container during development.
 
-To build and run the app in the foreground use (in the business-api folder):
+The development container bind-mounts the local `business-api` folder into `/app`, so source code changes on the host are visible immediately inside the container. The container keeps `node_modules` in its own Docker volume so host and container dependencies do not conflict.
+
+To build the image and run the app in the foreground use (in the business-api folder):
 
 `docker compose up --build` or simply `./container.sh build` (which will do the same)
 
 The container script allows executing arbitary shell code inside of the container via `./container.sh exec`
 
+After the first build, `./container.sh start` starts the same live-mounted development container without rebuilding, and `./container.sh restart` recreates it using the current image.
+
 
 ## Useful Commands
 
-During development, this commands must be run inside of the Docker container, via our wrapper script, e.g.: `./container.sh exec npm run test`
+During development, these commands must be run inside of the Docker container, via our wrapper script, e.g.: `./container.sh exec npm run test`
 
 ```bash
 ./container.sh exec npm install
@@ -37,5 +41,7 @@ During development, this commands must be run inside of the Docker container, vi
 ./container.sh exec npm run dev
 ./container.sh exec npm run cli -- company-card get
 ```
+
+Rebuild the image with `./container.sh build` when Docker-level dependencies change, such as updates to the `Dockerfile` or native packages required by npm modules.
 
 The API listens on `http://localhost:3100` by default and uses `/api/v1` as the REST base path.
