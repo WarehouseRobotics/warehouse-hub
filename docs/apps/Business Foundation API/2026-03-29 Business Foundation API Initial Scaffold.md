@@ -90,7 +90,7 @@ business-api/
       seed.ts             # optional dev seed data
     lib/
       ids.ts              # prefixed nanoid generators
-      slug-ids.ts         # dictionary-based word ID generator, like 'blue-jazzy-train-lake'
+      slug-ids.ts         # dictionary-based random word ID generator, like 'blue-jazzy-train-lake'
       errors.ts           # AppError class
       money.ts            # string-based money helpers
       embeddings.ts       # embedding helpers: compute, store, query nearest
