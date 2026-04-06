@@ -1,11 +1,17 @@
 import { Router } from "express";
 
 import { validateBody } from "../middleware/validate.js";
-import { contactInputSchema, contactPatchSchema, type ContactType } from "../schemas/contact.js";
+import {
+  contactInputSchema,
+  contactPatchSchema,
+  contactResolveInputSchema,
+  type ContactType,
+} from "../schemas/contact.js";
 import {
   createContact,
   getContact,
   listContacts,
+  resolveContact,
   softDeleteContact,
   updateContact,
 } from "../services/contacts.js";
@@ -30,6 +36,10 @@ contactsRouter.get("/", (request, response) => {
 
 contactsRouter.post("/", validateBody(contactInputSchema), (request, response) => {
   response.status(201).json(createContact(request.body));
+});
+
+contactsRouter.post("/resolve", validateBody(contactResolveInputSchema), (request, response) => {
+  response.json(resolveContact(request.body));
 });
 
 contactsRouter.get("/:id", (request, response) => {

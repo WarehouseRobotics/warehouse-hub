@@ -1,0 +1,175 @@
+import { and, eq, isNull } from "drizzle-orm";
+
+import { getOrm } from "../db/connection.js";
+import { invoiceNumberSeq, salesInvoices } from "../db/schema/index.js";
+import { AppError } from "../lib/errors.js";
+import { createPrefixedId } from "../lib/ids.js";
+import { createSlug } from "../lib/slug-ids.js";
+import type { SalesInvoiceGenerateInput, SalesInvoicePatch } from "../schemas/sales-invoice.js";
+import {
+  requireCompanyCardRecord,
+  requireContactRecord,
+  requireDealRecord,
+  requireDocumentRecord,
+  requireSalesInvoiceRecord,
+} from "./shared.js";
+
+function mapSalesInvoice(record: typeof salesInvoices.$inferSelect) {
+  return {
+    salesInvoiceId: record.id,
+    slug: record.slug,
+    invoiceNumber: record.invoiceNumber,
+    status: record.status,
+    sellerCompanyId: record.companyCardId,
+    customerContactId: record.customerContactId,
+    dealId: record.dealId,
+    issueDate: record.issueDate,
+    serviceDate: record.serviceDate,
+    dueDate: record.dueDate,
+    currency: record.currency,
+    paymentTermsDays: record.paymentTermsDays,
+    lineItems: JSON.parse(record.lineItems) as unknown[],
+    totals: {
+      net: record.net,
+      tax: record.tax,
+      gross: record.gross,
+    },
+    pdfDocumentId: record.pdfDocumentId,
+    pdfStatus: record.pdfDocumentId ? "available" : "pending",
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function addDays(date: string, days: number): string {
+  const value = new Date(date);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function nextInvoiceNumber(issueDate: string): string {
+  const year = Number.parseInt(issueDate.slice(0, 4), 10);
+  const existing = getOrm().select().from(invoiceNumberSeq).where(eq(invoiceNumberSeq.year, year)).get();
+  const nextNumber = (existing?.lastNumber ?? 0) + 1;
+
+  if (existing) {
+    getOrm()
+      .update(invoiceNumberSeq)
+      .set({ lastNumber: nextNumber })
+      .where(eq(invoiceNumberSeq.year, year))
+      .run();
+  } else {
+    getOrm().insert(invoiceNumberSeq).values({ year, lastNumber: nextNumber }).run();
+  }
+
+  return `${year}-${String(nextNumber).padStart(4, "0")}`;
+}
+
+function assertInvoiceTransition(fromStatus: string, toStatus: string): void {
+  const allowedTransitions: Record<string, string[]> = {
+    draft: ["draft", "finalized", "cancelled"],
+    finalized: ["finalized", "paid", "cancelled"],
+    paid: ["paid"],
+    cancelled: ["cancelled"],
+  };
+
+  if (!allowedTransitions[fromStatus]?.includes(toStatus)) {
+    throw new AppError(`Invalid sales invoice status transition: ${fromStatus} -> ${toStatus}`, {
+      statusCode: 409,
+      code: "invalid_status_transition",
+    });
+  }
+}
+
+export function generateSalesInvoice(data: SalesInvoiceGenerateInput) {
+  const company = requireCompanyCardRecord();
+  requireContactRecord(data.customerContactId);
+  const deal = data.dealId ? requireDealRecord(data.dealId) : null;
+  const paymentTermsDays = data.paymentTermsDays ?? company.paymentTermsDays;
+  const dueDate = addDays(data.issueDate, paymentTermsDays);
+  const lineItems = deal ? JSON.parse(deal.lineItems) : [];
+  const invoiceNumber = nextInvoiceNumber(data.issueDate);
+  const id = createPrefixedId("sinv_");
+  const now = new Date().toISOString();
+
+  getOrm()
+    .insert(salesInvoices)
+    .values({
+      id,
+      slug: createSlug(`${data.customerContactId}:${invoiceNumber}:${id}`),
+      invoiceNumber,
+      companyCardId: company.id,
+      customerContactId: data.customerContactId,
+      dealId: deal?.id ?? null,
+      issueDate: data.issueDate,
+      serviceDate: data.serviceDate ?? null,
+      dueDate,
+      currency: deal?.currency ?? company.currency,
+      paymentTermsDays,
+      lineItems: JSON.stringify(lineItems),
+      net: deal?.net ?? "0.00",
+      tax: deal?.tax ?? "0.00",
+      gross: deal?.gross ?? "0.00",
+      status: "draft",
+      pdfDocumentId: null,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    })
+    .run();
+
+  return getSalesInvoice(id);
+}
+
+export function listSalesInvoices(filters: { status?: string; customerContactId?: string } = {}) {
+  const conditions = [isNull(salesInvoices.deletedAt)];
+  if (filters.status) {
+    conditions.push(eq(salesInvoices.status, filters.status));
+  }
+  if (filters.customerContactId) {
+    conditions.push(eq(salesInvoices.customerContactId, filters.customerContactId));
+  }
+
+  return getOrm().select().from(salesInvoices).where(and(...conditions)).all().map(mapSalesInvoice);
+}
+
+export function getSalesInvoice(idOrSlug: string) {
+  return mapSalesInvoice(requireSalesInvoiceRecord(idOrSlug));
+}
+
+export function updateSalesInvoice(idOrSlug: string, patch: SalesInvoicePatch) {
+  const existing = requireSalesInvoiceRecord(idOrSlug);
+  if (patch.status) {
+    assertInvoiceTransition(existing.status, patch.status);
+  }
+  if (patch.pdfDocumentId) {
+    requireDocumentRecord(patch.pdfDocumentId);
+  }
+
+  getOrm()
+    .update(salesInvoices)
+    .set({
+      serviceDate: patch.serviceDate ?? existing.serviceDate,
+      dueDate: patch.dueDate ?? existing.dueDate,
+      paymentTermsDays: patch.paymentTermsDays ?? existing.paymentTermsDays,
+      status: patch.status ?? existing.status,
+      pdfDocumentId: patch.pdfDocumentId ?? existing.pdfDocumentId,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(salesInvoices.id, existing.id))
+    .run();
+
+  return getSalesInvoice(existing.id);
+}
+
+export function softDeleteSalesInvoice(idOrSlug: string) {
+  const existing = requireSalesInvoiceRecord(idOrSlug);
+  getOrm()
+    .update(salesInvoices)
+    .set({
+      deletedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(salesInvoices.id, existing.id))
+    .run();
+}

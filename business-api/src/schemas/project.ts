@@ -9,3 +9,8 @@ export const projectInputSchema = z
     status: z.enum(["active", "archived"]).default("active"),
   })
   .strict();
+
+export const projectPatchSchema = projectInputSchema.partial();
+
+export type ProjectInput = z.infer<typeof projectInputSchema>;
+export type ProjectPatch = z.infer<typeof projectPatchSchema>;

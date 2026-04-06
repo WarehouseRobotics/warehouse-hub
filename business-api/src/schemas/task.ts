@@ -11,3 +11,8 @@ export const taskInputSchema = z
     dueDate: z.string().optional(),
   })
   .strict();
+
+export const taskPatchSchema = taskInputSchema.partial();
+
+export type TaskInput = z.infer<typeof taskInputSchema>;
+export type TaskPatch = z.infer<typeof taskPatchSchema>;

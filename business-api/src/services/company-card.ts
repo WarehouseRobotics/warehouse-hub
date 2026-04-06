@@ -2,6 +2,7 @@ import { eq, isNull } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
 import { companyCard } from "../db/schema/index.js";
+import { computeEmbeddingText, upsertEmbedding } from "../lib/embeddings.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { CompanyCardInput } from "../schemas/company-card.js";
@@ -10,6 +11,7 @@ import { ensureDefaultTasksProject } from "./projects.js";
 function mapCompanyCard(record: typeof companyCard.$inferSelect) {
   return {
     companyId: record.id,
+    slug: record.slug,
     legalName: record.legalName,
     displayName: record.displayName,
     taxId: record.taxId,
@@ -73,7 +75,9 @@ export function upsertCompanyCard(data: CompanyCardInput) {
       .run();
 
     const updated = db.select().from(companyCard).where(eq(companyCard.id, existing.id)).get();
-    return mapCompanyCard(updated!);
+    const mapped = mapCompanyCard(updated!);
+    upsertEmbedding("company_card", existing.id, computeEmbeddingText("company_card", mapped));
+    return mapped;
   }
 
   const id = createPrefixedId("comp_");
@@ -106,5 +110,7 @@ export function upsertCompanyCard(data: CompanyCardInput) {
 
   ensureDefaultTasksProject(id);
   const created = db.select().from(companyCard).where(eq(companyCard.id, id)).get();
-  return mapCompanyCard(created!);
+  const mapped = mapCompanyCard(created!);
+  upsertEmbedding("company_card", id, computeEmbeddingText("company_card", mapped));
+  return mapped;
 }

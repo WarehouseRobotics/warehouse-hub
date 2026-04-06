@@ -1,13 +1,12 @@
 import { z } from "zod";
 
-export const documentInputSchema = z
+export const documentKindSchema = z.enum(["expense_invoice", "sales_invoice_pdf", "contract", "other"]);
+
+export const documentUploadSchema = z
   .object({
-    companyCardId: z.string().min(1),
-    kind: z.enum(["expense_invoice", "sales_invoice_pdf", "contract", "other"]),
+    kind: documentKindSchema,
     source: z.string().optional(),
-    originalFilename: z.string().min(1),
-    mimeType: z.string().min(1),
-    filePath: z.string().min(1),
-    checksum: z.string().optional(),
   })
   .strict();
+
+export type DocumentUploadInput = z.infer<typeof documentUploadSchema>;

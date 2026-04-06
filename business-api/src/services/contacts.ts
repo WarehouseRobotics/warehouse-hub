@@ -2,10 +2,12 @@ import { and, eq, isNull, like, or } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
 import { contacts } from "../db/schema/index.js";
+import { computeEmbeddingText, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { ContactInput, ContactPatch, ContactType } from "../schemas/contact.js";
+import type { ContactInput, ContactPatch, ContactResolveInput, ContactType } from "../schemas/contact.js";
+import { requireContactRecord } from "./shared.js";
 
 function parseRoles(raw: string): string[] {
   try {
@@ -45,16 +47,33 @@ function getContactRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(contacts)
-    .where(
-      and(
-        isNull(contacts.deletedAt),
-        or(eq(contacts.id, idOrSlug), eq(contacts.slug, idOrSlug)),
-      ),
-    )
+    .where(and(isNull(contacts.deletedAt), or(eq(contacts.id, idOrSlug), eq(contacts.slug, idOrSlug))))
     .get();
 }
 
+function validateParentContact(parentContactId: string | undefined, type: ContactType): void {
+  if (!parentContactId) {
+    return;
+  }
+
+  const parent = requireContactRecord(parentContactId);
+  if (type !== "person") {
+    throw new AppError("Only person contacts can be nested under a parent contact", {
+      statusCode: 400,
+      code: "invalid_parent_contact",
+    });
+  }
+
+  if (parent.type !== "company") {
+    throw new AppError("Parent contact must be a company", {
+      statusCode: 400,
+      code: "invalid_parent_contact",
+    });
+  }
+}
+
 export function createContact(data: ContactInput) {
+  validateParentContact(data.parentContactId, data.type);
   const now = new Date().toISOString();
   const id = createPrefixedId("ct_");
   const slug = createSlug(`${data.displayName}:${data.email ?? data.taxId ?? id}`);
@@ -85,7 +104,9 @@ export function createContact(data: ContactInput) {
     })
     .run();
 
-  return getContact(id);
+  const created = getContact(id);
+  upsertEmbedding("contact", id, computeEmbeddingText("contact", created));
+  return created;
 }
 
 export function listContacts(filters: {
@@ -180,7 +201,9 @@ export function updateContact(idOrSlug: string, patch: ContactPatch) {
     .where(eq(contacts.id, existing.id))
     .run();
 
-  return getContact(existing.id);
+  const updated = getContact(existing.id);
+  upsertEmbedding("contact", existing.id, computeEmbeddingText("contact", updated));
+  return updated;
 }
 
 export function softDeleteContact(idOrSlug: string) {
@@ -197,4 +220,53 @@ export function softDeleteContact(idOrSlug: string) {
     })
     .where(eq(contacts.id, existing.id))
     .run();
+}
+
+export function resolveContact(input: ContactResolveInput) {
+  const matchers = input.matchBy;
+  const candidates = getOrm().select().from(contacts).where(isNull(contacts.deletedAt)).all();
+  const normalizedTarget = {
+    taxId: input.contact.taxId?.trim().toLowerCase(),
+    email: input.contact.email?.trim().toLowerCase(),
+    legalName: input.contact.legalName?.trim().toLowerCase(),
+  };
+
+  for (const matcher of matchers) {
+    const matched = candidates.find((candidate) => {
+      if (matcher === "taxId") {
+        return normalizedTarget.taxId && candidate.taxId?.trim().toLowerCase() === normalizedTarget.taxId;
+      }
+
+      if (matcher === "email") {
+        return normalizedTarget.email && candidate.email?.trim().toLowerCase() === normalizedTarget.email;
+      }
+
+      return (
+        normalizedTarget.legalName &&
+        candidate.legalName?.trim().toLowerCase() === normalizedTarget.legalName
+      );
+    });
+
+    if (matched) {
+      return {
+        contactId: matched.id,
+        resolution: "matched" as const,
+        matchedBy: matcher,
+      };
+    }
+  }
+
+  if (!input.autoCreate) {
+    throw new AppError("Contact could not be resolved", {
+      statusCode: 404,
+      code: "not_found",
+    });
+  }
+
+  const created = createContact(input.contact);
+  return {
+    contactId: created.contactId,
+    resolution: "created" as const,
+    matchedBy: null,
+  };
 }

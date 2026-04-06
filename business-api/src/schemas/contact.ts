@@ -22,6 +22,15 @@ export const contactInputSchema = z
 
 export const contactPatchSchema = contactInputSchema.partial();
 
+export const contactResolveInputSchema = z
+  .object({
+    autoCreate: z.boolean().default(false),
+    matchBy: z.array(z.enum(["taxId", "email", "legalName"])).min(1),
+    contact: contactInputSchema,
+  })
+  .strict();
+
 export type ContactInput = z.infer<typeof contactInputSchema>;
 export type ContactPatch = z.infer<typeof contactPatchSchema>;
 export type ContactType = ContactInput["type"];
+export type ContactResolveInput = z.infer<typeof contactResolveInputSchema>;
