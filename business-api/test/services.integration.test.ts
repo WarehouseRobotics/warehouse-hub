@@ -223,6 +223,7 @@ describe("business-api service flows", () => {
     const { generateSalesInvoice, updateSalesInvoice } = await import("../src/services/sales-invoices.js");
     const { createProject } = await import("../src/services/projects.js");
     const { createTask, getTask } = await import("../src/services/tasks.js");
+    const { findSimilar } = await import("../src/lib/embeddings.js");
 
     const company = upsertCompanyCard({
       legalName: "Northwind Robotics SL",
@@ -291,7 +292,12 @@ describe("business-api service flows", () => {
 
     expect(invoice.invoiceNumber).toBe("2026-0001");
     expect(invoice.totals.gross).toBe("1815.00");
+    expect(invoice.customerDisplayName).toBe("Acme Retail GmbH");
     expect(updateSalesInvoice(invoice.salesInvoiceId, { status: "finalized" }).status).toBe("finalized");
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const similarInvoices = await findSimilar("sales_invoice", "Acme warehouse audit proposal", 2);
+    expect(similarInvoices[0]?.entityId).toBe(invoice.salesInvoiceId);
 
     const project = createProject({
       ownerEntityId: company.companyId,

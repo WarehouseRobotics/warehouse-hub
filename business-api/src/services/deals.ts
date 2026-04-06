@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
 import { deals } from "../db/schema/index.js";
-import { computeEmbeddingText, upsertEmbedding } from "../lib/embeddings.js";
+import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { computeLineItemTotals, normalizeQuantityString } from "../lib/money.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
@@ -39,6 +39,15 @@ function mapDeal(record: typeof deals.$inferSelect) {
   };
 }
 
+function scheduleEmbedding(dealId: string, payload: ReturnType<typeof getDeal>): void {
+  void upsertEmbedding("deal", dealId, computeEmbeddingText("deal", payload)).catch((error) => {
+    if (isBenignEmbeddingSyncError(error)) {
+      return;
+    }
+    console.warn(`Failed to sync deal embedding for ${dealId}:`, error);
+  });
+}
+
 export function createDeal(data: DealInput) {
   const company = requireCompanyCardRecord();
   requireContactRecord(data.customerContactId);
@@ -70,7 +79,7 @@ export function createDeal(data: DealInput) {
     .run();
 
   const created = getDeal(id);
-  upsertEmbedding("deal", id, computeEmbeddingText("deal", created));
+  scheduleEmbedding(id, created);
   return created;
 }
 
@@ -118,7 +127,7 @@ export function updateDeal(idOrSlug: string, patch: DealPatch) {
     .run();
 
   const updated = getDeal(existing.id);
-  upsertEmbedding("deal", existing.id, computeEmbeddingText("deal", updated));
+  scheduleEmbedding(existing.id, updated);
   return updated;
 }
 

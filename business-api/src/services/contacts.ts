@@ -2,7 +2,7 @@ import { and, eq, isNull, like, or } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
 import { contacts } from "../db/schema/index.js";
-import { computeEmbeddingText, upsertEmbedding } from "../lib/embeddings.js";
+import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
@@ -49,6 +49,15 @@ function getContactRecordByIdOrSlug(idOrSlug: string) {
     .from(contacts)
     .where(and(isNull(contacts.deletedAt), or(eq(contacts.id, idOrSlug), eq(contacts.slug, idOrSlug))))
     .get();
+}
+
+function scheduleEmbedding(contactId: string, payload: ReturnType<typeof getContact>): void {
+  void upsertEmbedding("contact", contactId, computeEmbeddingText("contact", payload)).catch((error) => {
+    if (isBenignEmbeddingSyncError(error)) {
+      return;
+    }
+    console.warn(`Failed to sync contact embedding for ${contactId}:`, error);
+  });
 }
 
 function validateParentContact(parentContactId: string | undefined, type: ContactType): void {
@@ -105,7 +114,7 @@ export function createContact(data: ContactInput) {
     .run();
 
   const created = getContact(id);
-  upsertEmbedding("contact", id, computeEmbeddingText("contact", created));
+  scheduleEmbedding(id, created);
   return created;
 }
 
@@ -202,7 +211,7 @@ export function updateContact(idOrSlug: string, patch: ContactPatch) {
     .run();
 
   const updated = getContact(existing.id);
-  upsertEmbedding("contact", existing.id, computeEmbeddingText("contact", updated));
+  scheduleEmbedding(existing.id, updated);
   return updated;
 }
 

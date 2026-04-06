@@ -2,7 +2,7 @@ import { eq, isNull } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
 import { companyCard } from "../db/schema/index.js";
-import { computeEmbeddingText, upsertEmbedding } from "../lib/embeddings.js";
+import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { CompanyCardInput } from "../schemas/company-card.js";
@@ -37,6 +37,15 @@ function mapCompanyCard(record: typeof companyCard.$inferSelect) {
     },
     updatedAt: record.updatedAt,
   };
+}
+
+function scheduleEmbedding(companyId: string, payload: ReturnType<typeof mapCompanyCard>): void {
+  void upsertEmbedding("company_card", companyId, computeEmbeddingText("company_card", payload)).catch((error) => {
+    if (isBenignEmbeddingSyncError(error)) {
+      return;
+    }
+    console.warn(`Failed to sync company-card embedding for ${companyId}:`, error);
+  });
 }
 
 export function getCompanyCard() {
@@ -76,7 +85,7 @@ export function upsertCompanyCard(data: CompanyCardInput) {
 
     const updated = db.select().from(companyCard).where(eq(companyCard.id, existing.id)).get();
     const mapped = mapCompanyCard(updated!);
-    upsertEmbedding("company_card", existing.id, computeEmbeddingText("company_card", mapped));
+    scheduleEmbedding(existing.id, mapped);
     return mapped;
   }
 
@@ -111,6 +120,6 @@ export function upsertCompanyCard(data: CompanyCardInput) {
   ensureDefaultTasksProject(id);
   const created = db.select().from(companyCard).where(eq(companyCard.id, id)).get();
   const mapped = mapCompanyCard(created!);
-  upsertEmbedding("company_card", id, computeEmbeddingText("company_card", mapped));
+  scheduleEmbedding(id, mapped);
   return mapped;
 }

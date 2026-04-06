@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
 import { tasks } from "../db/schema/index.js";
-import { computeEmbeddingText, upsertEmbedding } from "../lib/embeddings.js";
+import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
@@ -23,6 +23,15 @@ function mapTask(record: typeof tasks.$inferSelect) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
+}
+
+function scheduleEmbedding(taskId: string, payload: ReturnType<typeof getTask>): void {
+  void upsertEmbedding("task", taskId, computeEmbeddingText("task", payload)).catch((error) => {
+    if (isBenignEmbeddingSyncError(error)) {
+      return;
+    }
+    console.warn(`Failed to sync task embedding for ${taskId}:`, error);
+  });
 }
 
 function validateParentTask(projectId: string, parentTaskId: string | undefined): void {
@@ -80,7 +89,7 @@ export function createTask(data: TaskInput) {
     .run();
 
   const created = getTask(id);
-  upsertEmbedding("task", id, computeEmbeddingText("task", created));
+  scheduleEmbedding(id, created);
   return created;
 }
 
@@ -144,7 +153,7 @@ export function updateTask(idOrSlug: string, patch: TaskPatch) {
     .run();
 
   const updated = getTask(existing.id);
-  upsertEmbedding("task", existing.id, computeEmbeddingText("task", updated));
+  scheduleEmbedding(existing.id, updated);
   return updated;
 }
 

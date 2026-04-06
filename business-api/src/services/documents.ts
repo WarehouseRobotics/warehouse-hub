@@ -7,7 +7,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { config } from "../config.js";
 import { getOrm } from "../db/connection.js";
 import { documents } from "../db/schema/index.js";
-import { computeEmbeddingText, upsertEmbedding } from "../lib/embeddings.js";
+import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { DocumentUploadInput } from "../schemas/document.js";
@@ -25,6 +25,15 @@ function mapDocument(record: typeof documents.$inferSelect) {
     ocrStatus: record.ocrStatus,
     createdAt: record.createdAt,
   };
+}
+
+function scheduleEmbedding(documentId: string, payload: ReturnType<typeof mapDocument>): void {
+  void upsertEmbedding("document", documentId, computeEmbeddingText("document", payload)).catch((error) => {
+    if (isBenignEmbeddingSyncError(error)) {
+      return;
+    }
+    console.warn(`Failed to sync document embedding for ${documentId}:`, error);
+  });
 }
 
 export function uploadDocument(file: Express.Multer.File, meta: DocumentUploadInput) {
@@ -60,7 +69,7 @@ export function uploadDocument(file: Express.Multer.File, meta: DocumentUploadIn
     .run();
 
   const created = getDocumentMeta(documentId);
-  upsertEmbedding("document", documentId, computeEmbeddingText("document", created));
+  scheduleEmbedding(documentId, created);
   return created;
 }
 

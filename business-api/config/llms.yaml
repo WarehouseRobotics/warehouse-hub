@@ -1,0 +1,29 @@
+llms:
+  embedding:
+    style: openai-compatible
+    endpoint: http://192.168.0.25:1234/v1
+    model_name: text-embedding-embeddinggemma-300m-qat
+    apiKey: "sk-lm-rCKFBsk5:XVrIaU7kCFs0KpqSQkUF"
+    default_dims: 768
+  query_expander:
+    style: openai-compatible
+    endpoint: http://192.168.0.25:1234/v1
+    model_name: qwen3-1.7b
+    apiKey: "sk-lm-rCKFBsk5:XVrIaU7kCFs0KpqSQkUF"
+  reranking:
+    style: openai-compatible
+    endpoint: http://192.168.0.25:1234/v1
+    name: qwen3-reranker-0.6b      
+    apiKey: "sk-lm-rCKFBsk5:XVrIaU7kCFs0KpqSQkUF"
+  nano:
+    style: openai-compatible
+    endpoint: http://192.168.0.25:1234/v1
+    model_name: qwen3-1.7b
+    apiKey: "sk-lm-rCKFBsk5:XVrIaU7kCFs0KpqSQkUF"
+    thinking: off
+  capable:
+    style: openai-compatible
+    endpoint: http://192.168.0.25:1234/v1
+    model_name: qwen3-1.7b
+    apiKey: "sk-lm-rCKFBsk5:XVrIaU7kCFs0KpqSQkUF"
+    thinking: medium

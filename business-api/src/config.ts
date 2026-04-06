@@ -11,6 +11,12 @@ const envSchema = z.object({
   UPLOAD_DIR: z.string().default("./uploads"),
   API_KEY: z.string().optional(),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  LLMS_CONFIG_PATH: z.string().optional(),
+  EMBEDDING_API_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+  EMBEDDING_ALLOW_STUB_FALLBACK: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 const parsed = envSchema.parse(process.env);
@@ -21,6 +27,9 @@ export const config = {
   projectRoot,
   databasePath: path.resolve(projectRoot, parsed.DATABASE_PATH),
   uploadDir: path.resolve(projectRoot, parsed.UPLOAD_DIR),
+  llmsConfigPath: parsed.LLMS_CONFIG_PATH
+    ? path.resolve(projectRoot, parsed.LLMS_CONFIG_PATH)
+    : path.resolve(projectRoot, "config/llms.yaml"),
 };
 
 export type AppConfig = typeof config;

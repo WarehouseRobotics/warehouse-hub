@@ -1,7 +1,8 @@
 import { and, eq, isNull } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
-import { invoiceNumberSeq, salesInvoices } from "../db/schema/index.js";
+import { contacts, invoiceNumberSeq, salesInvoices } from "../db/schema/index.js";
+import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
@@ -15,6 +16,8 @@ import {
 } from "./shared.js";
 
 function mapSalesInvoice(record: typeof salesInvoices.$inferSelect) {
+  const customer = getOrm().select().from(contacts).where(eq(contacts.id, record.customerContactId)).get();
+
   return {
     salesInvoiceId: record.id,
     slug: record.slug,
@@ -29,6 +32,9 @@ function mapSalesInvoice(record: typeof salesInvoices.$inferSelect) {
     currency: record.currency,
     paymentTermsDays: record.paymentTermsDays,
     lineItems: JSON.parse(record.lineItems) as unknown[],
+    customerDisplayName: customer?.displayName ?? null,
+    customerLegalName: customer?.legalName ?? null,
+    customerEmail: customer?.email ?? null,
     totals: {
       net: record.net,
       tax: record.tax,
@@ -39,6 +45,15 @@ function mapSalesInvoice(record: typeof salesInvoices.$inferSelect) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
+}
+
+function scheduleEmbedding(invoiceId: string, payload: ReturnType<typeof getSalesInvoice>): void {
+  void upsertEmbedding("sales_invoice", invoiceId, computeEmbeddingText("sales_invoice", payload)).catch((error) => {
+    if (isBenignEmbeddingSyncError(error)) {
+      return;
+    }
+    console.warn(`Failed to sync sales-invoice embedding for ${invoiceId}:`, error);
+  });
 }
 
 function addDays(date: string, days: number): string {
@@ -83,7 +98,7 @@ function assertInvoiceTransition(fromStatus: string, toStatus: string): void {
 
 export function generateSalesInvoice(data: SalesInvoiceGenerateInput) {
   const company = requireCompanyCardRecord();
-  requireContactRecord(data.customerContactId);
+  const customer = requireContactRecord(data.customerContactId);
   const deal = data.dealId ? requireDealRecord(data.dealId) : null;
   const paymentTermsDays = data.paymentTermsDays ?? company.paymentTermsDays;
   const dueDate = addDays(data.issueDate, paymentTermsDays);
@@ -99,7 +114,7 @@ export function generateSalesInvoice(data: SalesInvoiceGenerateInput) {
       slug: createSlug(`${data.customerContactId}:${invoiceNumber}:${id}`),
       invoiceNumber,
       companyCardId: company.id,
-      customerContactId: data.customerContactId,
+      customerContactId: customer.id,
       dealId: deal?.id ?? null,
       issueDate: data.issueDate,
       serviceDate: data.serviceDate ?? null,
@@ -118,7 +133,9 @@ export function generateSalesInvoice(data: SalesInvoiceGenerateInput) {
     })
     .run();
 
-  return getSalesInvoice(id);
+  const created = getSalesInvoice(id);
+  scheduleEmbedding(id, created);
+  return created;
 }
 
 export function listSalesInvoices(filters: { status?: string; customerContactId?: string } = {}) {
@@ -159,7 +176,9 @@ export function updateSalesInvoice(idOrSlug: string, patch: SalesInvoicePatch) {
     .where(eq(salesInvoices.id, existing.id))
     .run();
 
-  return getSalesInvoice(existing.id);
+  const updated = getSalesInvoice(existing.id);
+  scheduleEmbedding(existing.id, updated);
+  return updated;
 }
 
 export function softDeleteSalesInvoice(idOrSlug: string) {

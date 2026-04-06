@@ -2,11 +2,21 @@ import { createHash } from "node:crypto";
 
 import { and, eq } from "drizzle-orm";
 
+import { config } from "../config.js";
 import { getDatabase, getOrm, getVectorBackend } from "../db/connection.js";
 import { entityEmbeddings } from "../db/schema/index.js";
+import { AppError } from "./errors.js";
+import { createTextEmbedding } from "./embedding-provider.js";
 import { createPrefixedId } from "./ids.js";
+import { getConfiguredEmbeddingDimensions } from "./llm-config.js";
 
-export type EmbeddingEntityType = "company_card" | "contact" | "document" | "deal" | "task";
+export type EmbeddingEntityType =
+  | "company_card"
+  | "contact"
+  | "document"
+  | "deal"
+  | "sales_invoice"
+  | "task";
 
 export function hashEmbeddingContent(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -20,6 +30,10 @@ export function createStubEmbedding(text: string, dimensions = 1536): number[] {
   });
 
   return values;
+}
+
+export function getExpectedEmbeddingDimensions(): number {
+  return getConfiguredEmbeddingDimensions();
 }
 
 export function computeEmbeddingText(entityType: EmbeddingEntityType, entity: Record<string, unknown>): string {
@@ -65,33 +79,94 @@ export function computeEmbeddingText(entityType: EmbeddingEntityType, entity: Re
       ]
         .filter(Boolean)
         .join(" ");
+    case "sales_invoice":
+      return [
+        entity.invoiceNumber,
+        entity.status,
+        entity.customerDisplayName,
+        entity.customerLegalName,
+        entity.customerEmail,
+        entity.currency,
+        entity.issueDate,
+        entity.serviceDate,
+        entity.dueDate,
+        entity.notes,
+        Array.isArray(entity.lineItems)
+          ? entity.lineItems
+              .map((lineItem) =>
+                typeof lineItem === "object" && lineItem
+                  ? Object.values(lineItem as Record<string, unknown>).join(" ")
+                  : "",
+              )
+              .join(" ")
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "task":
       return [entity.title, entity.description, entity.status, entity.priority].filter(Boolean).join(" ");
   }
 }
 
-export function upsertEmbedding(entityType: EmbeddingEntityType, entityId: string, text: string): void {
+export async function createEmbeddingVector(text: string): Promise<{ model: string; vector: number[]; dimensions: number }> {
+  try {
+    return await createTextEmbedding(text);
+  } catch (error) {
+    if (!config.EMBEDDING_ALLOW_STUB_FALLBACK) {
+      throw error;
+    }
+
+    return {
+      model: "stub-embedding-v1",
+      vector: createStubEmbedding(text, getExpectedEmbeddingDimensions()),
+      dimensions: getExpectedEmbeddingDimensions(),
+    };
+  }
+}
+
+export function isBenignEmbeddingSyncError(error: unknown): boolean {
+  return error instanceof TypeError && error.message.includes("database connection is not open");
+}
+
+function assertEmbeddingDimensions(vector: number[]): void {
+  const expectedDimensions = getExpectedEmbeddingDimensions();
+  if (vector.length !== expectedDimensions) {
+    throw new AppError(
+      `Embedding dimension mismatch: expected ${expectedDimensions}, received ${vector.length}`,
+      {
+        statusCode: 500,
+        code: "embedding_dimension_mismatch",
+      },
+    );
+  }
+}
+
+export async function upsertEmbedding(entityType: EmbeddingEntityType, entityId: string, text: string): Promise<void> {
   const contentHash = hashEmbeddingContent(text);
   const db = getOrm();
   const sqlite = getDatabase();
   const now = new Date().toISOString();
-  const existing = db
-    .select()
-    .from(entityEmbeddings)
-    .where(and(eq(entityEmbeddings.entityType, entityType), eq(entityEmbeddings.entityId, entityId)))
-    .get();
+  const getExisting = () =>
+    db
+      .select()
+      .from(entityEmbeddings)
+      .where(and(eq(entityEmbeddings.entityType, entityType), eq(entityEmbeddings.entityId, entityId)))
+      .get();
+  let existing = getExisting();
 
   if (existing && existing.contentHash === contentHash) {
     return;
   }
 
-  const embeddingJson = JSON.stringify(createStubEmbedding(text));
+  const embedding = await createEmbeddingVector(text);
+  assertEmbeddingDimensions(embedding.vector);
+  const embeddingJson = JSON.stringify(embedding.vector);
 
   if (existing) {
     db.update(entityEmbeddings)
       .set({
         contentHash,
-        model: "stub-embedding-v1",
+        model: embedding.model,
         createdAt: now,
       })
       .where(eq(entityEmbeddings.id, existing.id))
@@ -112,34 +187,65 @@ export function upsertEmbedding(entityType: EmbeddingEntityType, entityId: strin
   }
 
   const embeddingId = createPrefixedId("emb_");
-  db.insert(entityEmbeddings)
-    .values({
-      id: embeddingId,
-      entityType,
-      entityId,
-      contentHash,
-      model: "stub-embedding-v1",
-      createdAt: now,
-    })
-    .run();
+  try {
+    db.insert(entityEmbeddings)
+      .values({
+        id: embeddingId,
+        entityType,
+        entityId,
+        contentHash,
+        model: embedding.model,
+        createdAt: now,
+      })
+      .run();
 
-  const insertedRow = sqlite
-    .prepare("SELECT rowid FROM entity_embeddings WHERE id = ?")
-    .get(embeddingId) as { rowid: number } | undefined;
+    const insertedRow = sqlite
+      .prepare("SELECT rowid FROM entity_embeddings WHERE id = ?")
+      .get(embeddingId) as { rowid: number } | undefined;
 
-  if (insertedRow) {
-    sqlite
-      .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (?, ?)")
-      .run(insertedRow.rowid, embeddingJson);
+    if (insertedRow) {
+      sqlite
+        .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (?, ?)")
+        .run(insertedRow.rowid, embeddingJson);
+    }
+  } catch (error) {
+    if (!(error instanceof Error) || !String((error as { code?: string }).code).includes("SQLITE_CONSTRAINT")) {
+      throw error;
+    }
+
+    existing = getExisting();
+    if (!existing) {
+      throw error;
+    }
+
+    db.update(entityEmbeddings)
+      .set({
+        contentHash,
+        model: embedding.model,
+        createdAt: now,
+      })
+      .where(eq(entityEmbeddings.id, existing.id))
+      .run();
+
+    const existingRow = sqlite
+      .prepare("SELECT rowid FROM entity_embeddings WHERE id = ?")
+      .get(existing.id) as { rowid: number } | undefined;
+
+    if (existingRow) {
+      sqlite.prepare("DELETE FROM vec_embeddings WHERE rowid = ?").run(existingRow.rowid);
+      sqlite
+        .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (?, ?)")
+        .run(existingRow.rowid, embeddingJson);
+    }
   }
 }
 
-export function findSimilar(
+export async function findSimilar(
   entityType: EmbeddingEntityType,
   query: string,
   limit = 5,
-): Array<{ entityId: string; distance: number }> {
-  const queryEmbedding = createStubEmbedding(query);
+): Promise<Array<{ entityId: string; distance: number }>> {
+  const queryEmbedding = (await createEmbeddingVector(query)).vector;
   if (getVectorBackend() !== "sqlite-vec") {
     const rows = getDatabase()
       .prepare(

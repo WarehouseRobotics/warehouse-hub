@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 
 import { config } from "../config.js";
+import { getConfiguredEmbeddingDimensions } from "../lib/llm-config.js";
 import { applyMigrations } from "./migrate.js";
 import * as schema from "./schema/index.js";
 
@@ -31,7 +32,7 @@ function ensureVectorTables(database: Database.Database): void {
     database.prepare(
       `
         CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
-          embedding float[1536]
+          embedding float[${getConfiguredEmbeddingDimensions()}]
         )
       `,
     ).run();
