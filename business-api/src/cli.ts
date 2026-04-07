@@ -7,6 +7,7 @@ import { getCompanyCard, upsertCompanyCard } from "./services/company-card.js";
 import { createContact, getContact, listContacts, resolveContact } from "./services/contacts.js";
 import { createDeal, getDeal, listDeals } from "./services/deals.js";
 import { getDocumentDownload, getDocumentMeta, uploadDocument } from "./services/documents.js";
+import { ingestDocument } from "./services/document-ingestion.js";
 import { createExpense, getExpense, listExpenses, updateExpense } from "./services/expenses.js";
 import { createProject, getProject, listProjects } from "./services/projects.js";
 import { generateSalesInvoice, getSalesInvoice, listSalesInvoices, updateSalesInvoice } from "./services/sales-invoices.js";
@@ -14,7 +15,7 @@ import { createTask, getTask, listTasks, updateTask } from "./services/tasks.js"
 import { companyCardInputSchema } from "./schemas/company-card.js";
 import { contactInputSchema, contactResolveInputSchema } from "./schemas/contact.js";
 import { dealInputSchema } from "./schemas/deal.js";
-import { documentUploadSchema } from "./schemas/document.js";
+import { documentIngestSchema, documentUploadSchema } from "./schemas/document.js";
 import { expenseInputSchema, expensePatchSchema } from "./schemas/expense.js";
 import { projectInputSchema } from "./schemas/project.js";
 import { salesInvoiceGenerateSchema, salesInvoicePatchSchema } from "./schemas/sales-invoice.js";
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
         "tsx src/cli.ts contacts get <id-or-slug>",
         "tsx src/cli.ts contacts resolve '<json>'",
         "tsx src/cli.ts documents upload <file-path> '<json-meta>'",
+        "tsx src/cli.ts documents ingest <file-path> '<json-meta>'",
         "tsx src/cli.ts documents get <id-or-slug>",
         "tsx src/cli.ts documents download <id-or-slug> <output-path>",
         "tsx src/cli.ts expenses create '<json>'",
@@ -139,6 +141,33 @@ async function main(): Promise<void> {
         originalname: filePath.split("/").pop() ?? "upload.bin",
         encoding: "7bit",
         mimetype: "application/octet-stream",
+        size: fileBuffer.length,
+        buffer: fileBuffer,
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      meta,
+    );
+    printJson(created);
+    return;
+  }
+
+  if (command === "documents" && subcommand === "ingest") {
+    const filePath = rest[0];
+    const meta = documentIngestSchema.parse(parseJsonArg(rest[1], "document ingestion metadata"));
+    if (!filePath) {
+      throw new Error("Missing file path");
+    }
+
+    const fileBuffer = fs.readFileSync(filePath);
+    const created = await ingestDocument(
+      {
+        fieldname: "file",
+        originalname: filePath.split("/").pop() ?? "upload.bin",
+        encoding: "7bit",
+        mimetype: filePath.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/png",
         size: fileBuffer.length,
         buffer: fileBuffer,
         stream: undefined as never,

@@ -23,6 +23,13 @@ function mapDocument(record: typeof documents.$inferSelect) {
     mimeType: record.mimeType,
     storageStatus: record.storageStatus,
     ocrStatus: record.ocrStatus,
+    ocrText: record.ocrText,
+    ocrError: record.ocrError,
+    ocrEngine: record.ocrEngine,
+    ocrCompletedAt: record.ocrCompletedAt,
+    extractedData: record.extractedDataJson ? (JSON.parse(record.extractedDataJson) as unknown) : null,
+    linkedEntityType: record.linkedEntityType,
+    linkedEntityId: record.linkedEntityId,
     createdAt: record.createdAt,
   };
 }
@@ -36,7 +43,24 @@ function scheduleEmbedding(documentId: string, payload: ReturnType<typeof mapDoc
   });
 }
 
-export function uploadDocument(file: Express.Multer.File, meta: DocumentUploadInput) {
+type CreateStoredDocumentInput = {
+  kind: DocumentUploadInput["kind"];
+  source?: string;
+};
+
+type DocumentProcessingPatch = {
+  storageStatus?: string;
+  ocrStatus?: string;
+  ocrText?: string | null;
+  ocrError?: string | null;
+  ocrEngine?: string | null;
+  ocrCompletedAt?: string | null;
+  extractedData?: unknown;
+  linkedEntityType?: string | null;
+  linkedEntityId?: string | null;
+};
+
+export function createStoredDocument(file: Express.Multer.File, meta: CreateStoredDocumentInput) {
   const company = requireCompanyCardRecord();
   const documentId = createPrefixedId("doc_");
   const now = new Date().toISOString();
@@ -71,6 +95,38 @@ export function uploadDocument(file: Express.Multer.File, meta: DocumentUploadIn
   const created = getDocumentMeta(documentId);
   scheduleEmbedding(documentId, created);
   return created;
+}
+
+export function updateDocumentProcessing(idOrSlug: string, patch: DocumentProcessingPatch) {
+  const existing = requireDocumentRecord(idOrSlug);
+  getOrm()
+    .update(documents)
+    .set({
+      storageStatus: patch.storageStatus ?? existing.storageStatus,
+      ocrStatus: patch.ocrStatus ?? existing.ocrStatus,
+      ocrText: patch.ocrText === undefined ? existing.ocrText : patch.ocrText,
+      ocrError: patch.ocrError === undefined ? existing.ocrError : patch.ocrError,
+      ocrEngine: patch.ocrEngine === undefined ? existing.ocrEngine : patch.ocrEngine,
+      ocrCompletedAt: patch.ocrCompletedAt === undefined ? existing.ocrCompletedAt : patch.ocrCompletedAt,
+      extractedDataJson:
+        patch.extractedData === undefined
+          ? existing.extractedDataJson
+          : patch.extractedData === null
+            ? null
+            : JSON.stringify(patch.extractedData),
+      linkedEntityType: patch.linkedEntityType === undefined ? existing.linkedEntityType : patch.linkedEntityType,
+      linkedEntityId: patch.linkedEntityId === undefined ? existing.linkedEntityId : patch.linkedEntityId,
+    })
+    .where(eq(documents.id, existing.id))
+    .run();
+
+  const updated = getDocumentMeta(existing.id);
+  scheduleEmbedding(existing.id, updated);
+  return updated;
+}
+
+export function uploadDocument(file: Express.Multer.File, meta: DocumentUploadInput) {
+  return createStoredDocument(file, meta);
 }
 
 export function getDocumentMeta(idOrSlug: string) {

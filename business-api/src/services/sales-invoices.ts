@@ -5,6 +5,7 @@ import { contacts, invoiceNumberSeq, salesInvoices } from "../db/schema/index.js
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { normalizeMoneyString } from "../lib/money.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { SalesInvoiceGenerateInput, SalesInvoicePatch } from "../schemas/sales-invoice.js";
 import {
@@ -60,6 +61,24 @@ function addDays(date: string, days: number): string {
   const value = new Date(date);
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
+}
+
+function normalizeSalesInvoiceTotals(
+  totals: { net: string; tax: string; gross: string },
+): { net: string; tax: string; gross: string } {
+  return {
+    net: normalizeMoneyString(totals.net),
+    tax: normalizeMoneyString(totals.tax),
+    gross: normalizeMoneyString(totals.gross),
+  };
+}
+
+function getSalesInvoiceRecordByInvoiceNumber(invoiceNumber: string) {
+  return getOrm()
+    .select()
+    .from(salesInvoices)
+    .where(and(isNull(salesInvoices.deletedAt), eq(salesInvoices.invoiceNumber, invoiceNumber)))
+    .get();
 }
 
 function nextInvoiceNumber(issueDate: string): string {
@@ -152,6 +171,118 @@ export function listSalesInvoices(filters: { status?: string; customerContactId?
 
 export function getSalesInvoice(idOrSlug: string) {
   return mapSalesInvoice(requireSalesInvoiceRecord(idOrSlug));
+}
+
+type ImportSalesInvoiceInput = {
+  targetSalesInvoiceId?: string;
+  customerContactId: string;
+  invoiceNumber: string;
+  issueDate: string;
+  serviceDate?: string;
+  dueDate?: string;
+  currency: string;
+  paymentTermsDays?: number;
+  lineItems?: unknown[];
+  totals: {
+    net: string;
+    tax: string;
+    gross: string;
+  };
+  status?: "draft" | "finalized" | "paid" | "cancelled";
+  pdfDocumentId?: string;
+  overrideFields?: string[];
+};
+
+export function importSalesInvoice(data: ImportSalesInvoiceInput) {
+  const company = requireCompanyCardRecord();
+  requireContactRecord(data.customerContactId);
+  if (data.pdfDocumentId) {
+    requireDocumentRecord(data.pdfDocumentId);
+  }
+
+  const totals = normalizeSalesInvoiceTotals(data.totals);
+  const overrideFields = new Set(data.overrideFields ?? []);
+  const existing = data.targetSalesInvoiceId
+    ? requireSalesInvoiceRecord(data.targetSalesInvoiceId)
+    : getSalesInvoiceRecordByInvoiceNumber(data.invoiceNumber);
+  const now = new Date().toISOString();
+
+  if (existing) {
+    const nextStatus = overrideFields.has("status") ? data.status ?? existing.status : existing.status;
+    if (overrideFields.has("status")) {
+      assertInvoiceTransition(existing.status, nextStatus);
+    }
+
+    getOrm()
+      .update(salesInvoices)
+      .set({
+        invoiceNumber: overrideFields.has("invoiceNumber") ? data.invoiceNumber : existing.invoiceNumber,
+        customerContactId: overrideFields.has("customerContactId")
+          ? data.customerContactId
+          : existing.customerContactId,
+        issueDate: overrideFields.has("issueDate") ? data.issueDate : existing.issueDate,
+        serviceDate:
+          overrideFields.has("serviceDate")
+            ? (data.serviceDate ?? null)
+            : (existing.serviceDate ?? data.serviceDate ?? null),
+        dueDate:
+          overrideFields.has("dueDate")
+            ? (data.dueDate ?? null)
+            : (existing.dueDate ?? data.dueDate ?? null),
+        currency: overrideFields.has("currency") ? data.currency : existing.currency,
+        paymentTermsDays: overrideFields.has("paymentTermsDays")
+          ? (data.paymentTermsDays ?? existing.paymentTermsDays)
+          : (existing.paymentTermsDays ?? data.paymentTermsDays ?? company.paymentTermsDays),
+        lineItems: overrideFields.has("lineItems")
+          ? JSON.stringify(data.lineItems ?? [])
+          : existing.lineItems,
+        net: overrideFields.has("totals") ? totals.net : existing.net,
+        tax: overrideFields.has("totals") ? totals.tax : existing.tax,
+        gross: overrideFields.has("totals") ? totals.gross : existing.gross,
+        status: nextStatus,
+        pdfDocumentId: data.pdfDocumentId ?? existing.pdfDocumentId,
+        updatedAt: now,
+      })
+      .where(eq(salesInvoices.id, existing.id))
+      .run();
+
+    const updated = getSalesInvoice(existing.id);
+    scheduleEmbedding(existing.id, updated);
+    return updated;
+  }
+
+  const id = createPrefixedId("sinv_");
+  const paymentTermsDays = data.paymentTermsDays ?? company.paymentTermsDays;
+
+  getOrm()
+    .insert(salesInvoices)
+    .values({
+      id,
+      slug: createSlug(`${data.customerContactId}:${data.invoiceNumber}:${id}`),
+      invoiceNumber: data.invoiceNumber,
+      companyCardId: company.id,
+      customerContactId: data.customerContactId,
+      dealId: null,
+      issueDate: data.issueDate,
+      serviceDate: data.serviceDate ?? null,
+      dueDate: data.dueDate ?? addDays(data.issueDate, paymentTermsDays),
+      currency: data.currency,
+      paymentTermsDays,
+      lineItems: JSON.stringify(data.lineItems ?? []),
+      net: totals.net,
+      tax: totals.tax,
+      gross: totals.gross,
+      status: data.status ?? "draft",
+      pdfDocumentId: data.pdfDocumentId ?? null,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    })
+    .run();
+
+  const created = getSalesInvoice(id);
+  scheduleEmbedding(id, created);
+  return created;
 }
 
 export function updateSalesInvoice(idOrSlug: string, patch: SalesInvoicePatch) {

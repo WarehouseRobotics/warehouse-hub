@@ -216,6 +216,272 @@ describe("business-api service flows", () => {
     expect(listExpenses({ status: "paid" })).toHaveLength(1);
   });
 
+  it("ingests an expense invoice image with overrides and searchable OCR content", async () => {
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { createContact, listContacts } = await import("../src/services/contacts.js");
+    const { ingestDocument } = await import("../src/services/document-ingestion.js");
+    const { findSimilar } = await import("../src/lib/embeddings.js");
+
+    upsertCompanyCard({
+      legalName: "Northwind Robotics SL",
+      displayName: "Northwind Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    createContact({
+      type: "company",
+      status: "active",
+      roles: ["supplier"],
+      displayName: "Papeleria Centro SL",
+      legalName: "Papeleria Centro SL",
+      taxId: "B87654321",
+      email: "facturas@papeleriacentro.example",
+    });
+
+    const result = await ingestDocument(
+      {
+        fieldname: "file",
+        originalname: "invoice.png",
+        encoding: "7bit",
+        mimetype: "image/png",
+        size: 400,
+        buffer: Buffer.from(
+          [
+            "supplier: Papeleria Centro SL",
+            "supplier tax id: B87654321",
+            "supplier email: facturas@papeleriacentro.example",
+            "invoice number: FC-2026-0042",
+            "invoice date: 2026-03-25",
+            "due date: 2026-04-24",
+            "currency: EUR",
+            "net: 120.00",
+            "tax: 25.20",
+            "gross: 145.20",
+            "category: office_supplies",
+            "notes: Printer paper and toner.",
+            "tax line: name=IVA; rate=21; base=120.00; amount=25.20",
+          ].join("\n"),
+        ),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      {
+        kind: "expense_invoice",
+        overrides: {
+          invoiceDate: "2026-03-26",
+        },
+      },
+    );
+
+    expect(result.document.ocrStatus).toBe("completed");
+    expect(result.appliedOverrides).toContain("invoiceDate");
+    expect(result.linkedEntity?.type).toBe("expense");
+    expect(result.linkedEntity?.data).toEqual(
+      expect.objectContaining({
+        invoiceDate: "2026-03-26",
+        supplierContactId: expect.stringMatching(/^ct_/),
+      }),
+    );
+
+    const similarDocuments = await findSimilar("document", "toner invoice papeleria", 3);
+    expect(similarDocuments.some((match) => match.entityId === result.document.documentId)).toBe(true);
+    expect(listContacts({ role: "supplier" })).toHaveLength(1);
+  });
+
+  it("ingests sales invoice PDFs, creates contacts, and attaches to an existing invoice on re-import", async () => {
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { ingestDocument } = await import("../src/services/document-ingestion.js");
+
+    upsertCompanyCard({
+      legalName: "Northwind Robotics SL",
+      displayName: "Northwind Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    const first = await ingestDocument(
+      {
+        fieldname: "file",
+        originalname: "sales.pdf",
+        encoding: "7bit",
+        mimetype: "application/pdf",
+        size: 300,
+        buffer: Buffer.from(
+          [
+            "customer: Acme Retail GmbH",
+            "customer tax id: DE123456789",
+            "customer email: ap@acme-retail.example",
+            "invoice number: 2026-0041",
+            "issue date: 2026-04-02",
+            "service date: 2026-04-01",
+            "currency: EUR",
+            "payment terms days: 21",
+            "net: 1000.00",
+            "tax: 210.00",
+            "gross: 1210.00",
+          ].join("\n"),
+        ),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      {
+        kind: "sales_invoice_pdf",
+      },
+    );
+
+    expect(first.linkedEntity?.type).toBe("sales_invoice");
+    const createdInvoice = first.linkedEntity?.type === "sales_invoice" ? first.linkedEntity.data : null;
+    expect(createdInvoice?.invoiceNumber).toBe("2026-0041");
+
+    const second = await ingestDocument(
+      {
+        fieldname: "file",
+        originalname: "sales-updated.pdf",
+        encoding: "7bit",
+        mimetype: "application/pdf",
+        size: 320,
+        buffer: Buffer.from(
+          [
+            "customer: Acme Retail GmbH",
+            "invoice number: 2026-0041",
+            "issue date: 2026-04-02",
+            "currency: EUR",
+            "net: 1000.00",
+            "tax: 210.00",
+            "gross: 1210.00",
+          ].join("\n"),
+        ),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      {
+        kind: "sales_invoice_pdf",
+        targetSalesInvoiceId: createdInvoice?.salesInvoiceId,
+        overrides: {
+          status: "finalized",
+          lineItems: [{ description: "Warehouse audit", quantity: "1", unitPrice: "1000.00" }],
+        },
+      },
+    );
+
+    expect(second.linkedEntity?.type).toBe("sales_invoice");
+    if (second.linkedEntity?.type !== "sales_invoice" || !createdInvoice) {
+      throw new Error("Expected a linked sales invoice");
+    }
+    expect(second.linkedEntity.data.salesInvoiceId).toBe(createdInvoice.salesInvoiceId);
+    expect(second.linkedEntity.data.status).toBe("finalized");
+    expect(second.linkedEntity.data.pdfDocumentId).toBe(second.document.documentId);
+  });
+
+  it("ingests contracts and keeps failed OCR documents without linked entities", async () => {
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { ingestDocument } = await import("../src/services/document-ingestion.js");
+    const { getDocumentMeta } = await import("../src/services/documents.js");
+
+    upsertCompanyCard({
+      legalName: "Northwind Robotics SL",
+      displayName: "Northwind Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    const contract = await ingestDocument(
+      {
+        fieldname: "file",
+        originalname: "contract.pdf",
+        encoding: "7bit",
+        mimetype: "application/pdf",
+        size: 250,
+        buffer: Buffer.from(
+          [
+            "contract title: Master Services Agreement",
+            "effective date: 2026-04-03",
+            "counterparty: Acme Retail GmbH",
+            "counterparty email: legal@acme-retail.example",
+          ].join("\n"),
+        ),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      {
+        kind: "contract",
+      },
+    );
+
+    expect(contract.document.linkedEntityType).toBe("contact");
+    expect(contract.extracted.title).toBe("Master Services Agreement");
+
+    let failedDocumentId = "";
+    try {
+      await ingestDocument(
+        {
+          fieldname: "file",
+          originalname: "broken.pdf",
+          encoding: "7bit",
+          mimetype: "application/pdf",
+          size: 40,
+          buffer: Buffer.from("OCR_ERROR: broken sample"),
+          stream: undefined as never,
+          destination: "",
+          filename: "",
+          path: "",
+        },
+        {
+          kind: "contract",
+        },
+      );
+      throw new Error("Expected OCR failure");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "ocr_failed",
+      });
+      failedDocumentId = (error as { details?: { documentId?: string } }).details?.documentId ?? "";
+    }
+
+    const failedDocument = getDocumentMeta(failedDocumentId);
+    expect(failedDocument.ocrStatus).toBe("failed");
+    expect(failedDocument.linkedEntityId).toBeNull();
+  });
+
   it("computes deal totals, generates invoice numbers, and manages task hierarchies", async () => {
     const { upsertCompanyCard } = await import("../src/services/company-card.js");
     const { createContact } = await import("../src/services/contacts.js");

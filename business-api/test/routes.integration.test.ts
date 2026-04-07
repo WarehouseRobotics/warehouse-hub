@@ -94,6 +94,50 @@ describe("business-api routes", () => {
     expect(Buffer.from(await downloadResponse.arrayBuffer()).toString()).toBe("pdf-data-2");
   });
 
+  it("ingests a document through the HTTP API and creates an expense", async () => {
+    const formData = new FormData();
+    formData.set("kind", "expense_invoice");
+    formData.set("overrides", JSON.stringify({ invoiceDate: "2026-03-26" }));
+    formData.set(
+      "file",
+      new File(
+        [
+          Buffer.from(
+            [
+              "supplier: Papeleria Centro SL",
+              "invoice number: FC-2026-0042",
+              "invoice date: 2026-03-25",
+              "due date: 2026-04-24",
+              "currency: EUR",
+              "net: 120.00",
+              "tax: 25.20",
+              "gross: 145.20",
+            ].join("\n"),
+          ),
+        ],
+        "invoice.png",
+        { type: "image/png" },
+      ),
+    );
+
+    const response = await fetch(`${baseUrl}/api/v1/documents/ingest`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+      body: formData,
+    });
+
+    expect(response.status).toBe(201);
+    const payload = (await response.json()) as {
+      document: { documentId: string; ocrStatus: string };
+      linkedEntity: { type: string; data: { invoiceDate: string } } | null;
+    };
+    expect(payload.document.ocrStatus).toBe("completed");
+    expect(payload.linkedEntity?.type).toBe("expense");
+    expect(payload.linkedEntity?.data.invoiceDate).toBe("2026-03-26");
+  });
+
   it("creates and reads contacts through the HTTP API", async () => {
     const createResponse = await fetch(`${baseUrl}/api/v1/contacts`, {
       method: "POST",

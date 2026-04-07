@@ -17,6 +17,13 @@ export const documents = sqliteTable("documents", {
   checksum: text("checksum"),
   storageStatus: text("storage_status").notNull().default("stored"),
   ocrStatus: text("ocr_status").notNull().default("pending"),
+  ocrText: text("ocr_text"),
+  ocrError: text("ocr_error"),
+  ocrEngine: text("ocr_engine"),
+  ocrCompletedAt: text("ocr_completed_at"),
+  extractedDataJson: text("extracted_data_json"),
+  linkedEntityType: text("linked_entity_type"),
+  linkedEntityId: text("linked_entity_id"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   deletedAt: text("deleted_at"),
 });

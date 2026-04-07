@@ -61,7 +61,18 @@ export function computeEmbeddingText(entityType: EmbeddingEntityType, entity: Re
         .filter(Boolean)
         .join(" ");
     case "document":
-      return [entity.kind, entity.source, entity.originalFilename, entity.mimeType].filter(Boolean).join(" ");
+      return [
+        entity.kind,
+        entity.source,
+        entity.originalFilename,
+        entity.filename,
+        entity.mimeType,
+        entity.ocrStatus,
+        entity.ocrText,
+        typeof entity.extractedData === "object" && entity.extractedData ? JSON.stringify(entity.extractedData) : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "deal":
       return [
         entity.title,
