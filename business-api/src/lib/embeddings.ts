@@ -152,6 +152,14 @@ function assertEmbeddingDimensions(vector: number[]): void {
   }
 }
 
+function replaceVectorRow(rowid: number, embeddingJson: string): void {
+  const sqlite = getDatabase();
+  sqlite.prepare("DELETE FROM vec_embeddings WHERE rowid = ?").run(rowid);
+  sqlite
+    .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)")
+    .run(rowid, embeddingJson);
+}
+
 export async function upsertEmbedding(entityType: EmbeddingEntityType, entityId: string, text: string): Promise<void> {
   const contentHash = hashEmbeddingContent(text);
   const db = getOrm();
@@ -188,10 +196,7 @@ export async function upsertEmbedding(entityType: EmbeddingEntityType, entityId:
       .get(existing.id) as { rowid: number } | undefined;
 
     if (existingRow) {
-      sqlite.prepare("DELETE FROM vec_embeddings WHERE rowid = ?").run(existingRow.rowid);
-      sqlite
-        .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (?, ?)")
-        .run(existingRow.rowid, embeddingJson);
+      replaceVectorRow(existingRow.rowid, embeddingJson);
     }
 
     return;
@@ -216,7 +221,7 @@ export async function upsertEmbedding(entityType: EmbeddingEntityType, entityId:
 
     if (insertedRow) {
       sqlite
-        .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (?, ?)")
+        .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)")
         .run(insertedRow.rowid, embeddingJson);
     }
   } catch (error) {
@@ -243,10 +248,7 @@ export async function upsertEmbedding(entityType: EmbeddingEntityType, entityId:
       .get(existing.id) as { rowid: number } | undefined;
 
     if (existingRow) {
-      sqlite.prepare("DELETE FROM vec_embeddings WHERE rowid = ?").run(existingRow.rowid);
-      sqlite
-        .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (?, ?)")
-        .run(existingRow.rowid, embeddingJson);
+      replaceVectorRow(existingRow.rowid, embeddingJson);
     }
   }
 }
@@ -281,16 +283,20 @@ export async function findSimilar(
   const rows = getDatabase()
     .prepare(
       `
-        SELECT entity_embeddings.entity_id AS entityId, vec_embeddings.distance AS distance
-        FROM vec_embeddings
-        JOIN entity_embeddings ON entity_embeddings.rowid = vec_embeddings.rowid
-        WHERE vec_embeddings.embedding MATCH ?
-          AND entity_embeddings.entity_type = ?
-        ORDER BY distance
-        LIMIT ?
+        SELECT entity_embeddings.entity_id AS entityId, candidates.distance AS distance
+        FROM (
+          SELECT rowid, distance
+          FROM vec_embeddings
+          WHERE embedding MATCH ?
+          ORDER BY distance
+          LIMIT ?
+        ) AS candidates
+        JOIN entity_embeddings ON entity_embeddings.rowid = candidates.rowid
+        WHERE entity_embeddings.entity_type = ?
+        ORDER BY candidates.distance
       `,
     )
-    .all(JSON.stringify(queryEmbedding), entityType, limit) as Array<{
+    .all(JSON.stringify(queryEmbedding), limit, entityType) as Array<{
       entityId: string;
       distance: number;
     }>;
