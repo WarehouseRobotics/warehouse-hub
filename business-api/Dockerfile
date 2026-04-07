@@ -1,15 +1,18 @@
-FROM node:22-alpine
+FROM node:22-slim
 
 WORKDIR /app
 
-# Install git
-RUN apk add git make
+# Install runtime utilities used by local ingestion/OCR.
+#RUN apk add git make poppler-utils tesseract-ocr
+#RUN apk add git make poppler-utils tesseract-ocr musl musl-dev
+RUN apt-get update && apt-get install -y git make poppler-utils tesseract-ocr libtesseract-dev musl musl-dev
+RUN rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 
 # --node-llama-cpp-postinstall=skip is used to skip the postinstall script that 
 # builds the llama.cpp library that currently produce an error
-RUN npm install --node-llama-cpp-postinstall=skip
+RUN rm -rf node_modules && npm install --node-llama-cpp-postinstall=skip
 
 COPY . .
 
