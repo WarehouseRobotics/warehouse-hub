@@ -165,7 +165,7 @@ Contact nesting: a `person` contact can have `parent_contact_id` pointing to a `
 **documents**
 - `id` TEXT PK (prefix `doc_`)
 - `slug` TEXT UNIQUE
-- `kind` TEXT (`expense_invoice`, `sales_invoice_pdf`, `contract`, `other`)
+- `kind` TEXT (`expense_invoice`, `sales_invoice`, `contract`, `other`)
 - `source` TEXT
 - `original_filename`, `mime_type`, `file_path`, `checksum`
 - `storage_status` TEXT DEFAULT `stored`

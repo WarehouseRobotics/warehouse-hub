@@ -5,7 +5,7 @@ Add a new synchronous ingestion flow in `business-api` that accepts an image or 
 
 This v1 should support:
 - `expense_invoice`: create a `documents` record plus an `expenses` record
-- `sales_invoice_pdf`: create or update a `documents` record plus create or update a `sales_invoices` record
+- `sales_invoice`: create or update a `documents` record plus create or update a `sales_invoices` record
 - `contract`: create a `documents` record with OCR/extraction metadata only
 
 ## Public API and CLI Changes
@@ -16,11 +16,11 @@ Add a new multipart endpoint and matching CLI command instead of overloading the
 
 Multipart/body contract:
 - `file`: required image or PDF
-- `kind`: `expense_invoice | sales_invoice_pdf | contract`
+- `kind`: `expense_invoice | sales_invoice | contract`
 - `companyCardId`: optional transport field for future multi-company support; for current MVP validate it matches the single owned company card when provided
 - `source`: optional, same meaning as today
 - `overrides`: optional JSON object; values here always win over OCR-derived values field-by-field
-- `targetSalesInvoiceId`: optional, only for `sales_invoice_pdf`; when present, attach/update that invoice instead of creating a new one
+- `targetSalesInvoiceId`: optional, only for `sales_invoice`; when present, attach/update that invoice instead of creating a new one
 
 Override shape:
 - Shared: `invoiceNumber`, `invoiceDate`, `dueDate`, `currency`, `notes`
@@ -51,7 +51,7 @@ Pipeline for one request:
 6. Correct data using known records:
    - company card for seller identity and default currency/payment terms
    - contacts lookup for supplier/customer matching
-   - existing sales invoice lookup by invoice number when ingesting `sales_invoice_pdf`
+   - existing sales invoice lookup by invoice number when ingesting `sales_invoice`
 7. Apply explicit overrides last.
 8. Persist OCR/extraction metadata back onto the document.
 9. Create/update the linked typed record.

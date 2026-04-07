@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { expenseTotalsSchema, taxLineSchema } from "./expense.js";
 
-export const documentKindSchema = z.enum(["expense_invoice", "sales_invoice_pdf", "contract", "other"]);
+export const documentKindSchema = z.enum(["expense_invoice", "sales_invoice", "contract", "other"]);
 
 export const documentUploadSchema = z
   .object({
@@ -43,7 +43,7 @@ export const documentIngestOverridesSchema = sharedDocumentOverrideSchema
 
 export const documentIngestSchema = z
   .object({
-    kind: z.enum(["expense_invoice", "sales_invoice_pdf", "contract"]),
+    kind: z.enum(["expense_invoice", "sales_invoice", "contract"]),
     companyCardId: z.string().min(1).optional(),
     source: z.string().optional(),
     overrides: documentIngestOverridesSchema.optional(),

@@ -366,7 +366,7 @@ export async function ingestDocument(
       linkedEntityId = expense.expenseId;
     }
 
-    if (input.kind === "sales_invoice_pdf") {
+    if (input.kind === "sales_invoice") {
       const customer = resolvePartyContactId(
         "customer",
         extracted.customer,

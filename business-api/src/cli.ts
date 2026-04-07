@@ -30,7 +30,16 @@ function parseJsonArg(value: string | undefined, label: string): unknown {
     throw new Error(`Missing ${label} JSON argument`);
   }
 
-  return JSON.parse(value);
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    console.error(`Invalid ${label} JSON argument: ${value}`, { cause: error, raw: value });
+    throw new Error(`Invalid ${label} JSON argument: ${value}`, { cause: error });
+  }   
+  
+  return parsed;
 }
 
 async function main(): Promise<void> {

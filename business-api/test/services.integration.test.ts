@@ -350,7 +350,7 @@ describe("business-api service flows", () => {
         path: "",
       },
       {
-        kind: "sales_invoice_pdf",
+        kind: "sales_invoice",
       },
     );
 
@@ -382,7 +382,7 @@ describe("business-api service flows", () => {
         path: "",
       },
       {
-        kind: "sales_invoice_pdf",
+        kind: "sales_invoice",
         targetSalesInvoiceId: createdInvoice?.salesInvoiceId,
         overrides: {
           status: "finalized",
