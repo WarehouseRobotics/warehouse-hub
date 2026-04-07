@@ -22,7 +22,12 @@ case "$CMD" in
     ;;
   exec)
     shift
-    docker compose exec business-api sh -c "$*"
+    if [ "$#" -eq 0 ]; then
+      echo "Usage: $0 exec <command> <command arguments>}"
+      exit 1
+    fi
+
+    docker compose exec business-api "$@"
     ;;
   *)
     echo "Usage: $0 {build|start|stop|restart|sh|exec <command>}"
