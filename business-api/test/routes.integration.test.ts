@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-const testDataDir = path.resolve(process.cwd(), "test-data");
+const testDataDir = path.resolve(process.cwd(), "test-tmp");
 
 async function resetTestState() {
   const { resetDatabase, initializeDatabase } = await import("../src/db/connection.js");
@@ -130,10 +130,11 @@ describe("business-api routes", () => {
 
     expect(response.status).toBe(201);
     const payload = (await response.json()) as {
-      document: { documentId: string; ocrStatus: string };
+      document: { documentId: string; ocrStatus: string; ocrEngine: string | null };
       linkedEntity: { type: string; data: { invoiceDate: string } } | null;
     };
     expect(payload.document.ocrStatus).toBe("completed");
+    expect(payload.document.ocrEngine).toBe("structured-stub-ocr");
     expect(payload.linkedEntity?.type).toBe("expense");
     expect(payload.linkedEntity?.data.invoiceDate).toBe("2026-03-26");
   });

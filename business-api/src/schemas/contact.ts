@@ -25,7 +25,7 @@ export const contactPatchSchema = contactInputSchema.partial();
 export const contactResolveInputSchema = z
   .object({
     autoCreate: z.boolean().default(false),
-    matchBy: z.array(z.enum(["taxId", "email", "legalName"])).min(1),
+    matchBy: z.array(z.enum(["taxId", "email", "legalName", "canonicalName"])).min(1),
     contact: contactInputSchema,
   })
   .strict();

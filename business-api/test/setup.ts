@@ -9,6 +9,6 @@ process.env.UPLOAD_DIR = "./test-data/uploads";
 process.env.OCR_STUB_MODE = "true";
 process.env.EMBEDDING_ALLOW_STUB_FALLBACK = "true";
 
-const testDataDir = path.resolve(process.cwd(), "test-data");
+const testDataDir = path.resolve(process.cwd(), "test-tmp");
 fs.rmSync(testDataDir, { recursive: true, force: true });
 fs.mkdirSync(testDataDir, { recursive: true });

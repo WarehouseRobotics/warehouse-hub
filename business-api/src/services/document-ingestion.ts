@@ -1,17 +1,22 @@
 import type { ContactInput } from "../schemas/contact.js";
 import type { DocumentIngestInput, DocumentIngestOverrides } from "../schemas/document.js";
+import type { StructuredInvoice } from "../schemas/structured-ocr.js";
 import { createExpense, getExpense } from "./expenses.js";
 import { resolveContact } from "./contacts.js";
 import { createStoredDocument, getDocumentMeta, updateDocumentProcessing } from "./documents.js";
-import { extractDocumentText } from "./document-ocr.js";
+import { extractDocumentText, renderDocumentPages } from "./document-ocr.js";
 import { importSalesInvoice } from "./sales-invoices.js";
+import { extractStructuredInvoiceFromPages } from "./structured-ocr.js";
 import { requireCompanyCardRecord, requireContactRecord } from "./shared.js";
 import { AppError } from "../lib/errors.js";
 
 type ExtractedParty = {
   name?: string;
+  legalName?: string;
   taxId?: string;
   email?: string;
+  phone?: string;
+  billingAddress?: ContactInput["billingAddress"];
 };
 
 type ExtractedTotals = {
@@ -39,6 +44,7 @@ type ExtractedDocumentData = {
   category?: string;
   paymentTermsDays?: number;
   status?: "draft" | "finalized" | "paid" | "cancelled";
+  structuredData?: StructuredInvoice;
 };
 
 type IngestionResponse = {
@@ -189,6 +195,79 @@ function getOverrideFields(overrides: DocumentIngestOverrides | undefined): stri
     .map(([key]) => key);
 }
 
+function toParsedDate(value: string | undefined): string | undefined {
+  return parseDateValue(value) ?? value;
+}
+
+function mapStructuredParty(
+  party: StructuredInvoice["seller"] | StructuredInvoice["buyer"] | undefined,
+): ExtractedParty | undefined {
+  if (!party) {
+    return undefined;
+  }
+
+  const name = party.displayName ?? party.legalName;
+  if (!name && !party.taxId && !party.email && !party.phone && !party.address) {
+    return undefined;
+  }
+
+  return {
+    name,
+    legalName: party.legalName ?? name,
+    taxId: party.taxId,
+    email: party.email,
+    phone: party.phone,
+    billingAddress: party.address
+      ? {
+          street1: party.address.street1 ?? "",
+          street2: party.address.street2,
+          city: party.address.city ?? "",
+          postalCode: party.address.postalCode ?? "",
+          countryCode: party.address.countryCode ?? "",
+        }
+      : undefined,
+  };
+}
+
+function compactBillingAddress(address: ContactInput["billingAddress"] | undefined): ContactInput["billingAddress"] | undefined {
+  if (!address) {
+    return undefined;
+  }
+
+  if (!address.street1 || !address.city || !address.postalCode || !address.countryCode) {
+    return undefined;
+  }
+
+  return address;
+}
+
+function mapStructuredInvoiceToExtracted(
+  structured: StructuredInvoice,
+  kind: "expense_invoice" | "sales_invoice",
+): ExtractedDocumentData {
+  const seller = mapStructuredParty(structured.seller);
+  const buyer = mapStructuredParty(structured.buyer);
+  const supplier = seller ?? buyer;
+  const customer = buyer ?? seller;
+
+  return {
+    invoiceNumber: structured.invoiceNumber,
+    invoiceDate: toParsedDate(structured.invoiceDate),
+    issueDate: toParsedDate(structured.issueDate ?? structured.invoiceDate),
+    dueDate: toParsedDate(structured.dueDate),
+    serviceDate: toParsedDate(structured.serviceDate),
+    currency: structured.currency,
+    notes: structured.notes,
+    supplier: kind === "expense_invoice" ? supplier : seller,
+    customer: kind === "sales_invoice" ? customer : undefined,
+    totals: structured.totals,
+    taxLines: structured.taxLines,
+    lineItems: structured.lineItems,
+    paymentTermsDays: structured.paymentTermsDays,
+    structuredData: structured,
+  };
+}
+
 function mergeExtractedWithOverrides(
   extracted: ExtractedDocumentData,
   overrides: DocumentIngestOverrides | undefined,
@@ -250,9 +329,11 @@ function buildContactInput(party: ExtractedParty, role: "supplier" | "customer")
     type: "company",
     roles: [role],
     displayName,
-    legalName: displayName,
+    legalName: party.legalName?.trim() || displayName,
     taxId: party.taxId,
     email: party.email,
+    phone: party.phone,
+    billingAddress: compactBillingAddress(party.billingAddress),
     status: "active",
   };
 }
@@ -276,7 +357,7 @@ function resolvePartyContactId(
 
   const resolved = resolveContact({
     autoCreate: true,
-    matchBy: ["taxId", "email", "legalName"],
+    matchBy: ["taxId", "email", "canonicalName", "legalName"],
     contact: buildContactInput(party, role),
   });
 
@@ -321,8 +402,19 @@ export async function ingestDocument(
   });
 
   try {
-    const ocrResult = await extractDocumentText(file);
-    const parsed = parseExtractedData(ocrResult.text);
+    let ocrResult: { engine: string; text: string };
+    let parsed: ExtractedDocumentData;
+
+    if (input.kind === "expense_invoice" || input.kind === "sales_invoice") {
+      const structuredResult = await extractStructuredInvoiceFromPages(renderDocumentPages(file));
+      ocrResult = structuredResult;
+      parsed = mapStructuredInvoiceToExtracted(structuredResult.data, input.kind);
+    } else {
+      const textResult = await extractDocumentText(file);
+      ocrResult = textResult;
+      parsed = parseExtractedData(textResult.text);
+    }
+
     const extracted = mergeExtractedWithOverrides(parsed, input.overrides);
     const completedAt = new Date().toISOString();
 
@@ -416,7 +508,7 @@ export async function ingestDocument(
       } else if (extracted.counterparty?.name) {
         const resolved = resolveContact({
           autoCreate: true,
-          matchBy: ["taxId", "email", "legalName"],
+          matchBy: ["taxId", "email", "canonicalName", "legalName"],
           contact: buildContactInput(extracted.counterparty, "customer"),
         });
         const record = requireContactRecord(resolved.contactId);

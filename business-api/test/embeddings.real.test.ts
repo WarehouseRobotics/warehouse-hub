@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const testDataDir = path.resolve(process.cwd(), "test-data");
+const testDataDir = path.resolve(process.cwd(), "test-tmp");
 
 async function resetEmbeddingState() {
   vi.resetModules();
@@ -19,7 +19,7 @@ async function resetEmbeddingState() {
 describe("embedding service against the configured local API", () => {
   beforeAll(() => {
     process.env.EMBEDDING_ALLOW_STUB_FALLBACK = "false";
-    delete process.env.LLMS_CONFIG_PATH;
+    process.env.LLMS_CONFIG_PATH = "./config/llms.yaml";
   });
 
   beforeEach(async () => {

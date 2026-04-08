@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const testDataDir = path.resolve(process.cwd(), "test-data");
+const testDataDir = path.resolve(process.cwd(), "test-tmp");
 const llmConfigPath = path.join(testDataDir, "llms.mock.yaml");
 
 async function resetEmbeddingModules() {

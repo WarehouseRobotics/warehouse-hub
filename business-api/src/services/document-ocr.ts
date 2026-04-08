@@ -12,6 +12,12 @@ type OcrResult = {
   engine: string;
 };
 
+export type RasterizedPage = {
+  filename: string;
+  mimeType: "image/png";
+  buffer: Buffer;
+};
+
 function isPdf(file: Express.Multer.File): boolean {
   return file.mimetype === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf");
 }
@@ -40,7 +46,7 @@ async function extractImageText(buffer: Buffer): Promise<string> {
   return result.data.text.trim();
 }
 
-async function extractPdfText(file: Express.Multer.File): Promise<string> {
+export function rasterizePdfToPages(file: Express.Multer.File): RasterizedPage[] {
   const tempDir = fs.mkdtempSync(path.join(config.uploadDir, "ocr-"));
   const pdfPath = path.join(tempDir, "source.pdf");
   const prefix = path.join(tempDir, "page");
@@ -61,13 +67,11 @@ async function extractPdfText(file: Express.Multer.File): Promise<string> {
       });
     }
 
-    const pageTexts: string[] = [];
-    for (const pageFile of pageFiles) {
-      const pageBuffer = fs.readFileSync(path.join(tempDir, pageFile));
-      pageTexts.push(await extractImageText(pageBuffer));
-    }
-
-    return pageTexts.join("\n\n").trim();
+    return pageFiles.map((pageFile) => ({
+      filename: pageFile,
+      mimeType: "image/png",
+      buffer: fs.readFileSync(path.join(tempDir, pageFile)),
+    }));
   } catch (error) {
     if (error instanceof AppError) {
       throw error;
@@ -81,6 +85,38 @@ async function extractPdfText(file: Express.Multer.File): Promise<string> {
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+}
+
+async function extractPdfText(file: Express.Multer.File): Promise<string> {
+  const pageTexts: string[] = [];
+  for (const page of rasterizePdfToPages(file)) {
+    pageTexts.push(await extractImageText(page.buffer));
+  }
+
+  return pageTexts.join("\n\n").trim();
+}
+
+export function renderDocumentPages(file: Express.Multer.File): Array<{ mediaType: string; data: Buffer }> {
+  if (isPdf(file)) {
+    return rasterizePdfToPages(file).map((page) => ({
+      mediaType: page.mimeType,
+      data: page.buffer,
+    }));
+  }
+
+  if (isImage(file)) {
+    return [
+      {
+        mediaType: file.mimetype || "image/png",
+        data: file.buffer,
+      },
+    ];
+  }
+
+  throw new AppError(`Unsupported OCR mime type: ${file.mimetype || "unknown"}`, {
+    statusCode: 400,
+    code: "unsupported_document_type",
+  });
 }
 
 export async function extractDocumentText(file: Express.Multer.File): Promise<OcrResult> {

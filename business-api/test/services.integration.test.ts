@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-const testDataDir = path.resolve(process.cwd(), "test-data");
+const testDataDir = path.resolve(process.cwd(), "test-tmp");
 
 async function resetTestState() {
   const { resetDatabase, initializeDatabase } = await import("../src/db/connection.js");
@@ -99,12 +99,30 @@ describe("business-api service flows", () => {
     ).toEqual({
       contactId: existing.contactId,
       resolution: "matched",
-      matchedBy: "taxId",
+        matchedBy: "taxId",
+      });
+
+    expect(
+      resolveContact({
+        autoCreate: true,
+        matchBy: ["canonicalName"],
+        contact: {
+          type: "company",
+          status: "active",
+          roles: ["supplier"],
+          displayName: "Papeleria Centro",
+          legalName: "Papeleria Centro",
+        },
+      }),
+    ).toEqual({
+      contactId: existing.contactId,
+      resolution: "matched",
+      matchedBy: "canonicalName",
     });
 
     const created = resolveContact({
       autoCreate: true,
-      matchBy: ["taxId", "email", "legalName"],
+      matchBy: ["taxId", "email", "canonicalName", "legalName"],
       contact: {
         type: "company",
         status: "active",
@@ -122,6 +140,57 @@ describe("business-api service flows", () => {
         displayName: "Acme Retail GmbH",
       }),
     );
+  });
+
+  it("fails contact resolution when canonicalized company names are ambiguous", async () => {
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { createContact, resolveContact } = await import("../src/services/contacts.js");
+
+    upsertCompanyCard({
+      legalName: "Northwind Robotics SL",
+      displayName: "Northwind Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    createContact({
+      type: "company",
+      status: "active",
+      roles: ["customer"],
+      displayName: "Acme Retail GmbH",
+      legalName: "Acme Retail GmbH",
+    });
+    createContact({
+      type: "company",
+      status: "active",
+      roles: ["customer"],
+      displayName: "Acme Retail SL",
+      legalName: "Acme Retail SL",
+    });
+
+    expect(() =>
+      resolveContact({
+        autoCreate: true,
+        matchBy: ["canonicalName"],
+        contact: {
+          type: "company",
+          status: "active",
+          roles: ["customer"],
+          displayName: "Acme Retail",
+          legalName: "Acme Retail",
+        },
+      }),
+    ).toThrowError(/Contact resolution is ambiguous/);
   });
 
   it("uploads documents and records expenses with transitions", async () => {
@@ -287,8 +356,10 @@ describe("business-api service flows", () => {
     );
 
     expect(result.document.ocrStatus).toBe("completed");
+    expect(result.document.ocrEngine).toBe("structured-stub-ocr");
     expect(result.appliedOverrides).toContain("invoiceDate");
     expect(result.linkedEntity?.type).toBe("expense");
+    expect(result.extracted.structuredData?.schemaVersion).toBe("invoice.v1");
     expect(result.linkedEntity?.data).toEqual(
       expect.objectContaining({
         invoiceDate: "2026-03-26",
@@ -398,6 +469,85 @@ describe("business-api service flows", () => {
     expect(second.linkedEntity.data.salesInvoiceId).toBe(createdInvoice.salesInvoiceId);
     expect(second.linkedEntity.data.status).toBe("finalized");
     expect(second.linkedEntity.data.pdfDocumentId).toBe(second.document.documentId);
+  });
+
+  it("fails ambiguous invoice contact matching instead of auto-creating a duplicate", async () => {
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { createContact, listContacts } = await import("../src/services/contacts.js");
+    const { ingestDocument } = await import("../src/services/document-ingestion.js");
+    const { getDocumentMeta } = await import("../src/services/documents.js");
+
+    upsertCompanyCard({
+      legalName: "Northwind Robotics SL",
+      displayName: "Northwind Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    createContact({
+      type: "company",
+      status: "active",
+      roles: ["supplier"],
+      displayName: "Acme Supplies GmbH",
+      legalName: "Acme Supplies GmbH",
+    });
+    createContact({
+      type: "company",
+      status: "active",
+      roles: ["supplier"],
+      displayName: "Acme Supplies SL",
+      legalName: "Acme Supplies SL",
+    });
+
+    let failedDocumentId = "";
+    try {
+      await ingestDocument(
+        {
+          fieldname: "file",
+          originalname: "ambiguous.png",
+          encoding: "7bit",
+          mimetype: "image/png",
+          size: 200,
+          buffer: Buffer.from(
+            [
+              "supplier: Acme Supplies",
+              "invoice number: FC-2026-0043",
+              "invoice date: 2026-03-25",
+              "currency: EUR",
+              "net: 10.00",
+              "tax: 2.10",
+              "gross: 12.10",
+            ].join("\n"),
+          ),
+          stream: undefined as never,
+          destination: "",
+          filename: "",
+          path: "",
+        },
+        {
+          kind: "expense_invoice",
+        },
+      );
+      throw new Error("Expected ambiguous contact resolution");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "contact_resolution_ambiguous",
+      });
+      failedDocumentId = (error as { details?: { documentId?: string } }).details?.documentId ?? "";
+    }
+
+    expect(listContacts({ role: "supplier" })).toHaveLength(2);
+    expect(getDocumentMeta(failedDocumentId).ocrStatus).toBe("failed");
   });
 
   it("ingests contracts and keeps failed OCR documents without linked entities", async () => {

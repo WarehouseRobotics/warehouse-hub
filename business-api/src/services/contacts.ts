@@ -9,6 +9,21 @@ import { createSlug } from "../lib/slug-ids.js";
 import type { ContactInput, ContactPatch, ContactResolveInput, ContactType } from "../schemas/contact.js";
 import { requireContactRecord } from "./shared.js";
 
+const LEGAL_SUFFIXES = [
+  "llc",
+  "ltd",
+  "inc",
+  "corp",
+  "co",
+  "sl",
+  "sa",
+  "gmbh",
+  "bv",
+  "oy",
+  "sas",
+  "sarl",
+];
+
 function parseRoles(raw: string): string[] {
   try {
     return JSON.parse(raw) as string[];
@@ -79,6 +94,30 @@ function validateParentContact(parentContactId: string | undefined, type: Contac
       code: "invalid_parent_contact",
     });
   }
+}
+
+function normalizeValue(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return normalized || undefined;
+}
+
+function canonicalizeCompanyName(value: string | undefined): string | undefined {
+  const normalized = normalizeValue(value)
+    ?.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, " ")
+    .replace(/\b(s\s*l|s\s*a)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  const tokens = normalized
+    .split(" ")
+    .filter(Boolean)
+    .filter((token) => !LEGAL_SUFFIXES.includes(token));
+
+  return tokens.join(" ").trim() || undefined;
 }
 
 export function createContact(data: ContactInput) {
@@ -235,27 +274,47 @@ export function resolveContact(input: ContactResolveInput) {
   const matchers = input.matchBy;
   const candidates = getOrm().select().from(contacts).where(isNull(contacts.deletedAt)).all();
   const normalizedTarget = {
-    taxId: input.contact.taxId?.trim().toLowerCase(),
-    email: input.contact.email?.trim().toLowerCase(),
-    legalName: input.contact.legalName?.trim().toLowerCase(),
+    taxId: normalizeValue(input.contact.taxId),
+    email: normalizeValue(input.contact.email),
+    legalName: normalizeValue(input.contact.legalName),
+    canonicalName: canonicalizeCompanyName(input.contact.legalName ?? input.contact.displayName),
   };
 
   for (const matcher of matchers) {
-    const matched = candidates.find((candidate) => {
+    const matchedCandidates = candidates.filter((candidate) => {
       if (matcher === "taxId") {
-        return normalizedTarget.taxId && candidate.taxId?.trim().toLowerCase() === normalizedTarget.taxId;
+        return !!normalizedTarget.taxId && normalizeValue(candidate.taxId ?? undefined) === normalizedTarget.taxId;
       }
 
       if (matcher === "email") {
-        return normalizedTarget.email && candidate.email?.trim().toLowerCase() === normalizedTarget.email;
+        return !!normalizedTarget.email && normalizeValue(candidate.email ?? undefined) === normalizedTarget.email;
+      }
+
+      if (matcher === "canonicalName") {
+        return (
+          normalizedTarget.canonicalName &&
+          normalizedTarget.canonicalName === canonicalizeCompanyName(candidate.legalName ?? candidate.displayName)
+        );
       }
 
       return (
-        normalizedTarget.legalName &&
-        candidate.legalName?.trim().toLowerCase() === normalizedTarget.legalName
+        !!normalizedTarget.legalName &&
+        normalizeValue(candidate.legalName ?? undefined) === normalizedTarget.legalName
       );
     });
 
+    if (matcher === "canonicalName" && matchedCandidates.length > 1) {
+      throw new AppError("Contact resolution is ambiguous", {
+        statusCode: 422,
+        code: "contact_resolution_ambiguous",
+        details: {
+          matchedContactIds: matchedCandidates.map((candidate) => candidate.id),
+          canonicalName: normalizedTarget.canonicalName,
+        },
+      });
+    }
+
+    const matched = matchedCandidates[0];
     if (matched) {
       return {
         contactId: matched.id,

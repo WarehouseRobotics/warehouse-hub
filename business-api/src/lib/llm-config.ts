@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { config } from "../config.js";
 
-const embeddingProviderSchema = z
+const openAiCompatibleProviderSchema = z
   .object({
     style: z.literal("openai-compatible"),
     endpoint: z.string().url(),
@@ -15,21 +15,27 @@ const embeddingProviderSchema = z
     apiKey: z.string().min(1).optional(),
     default_dims: z.number().int().positive().optional(),
   })
-  .strict();
+  .passthrough();
+
+const embeddingProviderSchema = openAiCompatibleProviderSchema;
+const structuredOcrProviderSchema = openAiCompatibleProviderSchema;
 
 const llmsConfigSchema = z
   .object({
     llms: z
       .object({
         embedding: embeddingProviderSchema.optional(),
+        structured_ocr: structuredOcrProviderSchema.optional(),
       })
       .passthrough(),
   })
   .strict();
 
 export type EmbeddingProviderConfig = z.infer<typeof embeddingProviderSchema>;
+export type StructuredOcrProviderConfig = z.infer<typeof structuredOcrProviderSchema>;
 
 let cachedEmbeddingConfig: EmbeddingProviderConfig | null | undefined;
+let cachedStructuredOcrConfig: StructuredOcrProviderConfig | null | undefined;
 
 function resolveCandidatePaths(): string[] {
   const candidates = [config.llmsConfigPath, path.join(os.homedir(), ".wrobo-hub/llms.yaml")];
@@ -55,8 +61,28 @@ export function loadEmbeddingProviderConfig(): EmbeddingProviderConfig | null {
   return cachedEmbeddingConfig;
 }
 
+export function loadStructuredOcrProviderConfig(): StructuredOcrProviderConfig | null {
+  if (cachedStructuredOcrConfig !== undefined) {
+    return cachedStructuredOcrConfig;
+  }
+
+  for (const candidatePath of resolveCandidatePaths()) {
+    if (!fs.existsSync(candidatePath)) {
+      continue;
+    }
+
+    const parsed = llmsConfigSchema.parse(loadYaml(fs.readFileSync(candidatePath, "utf8")));
+    cachedStructuredOcrConfig = parsed.llms.structured_ocr ?? null;
+    return cachedStructuredOcrConfig;
+  }
+
+  cachedStructuredOcrConfig = null;
+  return cachedStructuredOcrConfig;
+}
+
 export function resetEmbeddingProviderConfigCache(): void {
   cachedEmbeddingConfig = undefined;
+  cachedStructuredOcrConfig = undefined;
 }
 
 export function getConfiguredEmbeddingDimensions(): number {

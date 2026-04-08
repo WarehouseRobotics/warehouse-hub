@@ -17,6 +17,7 @@ Warehouse Hub is privacy-orietented, so by default we allow users to configure p
 Admins should be able to configure which models are used for various internal tasks:
 
 * Embeddings model endpoint config
+* Structured OCR endpoint for invoice/document extraction
 * Summarization model endpoint (a model that can summarize contexts of up to 10k tokens)
 * Reranking-LLM model endpoint
 * Nano-LLM model endpoint (mini/nano models for short simple tasks)
@@ -47,6 +48,11 @@ llms:
     endpoint: http://192.168.0.25:1234/v1
     name: qwen3-reranker-0.6b      
     apiKey: "sk-..."    
+  structured_ocr:
+    style: openai-compatible
+    endpoint: http://192.168.0.25:1234/v1
+    model_name: qwen2.5-vl-7b-instruct
+    apiKey: "sk-..."
   nano:
     style: openai-compatible
     endpoint: http://192.168.0.25:1234/v1
