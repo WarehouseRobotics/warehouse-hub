@@ -1,4 +1,11 @@
-# 2026-03-29 Business Foundation API Initial Scaffold Run Results
+---
+type: iteration-report
+date: 2026-03-29
+goal: Implement Drizzle schema scaffold, validation and slug-id mechanics
+workpaths: business-api/*; docs/*
+---
+
+# Business Foundation API Initial Scaffold Run Results
 
 Implemented from the “Initial Scaffold” plan:
 

@@ -1,3 +1,12 @@
+---
+type: iteration-plan
+date: 2026-04-07
+goal: Implement basic document ingestion (expense and sales invoices) with OCR and text embeddings
+notes: New ingestion flow in business-api that accepts an image or PDF for a document
+workpaths: business-api/*; docs/*
+frozen: true
+---
+
 # Smart Document Ingestion for Invoices and Contracts
 
 ## Summary

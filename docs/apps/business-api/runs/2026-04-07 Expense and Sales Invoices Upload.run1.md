@@ -1,3 +1,10 @@
+---
+type: iteration-report
+date: 2026-04-07
+goal: Implement basic document ingestion (expense and sales invoices) with OCR and text embeddings
+workpaths: business-api/*; docs/*
+---
+
 # Smart Document Ingestion for Invoices and Contracts Agent Coding Run Results
 
 ## Summary

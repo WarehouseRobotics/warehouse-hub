@@ -1,4 +1,11 @@
-# 2026-04-04 Business Foundation API Initial Scaffold Run Results
+---
+type: iteration-report
+date: 2026-04-04
+goal: Implement starting scaffold of the business-api application
+workpaths: business-api/*; docs/*
+---
+
+# Business Foundation API Initial Scaffold Run Results
 
 Implemented the remaining Business API scaffold for the MVP resource set.
 

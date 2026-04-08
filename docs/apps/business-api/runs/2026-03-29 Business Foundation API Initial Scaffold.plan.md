@@ -2,9 +2,9 @@
 type: iteration-plan
 date: 2026-03-29
 goal: Scaffold the Express.js project and implement basic CRUD logic for the MVP feature set.
-notes: Covers copmany card, contacts registry, expense and sales registries and some basic task management with API and CLI tools.
+notes: Covers company card, contacts registry, expense and sales registries and some basic task management with API and CLI tools.
 workpaths: business-api/*; docs/*
-frozen: false
+frozen: true
 ---
 
 # Business Foundation API - Initial Scaffold Plan
