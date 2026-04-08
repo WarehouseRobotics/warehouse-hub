@@ -18,6 +18,12 @@ The platform is composed of:
 * externally available frontend bot, that can be managed and extended by the internal team of agents
 * file assets exchange GUI webapp     
 
+
+## Source Code Documentation 
+
+The `docs` folder contains Markdown documentation for each platform component – use it to search for relevant code design rules, feature architecture and other useful information about Warehouse Hub.
+
+
 ## Development Environment Conventions
 
 ### Run in Docker
