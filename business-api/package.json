@@ -40,6 +40,7 @@
     "node-llama-cpp": "^3.17.1",
     "sqlite-vec": "^0.1.9",
     "tesseract.js": "^7.0.0",
+    "winston": "^3.19.0",
     "zod": "^3.24.3"
   },
   "devDependencies": {
