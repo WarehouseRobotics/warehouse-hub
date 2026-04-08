@@ -14,8 +14,47 @@ export type ComputedTaxLine = {
   amount: string;
 };
 
+function normalizeDecimalString(value: string): string {
+  const trimmed = value.trim().replace(/\s+/g, "").replace(/['’]/g, "");
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const hasComma = trimmed.includes(",");
+  const hasDot = trimmed.includes(".");
+
+  if (hasComma && hasDot) {
+    const lastComma = trimmed.lastIndexOf(",");
+    const lastDot = trimmed.lastIndexOf(".");
+    if (lastDot > lastComma) {
+      return trimmed.replace(/,/g, "");
+    }
+
+    return trimmed.replace(/\./g, "").replace(/,/g, ".");
+  }
+
+  if (hasComma) {
+    const parts = trimmed.split(",");
+    if (parts.length === 2 && parts[1] && parts[1].length <= 2) {
+      return `${parts[0]}.${parts[1]}`;
+    }
+
+    return trimmed.replace(/,/g, "");
+  }
+
+  if (hasDot) {
+    const parts = trimmed.split(".");
+    if (parts.length > 2) {
+      const decimal = parts.pop() ?? "";
+      return `${parts.join("")}.${decimal}`;
+    }
+  }
+
+  return trimmed;
+}
+
 function parseDecimalInput(value: string | number, label: string): Decimal {
-  const normalized = typeof value === "number" ? value.toString() : value.trim();
+  const normalized = typeof value === "number" ? value.toString() : normalizeDecimalString(value);
   if (!/^-?\d+(\.\d+)?$/.test(normalized)) {
     throw new AppError(`Invalid ${label}: ${value}`, {
       statusCode: 400,

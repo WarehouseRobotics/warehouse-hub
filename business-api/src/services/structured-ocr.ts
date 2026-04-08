@@ -123,7 +123,7 @@ function parseStubInvoice(text: string): StructuredInvoice {
     taxRate: normalizeAmount(match[4]) ?? match[4]?.trim(),
   }));
 
-  return structuredInvoiceSchema.parse({
+  const parsedResult = structuredInvoiceSchema.parse({
     schemaVersion: "invoice.v1",
     documentType: firstMatch(text, [/document type\s*:\s*(expense_invoice|sales_invoice|invoice)/im]) ?? "invoice",
     invoiceNumber: firstMatch(text, [/invoice(?: number| no\.?| #)?\s*:\s*(.+)/im]),
@@ -148,6 +148,8 @@ function parseStubInvoice(text: string): StructuredInvoice {
     rawText: text.trim() || undefined,
     pageNotes: text.trim() ? text.split(/\n\s*\n/).map((chunk) => chunk.trim()).filter(Boolean) : undefined,
   });
+
+  return parsedResult;
 }
 
 function getMessageContent(payload: z.infer<typeof chatCompletionResponseSchema>): string {
@@ -236,7 +238,7 @@ async function runStructuredExtraction<T>({
       messages: [
         {
           role: "system",
-          content: "Extract structured OCR data from the supplied invoice page images. Return only JSON that matches the provided schema.",
+          content: "## Your Task\n\nExtract structured document data from the supplied page images. The document can be an sales or expense invoice or similar expense document or a contract piece. Respond with a JSON object that matches the provided schema. To the 'notes' add a summary of the invoice items, if any and original invoice notes, if present.",
         },
         {
           role: "user",
@@ -277,6 +279,7 @@ async function runStructuredExtraction<T>({
   const message = getMessageContent(payload);
 
   let parsedJson: unknown;
+
   try {
     parsedJson = JSON.parse(message);
   } catch (error) {

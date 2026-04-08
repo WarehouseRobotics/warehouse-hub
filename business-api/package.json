@@ -23,7 +23,8 @@
     "db:migrate": "tsx src/cli.ts db migrate",
     "cli": "tsx src/cli.ts",
     "dev:setup-default-company-card": "tsx src/dev/setup-default-company-card.ts",
-    "dev:recreate-db": "tsx src/dev/recreate-dev-database.ts"
+    "dev:recreate-db": "tsx src/dev/recreate-dev-database.ts",
+    "dev:reset-db": "tsx src/dev/recreate-dev-database.ts && tsx src/dev/setup-default-company-card.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
