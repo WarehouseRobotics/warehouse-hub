@@ -6,12 +6,13 @@ import { createApp } from "./app.js";
 import { getCompanyCard, upsertCompanyCard } from "./services/company-card.js";
 import { createContact, getContact, listContacts, resolveContact } from "./services/contacts.js";
 import { createDeal, getDeal, listDeals } from "./services/deals.js";
-import { getDocumentDownload, getDocumentMeta, uploadDocument } from "./services/documents.js";
+import { getDocumentDownload, getDocumentMeta, listDocuments, uploadDocument } from "./services/documents.js";
 import { ingestDocument } from "./services/document-ingestion.js";
 import { createExpense, getExpense, listExpenses, updateExpense } from "./services/expenses.js";
 import { createProject, getProject, listProjects } from "./services/projects.js";
 import { generateSalesInvoice, getSalesInvoice, listSalesInvoices, updateSalesInvoice } from "./services/sales-invoices.js";
 import { createTask, getTask, listTasks, updateTask } from "./services/tasks.js";
+import { parseCliListFilters } from "./lib/list-filters.js";
 import { logger } from "./lib/logger.js";
 import { companyCardInputSchema } from "./schemas/company-card.js";
 import { contactInputSchema, contactResolveInputSchema } from "./schemas/contact.js";
@@ -60,18 +61,19 @@ async function main(): Promise<void> {
         "tsx src/cli.ts contacts resolve '<json>'",
         "tsx src/cli.ts documents upload <file-path> '<json-meta>'",
         "tsx src/cli.ts documents ingest <file-path> '<json-meta>'",
+        "tsx src/cli.ts documents list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
         "tsx src/cli.ts documents get <id-or-slug>",
         "tsx src/cli.ts documents download <id-or-slug> <output-path>",
         "tsx src/cli.ts expenses create '<json>'",
         "tsx src/cli.ts expenses get <id-or-slug>",
-        "tsx src/cli.ts expenses list",
+        "tsx src/cli.ts expenses list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
         "tsx src/cli.ts expenses update <id-or-slug> '<json>'",
         "tsx src/cli.ts deals create '<json>'",
         "tsx src/cli.ts deals get <id-or-slug>",
         "tsx src/cli.ts deals list",
         "tsx src/cli.ts sales-invoices generate '<json>'",
         "tsx src/cli.ts sales-invoices get <id-or-slug>",
-        "tsx src/cli.ts sales-invoices list",
+        "tsx src/cli.ts sales-invoices list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
         "tsx src/cli.ts sales-invoices update <id-or-slug> '<json>'",
         "tsx src/cli.ts projects create '<json>'",
         "tsx src/cli.ts projects get <id-or-slug>",
@@ -199,6 +201,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "documents" && subcommand === "list") {
+    printJson(await listDocuments(parseCliListFilters(rest)));
+    return;
+  }
+
   if (command === "documents" && subcommand === "download") {
     const document = getDocumentDownload(rest[0]);
     const outputPath = rest[1];
@@ -223,7 +230,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "expenses" && subcommand === "list") {
-    printJson(listExpenses());
+    printJson(await listExpenses(parseCliListFilters(rest)));
     return;
   }
 
@@ -261,7 +268,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "sales-invoices" && subcommand === "list") {
-    printJson(listSalesInvoices());
+    printJson(await listSalesInvoices(parseCliListFilters(rest)));
     return;
   }
 

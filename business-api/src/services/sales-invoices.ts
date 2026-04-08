@@ -5,6 +5,7 @@ import { contacts, invoiceNumberSeq, salesInvoices } from "../db/schema/index.js
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { applySimilarityFilter, matchesResolvedDateFilters, resolveListFilters, type ListFilters } from "../lib/list-filters.js";
 import { logger } from "../lib/logger.js";
 import { normalizeMoneyString } from "../lib/money.js";
 import { createSlug } from "../lib/slug-ids.js";
@@ -158,7 +159,7 @@ export function generateSalesInvoice(data: SalesInvoiceGenerateInput) {
   return created;
 }
 
-export function listSalesInvoices(filters: { status?: string; customerContactId?: string } = {}) {
+export async function listSalesInvoices(filters: { status?: string; customerContactId?: string } & ListFilters = {}) {
   const conditions = [isNull(salesInvoices.deletedAt)];
   if (filters.status) {
     conditions.push(eq(salesInvoices.status, filters.status));
@@ -167,7 +168,21 @@ export function listSalesInvoices(filters: { status?: string; customerContactId?
     conditions.push(eq(salesInvoices.customerContactId, filters.customerContactId));
   }
 
-  return getOrm().select().from(salesInvoices).where(and(...conditions)).all().map(mapSalesInvoice);
+  const resolvedFilters = resolveListFilters(filters);
+  const items = getOrm()
+    .select()
+    .from(salesInvoices)
+    .where(and(...conditions))
+    .all()
+    .map(mapSalesInvoice)
+    .filter((invoice) => matchesResolvedDateFilters(invoice.issueDate, resolvedFilters));
+
+  return applySimilarityFilter(items, {
+    entityType: "sales_invoice",
+    similar: resolvedFilters.similar,
+    limit: resolvedFilters.limit,
+    getEntityId: (invoice) => invoice.salesInvoiceId,
+  });
 }
 
 export function getSalesInvoice(idOrSlug: string) {

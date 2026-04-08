@@ -1,8 +1,9 @@
 import multer from "multer";
 import { Router } from "express";
 
+import { parseListFilters } from "../lib/list-filters.js";
 import { documentIngestSchema, documentUploadSchema } from "../schemas/document.js";
-import { getDocumentDownload, getDocumentMeta, softDeleteDocument, uploadDocument } from "../services/documents.js";
+import { getDocumentDownload, getDocumentMeta, listDocuments, softDeleteDocument, uploadDocument } from "../services/documents.js";
 import { ingestDocument } from "../services/document-ingestion.js";
 
 export const documentsRouter = Router();
@@ -33,6 +34,24 @@ documentsRouter.post("/", upload.single("file"), (request, response) => {
 
   const meta = documentUploadSchema.parse(request.body);
   response.status(201).json(uploadDocument(request.file, meta));
+});
+
+documentsRouter.get("/", async (request, response, next) => {
+  try {
+    response.json(
+      await listDocuments(
+        parseListFilters({
+          similar: typeof request.query.similar === "string" ? request.query.similar : undefined,
+          limit: typeof request.query.limit === "string" ? request.query.limit : undefined,
+          since: typeof request.query.since === "string" ? request.query.since : undefined,
+          before: typeof request.query.before === "string" ? request.query.before : undefined,
+          after: typeof request.query.after === "string" ? request.query.after : undefined,
+        }),
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
 });
 
 documentsRouter.post("/ingest", upload.single("file"), async (request, response, next) => {

@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { parseListFilters } from "../lib/list-filters.js";
 import { validateBody } from "../middleware/validate.js";
 import { salesInvoiceGenerateSchema, salesInvoicePatchSchema } from "../schemas/sales-invoice.js";
 import {
@@ -16,14 +17,25 @@ function getRouteParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
 
-salesInvoicesRouter.get("/", (request, response) => {
-  response.json(
-    listSalesInvoices({
+salesInvoicesRouter.get("/", async (request, response, next) => {
+  try {
+    response.json(
+      await listSalesInvoices({
+        ...parseListFilters({
+          similar: typeof request.query.similar === "string" ? request.query.similar : undefined,
+          limit: typeof request.query.limit === "string" ? request.query.limit : undefined,
+          since: typeof request.query.since === "string" ? request.query.since : undefined,
+          before: typeof request.query.before === "string" ? request.query.before : undefined,
+          after: typeof request.query.after === "string" ? request.query.after : undefined,
+        }),
       status: typeof request.query.status === "string" ? request.query.status : undefined,
       customerContactId:
         typeof request.query.customerContactId === "string" ? request.query.customerContactId : undefined,
-    }),
-  );
+      }),
+    );
+  } catch (error) {
+    next(error);
+  }
 });
 
 salesInvoicesRouter.post("/", validateBody(salesInvoiceGenerateSchema), (request, response) => {

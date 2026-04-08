@@ -1,3 +1,14 @@
+---
+type: design-guide
+description: Practical conventions for text embeddings of documents and other content
+project_dir: business-api
+frozen: false
+see_also:
+  - docs/apps/Business Foundation API.md
+  - docs/architecture/Business API Architecture.md
+---
+
+
 # Business Foundation API Embeddings
 
 This document describes the current technical design of text embeddings in the `business-api` codebase.

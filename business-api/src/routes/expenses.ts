@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { parseListFilters } from "../lib/list-filters.js";
 import { validateBody } from "../middleware/validate.js";
 import { expenseInputSchema, expensePatchSchema } from "../schemas/expense.js";
 import {
@@ -16,15 +17,26 @@ function getRouteParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
 
-expensesRouter.get("/", (request, response) => {
-  response.json(
-    listExpenses({
+expensesRouter.get("/", async (request, response, next) => {
+  try {
+    response.json(
+      await listExpenses({
+        ...parseListFilters({
+          similar: typeof request.query.similar === "string" ? request.query.similar : undefined,
+          limit: typeof request.query.limit === "string" ? request.query.limit : undefined,
+          since: typeof request.query.since === "string" ? request.query.since : undefined,
+          before: typeof request.query.before === "string" ? request.query.before : undefined,
+          after: typeof request.query.after === "string" ? request.query.after : undefined,
+        }),
       supplierContactId:
         typeof request.query.supplierContactId === "string" ? request.query.supplierContactId : undefined,
       category: typeof request.query.category === "string" ? request.query.category : undefined,
       status: typeof request.query.status === "string" ? request.query.status : undefined,
-    }),
-  );
+      }),
+    );
+  } catch (error) {
+    next(error);
+  }
 });
 
 expensesRouter.post("/", validateBody(expenseInputSchema), (request, response) => {

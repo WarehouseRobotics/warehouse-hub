@@ -2,9 +2,12 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
 import { expenses } from "../db/schema/index.js";
+import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
-import { normalizeMoneyString } from "../lib/money.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { applySimilarityFilter, matchesResolvedDateFilters, resolveListFilters, type ListFilters } from "../lib/list-filters.js";
+import { logger } from "../lib/logger.js";
+import { normalizeMoneyString } from "../lib/money.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { ExpenseInput, ExpensePatch } from "../schemas/expense.js";
 import {
@@ -37,6 +40,15 @@ function mapExpense(record: typeof expenses.$inferSelect) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
+}
+
+function scheduleEmbedding(expenseId: string, payload: ReturnType<typeof getExpense>): void {
+  void upsertEmbedding("expense_invoice", expenseId, computeEmbeddingText("expense_invoice", payload)).catch((error) => {
+    if (isBenignEmbeddingSyncError(error)) {
+      return;
+    }
+    logger.warn("Failed to sync expense embedding", { expenseId, error });
+  });
 }
 
 function normalizeExpenseInput(data: ExpenseInput | ExpensePatch, existing?: typeof expenses.$inferSelect) {
@@ -116,14 +128,16 @@ export function createExpense(data: ExpenseInput) {
     })
     .run();
 
-  return getExpense(id);
+  const created = getExpense(id);
+  scheduleEmbedding(id, created);
+  return created;
 }
 
-export function listExpenses(filters: {
+export async function listExpenses(filters: {
   supplierContactId?: string;
   category?: string;
   status?: string;
-} = {}) {
+} & ListFilters = {}) {
   const conditions = [isNull(expenses.deletedAt)];
   if (filters.supplierContactId) {
     conditions.push(eq(expenses.supplierContactId, filters.supplierContactId));
@@ -135,7 +149,21 @@ export function listExpenses(filters: {
     conditions.push(eq(expenses.status, filters.status));
   }
 
-  return getOrm().select().from(expenses).where(and(...conditions)).all().map(mapExpense);
+  const resolvedFilters = resolveListFilters(filters);
+  const items = getOrm()
+    .select()
+    .from(expenses)
+    .where(and(...conditions))
+    .all()
+    .map(mapExpense)
+    .filter((expense) => matchesResolvedDateFilters(expense.invoiceDate ?? expense.createdAt, resolvedFilters));
+
+  return applySimilarityFilter(items, {
+    entityType: "expense_invoice",
+    similar: resolvedFilters.similar,
+    limit: resolvedFilters.limit,
+    getEntityId: (expense) => expense.expenseId,
+  });
 }
 
 export function getExpense(idOrSlug: string) {
@@ -177,7 +205,9 @@ export function updateExpense(idOrSlug: string, patch: ExpensePatch) {
     .where(eq(expenses.id, existing.id))
     .run();
 
-  return getExpense(existing.id);
+  const updated = getExpense(existing.id);
+  scheduleEmbedding(existing.id, updated);
+  return updated;
 }
 
 export function softDeleteExpense(idOrSlug: string) {

@@ -9,6 +9,7 @@ import { getOrm } from "../db/connection.js";
 import { documents } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { applySimilarityFilter, matchesResolvedDateFilters, resolveListFilters, type ListFilters } from "../lib/list-filters.js";
 import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { DocumentUploadInput } from "../schemas/document.js";
@@ -143,13 +144,22 @@ export function getDocumentDownload(idOrSlug: string) {
   };
 }
 
-export function listDocuments() {
-  return getOrm()
+export async function listDocuments(filters: ListFilters = {}) {
+  const resolvedFilters = resolveListFilters(filters);
+  const items = getOrm()
     .select()
     .from(documents)
     .where(and(isNull(documents.deletedAt)))
     .all()
-    .map(mapDocument);
+    .map(mapDocument)
+    .filter((document) => matchesResolvedDateFilters(document.createdAt, resolvedFilters));
+
+  return applySimilarityFilter(items, {
+    entityType: "document",
+    similar: resolvedFilters.similar,
+    limit: resolvedFilters.limit,
+    getEntityId: (document) => document.documentId,
+  });
 }
 
 export function softDeleteDocument(idOrSlug: string) {

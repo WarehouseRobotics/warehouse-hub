@@ -96,6 +96,113 @@ describe("business-api routes", () => {
     expect(Buffer.from(await downloadResponse.arrayBuffer()).toString()).toBe("pdf-data-2");
   });
 
+  it("lists documents, expenses, and sales invoices with time filters through the HTTP API", async () => {
+    const { createContact } = await import("../src/services/contacts.js");
+    const { uploadDocument } = await import("../src/services/documents.js");
+    const { createExpense } = await import("../src/services/expenses.js");
+    const { importSalesInvoice } = await import("../src/services/sales-invoices.js");
+
+    const supplier = createContact({
+      type: "company",
+      status: "active",
+      roles: ["supplier"],
+      displayName: "Papeleria Centro SL",
+      legalName: "Papeleria Centro SL",
+    });
+
+    const customer = createContact({
+      type: "company",
+      status: "active",
+      roles: ["customer"],
+      displayName: "Acme Retail GmbH",
+      legalName: "Acme Retail GmbH",
+    });
+
+    const document = uploadDocument(
+      {
+        fieldname: "file",
+        originalname: "invoice.pdf",
+        encoding: "7bit",
+        mimetype: "application/pdf",
+        size: 8,
+        buffer: Buffer.from("pdf-data"),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      {
+        kind: "expense_invoice",
+        source: "email_forward",
+      },
+    );
+
+    createExpense({
+      supplierContactId: supplier.contactId,
+      documentId: document.documentId,
+      invoiceNumber: "FC-2026-0042",
+      invoiceDate: "2026-03-25",
+      dueDate: "2026-04-24",
+      currency: "EUR",
+      totals: {
+        net: "120.00",
+        tax: "25.20",
+        gross: "145.20",
+      },
+      category: "office_supplies",
+      status: "recorded",
+    });
+
+    importSalesInvoice({
+      customerContactId: customer.contactId,
+      invoiceNumber: "2026-0041",
+      issueDate: "2026-04-02",
+      currency: "EUR",
+      totals: {
+        net: "1000.00",
+        tax: "210.00",
+        gross: "1210.00",
+      },
+      status: "finalized",
+    });
+
+    const documentResponse = await fetch(`${baseUrl}/api/v1/documents?after=2000-01-01&before=2100-01-01`, {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+    expect(documentResponse.status).toBe(200);
+    expect((await documentResponse.json()) as Array<{ documentId: string }>).toEqual([
+      expect.objectContaining({ documentId: document.documentId }),
+    ]);
+
+    const expensesResponse = await fetch(
+      `${baseUrl}/api/v1/expenses?status=recorded&after=2026-03-01&before=2026-03-26`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(expensesResponse.status).toBe(200);
+    expect((await expensesResponse.json()) as Array<{ invoiceNumber: string }>).toEqual([
+      expect.objectContaining({ invoiceNumber: "FC-2026-0042" }),
+    ]);
+
+    const salesInvoicesResponse = await fetch(
+      `${baseUrl}/api/v1/sales-invoices?status=finalized&after=2026-04-01&before=2026-04-03`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(salesInvoicesResponse.status).toBe(200);
+    expect((await salesInvoicesResponse.json()) as Array<{ invoiceNumber: string }>).toEqual([
+      expect.objectContaining({ invoiceNumber: "2026-0041" }),
+    ]);
+  });
+
   it("ingests a document through the HTTP API and creates an expense", async () => {
     const formData = new FormData();
     formData.set("kind", "expense_invoice");
