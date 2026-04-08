@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Warehouse Hub Business API server and CLI scaffold",
   "bin": {
-    "wrobo-biz": "./bin/wrobo-biz"
+    "wrobo-biz": "./bin/wrobo-biz",
+    "wrobo-biz-dev-company-card": "./bin/wrobo-biz-dev-company-card",
+    "wrobo-biz-dev-recreate-db": "./bin/wrobo-biz-dev-recreate-db"
   },
   "engines": {
     "node": ">=20.18.0"
@@ -19,7 +21,9 @@
     "test": "vitest run",
     "db:init": "tsx src/cli.ts db init",
     "db:migrate": "tsx src/cli.ts db migrate",
-    "cli": "tsx src/cli.ts"
+    "cli": "tsx src/cli.ts",
+    "dev:setup-default-company-card": "tsx src/dev/setup-default-company-card.ts",
+    "dev:recreate-db": "tsx src/dev/recreate-dev-database.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

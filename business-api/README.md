@@ -40,7 +40,10 @@ During development, these commands must be run inside of the Docker container, v
 ./container.sh exec npm run db:init
 ./container.sh exec npm run dev
 ./container.sh exec npm run cli -- company-card get
+./container.sh exec npm run dev:setup-default-company-card
 ```
+
+To seed a default test company card for local development, run `./container.sh exec npm run dev:setup-default-company-card`. The command initializes the database if needed and then idempotently creates or updates the default company card with Spanish `S.L.` style demo data.
 
 Rebuild the image with `./container.sh build` when Docker-level dependencies change, such as updates to the `Dockerfile` or native packages required by npm modules.
 

@@ -1,0 +1,35 @@
+#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, "..");
+const builtEntrypoint = path.join(projectRoot, "dist/src/dev/recreate-dev-database.js");
+const sourceEntrypoint = path.join(projectRoot, "src/dev/recreate-dev-database.ts");
+
+const command = fs.existsSync(builtEntrypoint)
+  ? {
+      executable: process.execPath,
+      args: [builtEntrypoint, ...process.argv.slice(2)],
+    }
+  : {
+      executable: process.execPath,
+      args: ["--import", "tsx", sourceEntrypoint, ...process.argv.slice(2)],
+    };
+
+const result = spawnSync(command.executable, command.args, {
+  cwd: projectRoot,
+  stdio: "inherit",
+});
+
+if (typeof result.status === "number") {
+  process.exit(result.status);
+}
+
+if (result.error) {
+  throw result.error;
+}
+
+process.exit(1);
