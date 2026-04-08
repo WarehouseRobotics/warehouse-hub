@@ -5,6 +5,7 @@ import { contacts, invoiceNumberSeq, salesInvoices } from "../db/schema/index.js
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { logger } from "../lib/logger.js";
 import { normalizeMoneyString } from "../lib/money.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { SalesInvoiceGenerateInput, SalesInvoicePatch } from "../schemas/sales-invoice.js";
@@ -53,7 +54,7 @@ function scheduleEmbedding(invoiceId: string, payload: ReturnType<typeof getSale
     if (isBenignEmbeddingSyncError(error)) {
       return;
     }
-    console.warn(`Failed to sync sales-invoice embedding for ${invoiceId}:`, error);
+    logger.warn("Failed to sync sales-invoice embedding", { invoiceId, error });
   });
 }
 

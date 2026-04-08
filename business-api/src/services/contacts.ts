@@ -5,6 +5,7 @@ import { contacts } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { ContactInput, ContactPatch, ContactResolveInput, ContactType } from "../schemas/contact.js";
 import { requireContactRecord } from "./shared.js";
@@ -71,7 +72,7 @@ function scheduleEmbedding(contactId: string, payload: ReturnType<typeof getCont
     if (isBenignEmbeddingSyncError(error)) {
       return;
     }
-    console.warn(`Failed to sync contact embedding for ${contactId}:`, error);
+    logger.warn("Failed to sync contact embedding", { contactId, error });
   });
 }
 

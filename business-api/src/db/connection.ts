@@ -7,6 +7,7 @@ import * as sqliteVec from "sqlite-vec";
 
 import { config } from "../config.js";
 import { getConfiguredEmbeddingDimensions } from "../lib/llm-config.js";
+import { logger } from "../lib/logger.js";
 import { applyMigrations } from "./migrate.js";
 import * as schema from "./schema/index.js";
 
@@ -67,8 +68,7 @@ function initializeVectorBackend(database: Database.Database): void {
     vectorBackend = "sqlite-vec";
   } catch (error) {
     vectorBackend = "json";
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`sqlite-vec unavailable, falling back to JSON embeddings: ${message}`);
+    logger.warn("sqlite-vec unavailable, falling back to JSON embeddings", { error });
   }
 }
 

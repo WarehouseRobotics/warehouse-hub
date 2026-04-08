@@ -12,6 +12,7 @@ import { createExpense, getExpense, listExpenses, updateExpense } from "./servic
 import { createProject, getProject, listProjects } from "./services/projects.js";
 import { generateSalesInvoice, getSalesInvoice, listSalesInvoices, updateSalesInvoice } from "./services/sales-invoices.js";
 import { createTask, getTask, listTasks, updateTask } from "./services/tasks.js";
+import { logger } from "./lib/logger.js";
 import { companyCardInputSchema } from "./schemas/company-card.js";
 import { contactInputSchema, contactResolveInputSchema } from "./schemas/contact.js";
 import { dealInputSchema } from "./schemas/deal.js";
@@ -35,10 +36,10 @@ function parseJsonArg(value: string | undefined, label: string): unknown {
   try {
     parsed = JSON.parse(value);
   } catch (error) {
-    console.error(`Invalid ${label} JSON argument: ${value}`, { cause: error, raw: value });
+    logger.error("Invalid CLI JSON argument", { label, raw: value, error });
     throw new Error(`Invalid ${label} JSON argument: ${value}`, { cause: error });
-  }   
-  
+  }
+
   return parsed;
 }
 
@@ -89,7 +90,10 @@ async function main(): Promise<void> {
   if (command === "serve") {
     const app = createApp();
     app.listen(config.PORT, () => {
-      console.log(`Business API listening on http://localhost:${config.PORT}`);
+      logger.info("Business API server started from CLI", {
+        port: config.PORT,
+        url: `http://localhost:${config.PORT}`,
+      });
     });
     return;
   }
@@ -310,6 +314,10 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
+  logger.error("Business API CLI command failed", {
+    command: process.argv.slice(2).join(" "),
+    error,
+  });
   process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 });

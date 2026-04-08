@@ -9,6 +9,7 @@ import { getOrm } from "../db/connection.js";
 import { documents } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { DocumentUploadInput } from "../schemas/document.js";
 import { requireCompanyCardRecord, requireDocumentRecord } from "./shared.js";
@@ -39,7 +40,7 @@ function scheduleEmbedding(documentId: string, payload: ReturnType<typeof mapDoc
     if (isBenignEmbeddingSyncError(error)) {
       return;
     }
-    console.warn(`Failed to sync document embedding for ${documentId}:`, error);
+    logger.warn("Failed to sync document embedding", { documentId, error });
   });
 }
 

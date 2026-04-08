@@ -13,6 +13,7 @@ see_also:
 * Express.js
 * SQLite for database with asg017/sqlite-vec for vector storage
 * Drizzle ORM and zod
+* Winston for structured JSON logging
 * MCP SDK
 
 ## API and CLI conventions for MVP
@@ -45,6 +46,13 @@ Suggested persistence split in SQLite:
 * relational business tables for deterministic lookups and bookkeeping
 * document metadata and linkage tables
 * vector index only for document search, OCR summaries and semantic recall, not as source of truth for accounting records
+
+Logging conventions:
+
+* runtime and operational diagnostics should go through a shared `winston` logger
+* logs should be emitted as JSON so they are easy to ingest in Docker, local tooling, and future observability pipelines
+* `LOG_LEVEL` controls verbosity across the API server, background work, and development scripts
+* CLI command payloads should stay on stdout as JSON results, while diagnostic logging remains separate
 
 Dev tools:
 

@@ -4,6 +4,7 @@ import { getOrm } from "../db/connection.js";
 import { companyCard } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { CompanyCardInput } from "../schemas/company-card.js";
 import { ensureDefaultTasksProject } from "./projects.js";
@@ -44,7 +45,7 @@ function scheduleEmbedding(companyId: string, payload: ReturnType<typeof mapComp
     if (isBenignEmbeddingSyncError(error)) {
       return;
     }
-    console.warn(`Failed to sync company-card embedding for ${companyId}:`, error);
+    logger.warn("Failed to sync company-card embedding", { companyId, error });
   });
 }
 

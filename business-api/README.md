@@ -14,6 +14,7 @@ The initial iteration now includes:
 * SQLite initialization and first SQL migration
 * Drizzle ORM schema definitions for the MVP business objects
 * Working `company-card` and `contacts` services/routes as the first vertical slices
+* Winston-based structured JSON logging for server/runtime diagnostics
 
 
 # Docker container
@@ -48,3 +49,9 @@ To seed a default test company card for local development, run `./container.sh e
 Rebuild the image with `./container.sh build` when Docker-level dependencies change, such as updates to the `Dockerfile` or native packages required by npm modules.
 
 The API listens on `http://localhost:3100` by default and uses `/api/v1` as the REST base path.
+
+## Logging
+
+The Business API uses `winston` for structured JSON logging. This applies to server startup, operational warnings, and development script failures.
+
+Set `LOG_LEVEL` to one of `debug`, `info`, `warn`, or `error` to control verbosity.

@@ -5,6 +5,7 @@ import { deals } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { computeLineItemTotals, normalizeQuantityString } from "../lib/money.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { DealInput, DealLineItem, DealPatch } from "../schemas/deal.js";
 import { requireCompanyCardRecord, requireContactRecord, requireDealRecord } from "./shared.js";
@@ -44,7 +45,7 @@ function scheduleEmbedding(dealId: string, payload: ReturnType<typeof getDeal>):
     if (isBenignEmbeddingSyncError(error)) {
       return;
     }
-    console.warn(`Failed to sync deal embedding for ${dealId}:`, error);
+    logger.warn("Failed to sync deal embedding", { dealId, error });
   });
 }
 

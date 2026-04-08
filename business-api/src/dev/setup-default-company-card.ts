@@ -1,4 +1,5 @@
 import { initializeDatabase } from "../db/connection.js";
+import { logger } from "../lib/logger.js";
 import { getCompanyCard, upsertCompanyCard } from "../services/company-card.js";
 import type { CompanyCardInput } from "../schemas/company-card.js";
 
@@ -50,6 +51,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error("Failed to setup default company card:", error);
+  logger.error("Failed to setup default company card", { error });
   process.exitCode = 1;
 });

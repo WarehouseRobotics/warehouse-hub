@@ -2,6 +2,7 @@ import fs from "node:fs";
 
 import { config } from "../config.js";
 import { initializeDatabase, resetDatabase } from "../db/connection.js";
+import { logger } from "../lib/logger.js";
 
 function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -44,6 +45,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error("Failed to recreate dev database:", error);
+  logger.error("Failed to recreate dev database", { error });
   process.exitCode = 1;
 });

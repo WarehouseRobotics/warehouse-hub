@@ -5,6 +5,7 @@ import { tasks } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { TaskInput, TaskPatch } from "../schemas/task.js";
 import { requireProjectRecord, requireTaskRecord } from "./shared.js";
@@ -30,7 +31,7 @@ function scheduleEmbedding(taskId: string, payload: ReturnType<typeof getTask>):
     if (isBenignEmbeddingSyncError(error)) {
       return;
     }
-    console.warn(`Failed to sync task embedding for ${taskId}:`, error);
+    logger.warn("Failed to sync task embedding", { taskId, error });
   });
 }
 
