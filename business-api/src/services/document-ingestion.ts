@@ -9,6 +9,7 @@ import { importSalesInvoice } from "./sales-invoices.js";
 import { extractStructuredInvoiceFromPages } from "./structured-ocr.js";
 import { requireCompanyCardRecord, requireContactRecord } from "./shared.js";
 import { AppError } from "../lib/errors.js";
+import { logger } from "../lib/logger.js";
 
 type ExtractedParty = {
   name?: string;

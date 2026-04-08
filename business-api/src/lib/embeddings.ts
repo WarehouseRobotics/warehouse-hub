@@ -9,12 +9,14 @@ import { AppError } from "./errors.js";
 import { createTextEmbedding } from "./embedding-provider.js";
 import { createPrefixedId } from "./ids.js";
 import { getConfiguredEmbeddingDimensions } from "./llm-config.js";
+import { logger } from "./logger.js";
 
 export type EmbeddingEntityType =
   | "company_card"
   | "contact"
   | "document"
   | "deal"
+  | "expense_invoice"
   | "sales_invoice"
   | "task";
 
@@ -70,6 +72,25 @@ export function computeEmbeddingText(entityType: EmbeddingEntityType, entity: Re
         entity.ocrStatus,
         entity.ocrText,
         typeof entity.extractedData === "object" && entity.extractedData ? JSON.stringify(entity.extractedData) : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    case "expense_invoice":
+      return [
+        entity.supplierDisplayName,
+        entity.supplierLegalName,
+        entity.supplierEmail,
+        entity.invoiceNumber,
+        entity.invoiceDate,
+        entity.dueDate,
+        entity.currency,
+        entity.net,
+        entity.tax,
+        entity.gross,
+        entity.taxLines,
+        entity.category,
+        entity.notes,
+        entity.status,  
       ]
         .filter(Boolean)
         .join(" ");
@@ -165,6 +186,7 @@ export async function upsertEmbedding(entityType: EmbeddingEntityType, entityId:
   const db = getOrm();
   const sqlite = getDatabase();
   const now = new Date().toISOString();
+
   const getExisting = () =>
     db
       .select()

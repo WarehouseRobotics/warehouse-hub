@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { beforeEach, describe, expect, it } from "vitest";
+import { logger } from "../src/lib/logger.js";
 
 const testDataDir = path.resolve(process.cwd(), "test-data");
 
