@@ -9,6 +9,8 @@ process.env.UPLOAD_DIR = "./test-data/uploads";
 process.env.OCR_STUB_MODE = "true";
 process.env.EMBEDDING_ALLOW_STUB_FALLBACK = "true";
 
-const testDataDir = path.resolve(process.cwd(), "test-tmp");
-fs.rmSync(testDataDir, { recursive: true, force: true });
+const testDataDir = path.resolve(process.cwd(), "test-data");
 fs.mkdirSync(testDataDir, { recursive: true });
+fs.rmSync(path.join(testDataDir, "business-api.sqlite"), { force: true });
+fs.rmSync(path.join(testDataDir, "uploads"), { recursive: true, force: true });
+fs.rmSync(path.join(testDataDir, "llms.mock.yaml"), { force: true });

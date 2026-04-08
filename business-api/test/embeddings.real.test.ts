@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const testDataDir = path.resolve(process.cwd(), "test-tmp");
+const testDataDir = path.resolve(process.cwd(), "test-data");
 
 async function resetEmbeddingState() {
   vi.resetModules();
@@ -11,8 +11,10 @@ async function resetEmbeddingState() {
   resetEmbeddingProviderConfigCache();
   const { resetDatabase, initializeDatabase } = await import("../src/db/connection.js");
   resetDatabase();
-  fs.rmSync(testDataDir, { recursive: true, force: true });
   fs.mkdirSync(testDataDir, { recursive: true });
+  fs.rmSync(path.join(testDataDir, "business-api.sqlite"), { force: true });
+  fs.rmSync(path.join(testDataDir, "uploads"), { recursive: true, force: true });
+  fs.rmSync(path.join(testDataDir, "llms.mock.yaml"), { force: true });
   initializeDatabase();
 }
 

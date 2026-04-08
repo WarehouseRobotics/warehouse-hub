@@ -97,6 +97,15 @@ async function extractPdfText(file: Express.Multer.File): Promise<string> {
 }
 
 export function renderDocumentPages(file: Express.Multer.File): Array<{ mediaType: string; data: Buffer }> {
+  if (config.OCR_STUB_MODE) {
+    return [
+      {
+        mediaType: isPdf(file) ? "application/pdf" : (file.mimetype || "image/png"),
+        data: file.buffer,
+      },
+    ];
+  }
+
   if (isPdf(file)) {
     return rasterizePdfToPages(file).map((page) => ({
       mediaType: page.mimeType,

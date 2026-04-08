@@ -4,13 +4,15 @@ import type { Server } from "node:http";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-const testDataDir = path.resolve(process.cwd(), "test-tmp");
+const testDataDir = path.resolve(process.cwd(), "test-data");
 
 async function resetTestState() {
   const { resetDatabase, initializeDatabase } = await import("../src/db/connection.js");
   resetDatabase();
-  fs.rmSync(testDataDir, { recursive: true, force: true });
   fs.mkdirSync(testDataDir, { recursive: true });
+  fs.rmSync(path.join(testDataDir, "business-api.sqlite"), { force: true });
+  fs.rmSync(path.join(testDataDir, "uploads"), { recursive: true, force: true });
+  fs.rmSync(path.join(testDataDir, "llms.mock.yaml"), { force: true });
   initializeDatabase();
 }
 
