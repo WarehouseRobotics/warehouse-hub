@@ -6,7 +6,7 @@ import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } fro
 import { createPrefixedId } from "../lib/ids.js";
 import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { CompanyCardInput } from "../schemas/company-card.js";
+import type { CompanyCardInput } from "@warehouse-hub/business-schemas";
 import { ensureDefaultTasksProject } from "./projects.js";
 
 function mapCompanyCard(record: typeof companyCard.$inferSelect) {

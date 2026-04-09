@@ -2,7 +2,7 @@ import { Router } from "express";
 
 import { parseListFilters } from "../lib/list-filters.js";
 import { validateBody } from "../middleware/validate.js";
-import { salesInvoiceGenerateSchema, salesInvoicePatchSchema } from "../schemas/sales-invoice.js";
+import { salesInvoiceGenerateSchema, salesInvoicePatchSchema } from "@warehouse-hub/business-schemas";
 import {
   generateSalesInvoice,
   getSalesInvoice,

@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { validateBody } from "../middleware/validate.js";
-import { companyCardInputSchema } from "../schemas/company-card.js";
+import { companyCardInputSchema } from "@warehouse-hub/business-schemas";
 import { getCompanyCard, upsertCompanyCard } from "../services/company-card.js";
 
 export const companyCardRouter = Router();

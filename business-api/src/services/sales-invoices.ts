@@ -9,7 +9,7 @@ import { applySimilarityFilter, matchesResolvedDateFilters, resolveListFilters, 
 import { logger } from "../lib/logger.js";
 import { normalizeMoneyString } from "../lib/money.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { SalesInvoiceGenerateInput, SalesInvoicePatch } from "../schemas/sales-invoice.js";
+import type { SalesInvoiceGenerateInput, SalesInvoicePatch } from "@warehouse-hub/business-schemas";
 import {
   requireCompanyCardRecord,
   requireContactRecord,

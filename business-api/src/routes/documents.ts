@@ -2,7 +2,7 @@ import multer from "multer";
 import { Router } from "express";
 
 import { parseListFilters } from "../lib/list-filters.js";
-import { documentIngestSchema, documentUploadSchema } from "../schemas/document.js";
+import { documentIngestSchema, documentUploadSchema } from "@warehouse-hub/business-schemas";
 import { getDocumentDownload, getDocumentMeta, listDocuments, softDeleteDocument, uploadDocument } from "../services/documents.js";
 import { ingestDocument } from "../services/document-ingestion.js";
 

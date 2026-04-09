@@ -27,6 +27,7 @@
     "dev:reset-db": "tsx src/dev/recreate-dev-database.ts && tsx src/dev/setup-default-company-card.ts"
   },
   "dependencies": {
+    "@warehouse-hub/business-schemas": "file:../packages/business-schemas",
     "better-sqlite3": "^11.8.1",
     "bullmq": "^5.73.0",
     "decimal.js": "^10.6.0",

@@ -7,7 +7,7 @@ import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { TaskInput, TaskPatch } from "../schemas/task.js";
+import type { TaskInput, TaskPatch } from "@warehouse-hub/business-schemas";
 import { requireProjectRecord, requireTaskRecord } from "./shared.js";
 
 function mapTask(record: typeof tasks.$inferSelect) {

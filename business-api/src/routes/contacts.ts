@@ -1,12 +1,7 @@
 import { Router } from "express";
+import { contactInputSchema, contactPatchSchema, contactResolveInputSchema, type ContactType } from "@warehouse-hub/business-schemas";
 
 import { validateBody } from "../middleware/validate.js";
-import {
-  contactInputSchema,
-  contactPatchSchema,
-  contactResolveInputSchema,
-  type ContactType,
-} from "../schemas/contact.js";
 import {
   createContact,
   getContact,

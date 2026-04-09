@@ -7,7 +7,7 @@ import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { ContactInput, ContactPatch, ContactResolveInput, ContactType } from "../schemas/contact.js";
+import type { ContactInput, ContactPatch, ContactResolveInput, ContactType } from "@warehouse-hub/business-schemas";
 import { requireContactRecord } from "./shared.js";
 
 const LEGAL_SUFFIXES = [

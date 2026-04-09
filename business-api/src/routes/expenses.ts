@@ -2,7 +2,7 @@ import { Router } from "express";
 
 import { parseListFilters } from "../lib/list-filters.js";
 import { validateBody } from "../middleware/validate.js";
-import { expenseInputSchema, expensePatchSchema } from "../schemas/expense.js";
+import { expenseInputSchema, expensePatchSchema } from "@warehouse-hub/business-schemas";
 import {
   createExpense,
   getExpense,

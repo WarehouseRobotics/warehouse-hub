@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { validateBody } from "../middleware/validate.js";
-import { dealInputSchema, dealPatchSchema } from "../schemas/deal.js";
+import { dealInputSchema, dealPatchSchema } from "@warehouse-hub/business-schemas";
 import { createDeal, getDeal, listDeals, softDeleteDeal, updateDeal } from "../services/deals.js";
 
 export const dealsRouter = Router();

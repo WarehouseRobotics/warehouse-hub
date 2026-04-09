@@ -1,7 +1,7 @@
 import { initializeDatabase } from "../db/connection.js";
 import { logger } from "../lib/logger.js";
 import { getCompanyCard, upsertCompanyCard } from "../services/company-card.js";
-import type { CompanyCardInput } from "../schemas/company-card.js";
+import type { CompanyCardInput } from "@warehouse-hub/business-schemas";
 
 const defaultCompanyCard: CompanyCardInput = {
   legalName: "Warehouse Robotics S.L.",

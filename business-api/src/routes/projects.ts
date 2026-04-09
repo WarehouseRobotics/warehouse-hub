@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { validateBody } from "../middleware/validate.js";
-import { projectInputSchema, projectPatchSchema } from "../schemas/project.js";
+import { projectInputSchema, projectPatchSchema } from "@warehouse-hub/business-schemas";
 import { createProject, getProject, listProjects, softDeleteProject, updateProject } from "../services/projects.js";
 
 export const projectsRouter = Router();

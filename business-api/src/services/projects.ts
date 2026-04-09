@@ -5,7 +5,7 @@ import { projects, tasks } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { ProjectInput, ProjectPatch } from "../schemas/project.js";
+import type { ProjectInput, ProjectPatch } from "@warehouse-hub/business-schemas";
 import { requireCompanyCardRecord, requireContactRecord, requireProjectRecord } from "./shared.js";
 
 function mapProject(record: typeof projects.$inferSelect) {

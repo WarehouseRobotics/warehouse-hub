@@ -1,0 +1,28 @@
+{
+  "name": "@warehouse-hub/business-schemas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared Warehouse Hub business object Zod schemas",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,5 +1,4 @@
-import type { ContactInput } from "../schemas/contact.js";
-import type { DocumentIngestInput, DocumentIngestOverrides } from "../schemas/document.js";
+import type { ContactInput, DocumentIngestInput, DocumentIngestOverrides } from "@warehouse-hub/business-schemas";
 import type { StructuredInvoice } from "../schemas/structured-ocr.js";
 import { createExpense, getExpense } from "./expenses.js";
 import { resolveContact } from "./contacts.js";

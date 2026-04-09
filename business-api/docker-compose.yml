@@ -1,7 +1,9 @@
 services:
   business-api:
     build:
-      context: .
+      context: ..
+      dockerfile: business-api/Dockerfile
+    working_dir: /workspace/business-api
     command: sh -c "npm install --node-llama-cpp-postinstall=skip && npm run dev"
     ports:
       - "3100:3100"
@@ -11,10 +13,10 @@ services:
       UPLOAD_DIR: /data/uploads
       API_KEY: test-api-key
     volumes:
-      - .:/app
-      - business_api_node_modules:/app/node_modules
+      - ..:/workspace
+      - business_api_node_modules:/workspace/business-api/node_modules
       - ./data:/data
-      - ./test-data:/app/test-data
+      - ./test-data:/workspace/business-api/test-data
 
 volumes:
   business_api_node_modules:

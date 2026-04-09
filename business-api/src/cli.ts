@@ -12,16 +12,23 @@ import { createExpense, getExpense, listExpenses, updateExpense } from "./servic
 import { createProject, getProject, listProjects } from "./services/projects.js";
 import { generateSalesInvoice, getSalesInvoice, listSalesInvoices, updateSalesInvoice } from "./services/sales-invoices.js";
 import { createTask, getTask, listTasks, updateTask } from "./services/tasks.js";
+import {
+  companyCardInputSchema,
+  contactInputSchema,
+  contactResolveInputSchema,
+  dealInputSchema,
+  documentIngestSchema,
+  documentUploadSchema,
+  expenseInputSchema,
+  expensePatchSchema,
+  projectInputSchema,
+  salesInvoiceGenerateSchema,
+  salesInvoicePatchSchema,
+  taskInputSchema,
+  taskPatchSchema,
+} from "@warehouse-hub/business-schemas";
 import { parseCliListFilters } from "./lib/list-filters.js";
 import { logger } from "./lib/logger.js";
-import { companyCardInputSchema } from "./schemas/company-card.js";
-import { contactInputSchema, contactResolveInputSchema } from "./schemas/contact.js";
-import { dealInputSchema } from "./schemas/deal.js";
-import { documentIngestSchema, documentUploadSchema } from "./schemas/document.js";
-import { expenseInputSchema, expensePatchSchema } from "./schemas/expense.js";
-import { projectInputSchema } from "./schemas/project.js";
-import { salesInvoiceGenerateSchema, salesInvoicePatchSchema } from "./schemas/sales-invoice.js";
-import { taskInputSchema, taskPatchSchema } from "./schemas/task.js";
 
 function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);

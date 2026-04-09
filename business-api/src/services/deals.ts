@@ -7,7 +7,7 @@ import { computeLineItemTotals, normalizeQuantityString } from "../lib/money.js"
 import { createPrefixedId } from "../lib/ids.js";
 import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { DealInput, DealLineItem, DealPatch } from "../schemas/deal.js";
+import type { DealInput, DealLineItem, DealPatch } from "@warehouse-hub/business-schemas";
 import { requireCompanyCardRecord, requireContactRecord, requireDealRecord } from "./shared.js";
 
 function normalizeLineItems(lineItems: DealLineItem[]) {

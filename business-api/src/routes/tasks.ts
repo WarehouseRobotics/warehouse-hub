@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { validateBody } from "../middleware/validate.js";
-import { taskInputSchema, taskPatchSchema } from "../schemas/task.js";
+import { taskInputSchema, taskPatchSchema } from "@warehouse-hub/business-schemas";
 import { createTask, getTask, listTasks, softDeleteTask, updateTask } from "../services/tasks.js";
 
 export const tasksRouter = Router();

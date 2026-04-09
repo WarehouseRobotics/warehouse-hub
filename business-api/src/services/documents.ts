@@ -12,7 +12,7 @@ import { createPrefixedId } from "../lib/ids.js";
 import { applySimilarityFilter, matchesResolvedDateFilters, resolveListFilters, type ListFilters } from "../lib/list-filters.js";
 import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { DocumentUploadInput } from "../schemas/document.js";
+import type { DocumentUploadInput } from "@warehouse-hub/business-schemas";
 import { requireCompanyCardRecord, requireDocumentRecord } from "./shared.js";
 
 function mapDocument(record: typeof documents.$inferSelect) {
