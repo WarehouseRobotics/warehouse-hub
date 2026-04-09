@@ -16,6 +16,9 @@ The initial iteration now includes:
 * Working `company-card` and `contacts` services/routes as the first vertical slices
 * Winston-based structured JSON logging for server/runtime diagnostics
 
+## Shared Types 
+
+Shared Zod schemas for business object contracts are stored in the repo-level package at `packages/business-schemas`.
 
 # Docker container
 

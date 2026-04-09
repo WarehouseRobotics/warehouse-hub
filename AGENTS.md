@@ -23,6 +23,12 @@ The platform is composed of:
 
 The `docs` folder contains Markdown documentation for each platform component – use it to search for relevant code design rules, feature architecture and other useful information about Warehouse Hub.
 
+## Shared Business Schemas
+
+Shared Zod schemas for business object contracts are stored in the repo-level package at `packages/business-schemas`.
+
+Use this package when a business type schema must be shared between subprojects such as `business-api` and `dashboard`. Keep ORM-specific or backend-specific types inside the owning subproject.
+
 
 ## Development Environment Conventions
 

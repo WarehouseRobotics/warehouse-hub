@@ -18,6 +18,18 @@ The platform is composed of:
 * externally available frontend bot, that can be managed and extended by the internal team of agents
 * file assets exchange GUI webapp     
 
+
+## Source Code Documentation 
+
+The `docs` folder contains Markdown documentation for each platform component – use it to search for relevant code design rules, feature architecture and other useful information about Warehouse Hub.
+
+## Shared Business Schemas
+
+Shared Zod schemas for business object contracts are stored in the repo-level package at `packages/business-schemas`.
+
+Use this package when a business type schema must be shared between subprojects such as `business-api` and `dashboard`. Keep ORM-specific or backend-specific types inside the owning subproject.
+
+
 ## Development Environment Conventions
 
 ### Run in Docker
@@ -42,3 +54,9 @@ During development, this commands must be run inside of the Docker container, vi
 ./container.sh exec npm run dev # start a dev server
 ./container.sh exec npm run cli -- company-card get # run a business-api cli tool and output the result
 ```
+
+### Logging
+
+The `business-api` uses `winston` for structured JSON logging. Operational logs from the API server, background processing, database fallback paths, and development scripts are emitted as JSON records and controlled with `LOG_LEVEL`.
+
+CLI command results still print their business payloads as JSON on stdout so they remain easy to pipe into other tools. Diagnostic logs are emitted separately via Winston.
