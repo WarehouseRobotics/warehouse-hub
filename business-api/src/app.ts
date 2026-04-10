@@ -14,6 +14,19 @@ import { tasksRouter } from "./routes/tasks.js";
 export function createApp() {
   const app = express();
 
+  app.use((request, response, next) => {
+    response.header("Access-Control-Allow-Origin", "*");
+    response.header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key");
+    response.header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+
+    if (request.method === "OPTIONS") {
+      response.status(204).send();
+      return;
+    }
+
+    next();
+  });
+
   app.use(express.json());
 
   app.get("/health", (_request, response) => {
