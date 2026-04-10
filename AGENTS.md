@@ -7,7 +7,7 @@ Multi-project repository of the Warehouse Robotics Hub Solution - an agentic CRM
 The platform is composed of: 
 
 * Business API: foundational Business API that provides model abstraction for objects like users, companies, etc and deterministic (non-LLM) business logic operations, typical for any small business management software (in the `business-api` folder)
-* Dashboard: and configuration GUI webapp (in the `dashboard` folder, has a separate submodule repo)
+* Dashboard: configuration and management GUI webapp (in the `dashboard` folder, has a separate submodule repo) acting as a UI client for the business API
 * an internal team of agents running on OpenClaw (in the `openclaw` folder)
     * Agent team
         * Hub-developer agent that can extend the frontend bot system and make changes to the internal OpenClaw setup
