@@ -9,14 +9,13 @@ RUN apt-get update && apt-get install -y git make poppler-utils tesseract-ocr li
 RUN rm -rf /var/lib/apt/lists/*
 
 COPY business-api/package*.json ./
-COPY packages/business-schemas/package*.json /workspace/packages/business-schemas/
+COPY packages/business-schemas /workspace/packages/business-schemas/
 
 # --node-llama-cpp-postinstall=skip is used to skip the postinstall script that 
 # builds the llama.cpp library that currently produce an error
 RUN rm -rf node_modules && npm install --node-llama-cpp-postinstall=skip
 
 COPY business-api /workspace/business-api
-COPY packages/business-schemas /workspace/packages/business-schemas
 
 RUN npm run build
 RUN mkdir -p dist/src/db/migrations && cp src/db/migrations/*.sql dist/src/db/migrations/
