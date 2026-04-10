@@ -25,7 +25,7 @@ The `docs` folder contains Markdown documentation for each platform component â€
 
 ## Shared Business Schemas
 
-Shared Zod schemas for business object contracts are stored in the repo-level package at `packages/business-schemas`.
+Shared Zod schemas for business object contracts (like invoices, expenses, contacts, tasks, etc.) are stored in the repo-level package at `packages/business-schemas`.
 
 Use this package when a business type schema must be shared between subprojects such as `business-api` and `dashboard`. Keep ORM-specific or backend-specific types inside the owning subproject.
 
