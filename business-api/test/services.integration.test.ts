@@ -301,6 +301,9 @@ describe("business-api service flows", () => {
       tax: "25.20",
       gross: "145.20",
     });
+    expect(expense.supplierDisplayName).toBe("Papeleria Centro SL");
+    expect(expense.supplierLegalName).toBe("Papeleria Centro SL");
+    expect(expense.supplierEmail).toBe("facturas@papeleriacentro.example");
     expect(fs.existsSync(getDocumentDownload(document.documentId).path)).toBe(true);
 
     const paid = updateExpense(expense.expenseId, {

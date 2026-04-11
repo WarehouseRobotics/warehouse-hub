@@ -185,8 +185,11 @@ describe("business-api routes", () => {
       },
     );
     expect(expensesResponse.status).toBe(200);
-    expect((await expensesResponse.json()) as Array<{ invoiceNumber: string }>).toEqual([
-      expect.objectContaining({ invoiceNumber: "FC-2026-0042" }),
+    expect((await expensesResponse.json()) as Array<{ invoiceNumber: string; supplierDisplayName: string | null }>).toEqual([
+      expect.objectContaining({
+        invoiceNumber: "FC-2026-0042",
+        supplierDisplayName: "Papeleria Centro SL",
+      }),
     ]);
 
     const salesInvoicesResponse = await fetch(

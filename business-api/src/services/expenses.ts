@@ -1,7 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
-import { expenses } from "../db/schema/index.js";
+import { contacts, expenses } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
@@ -18,10 +18,15 @@ import {
 } from "./shared.js";
 
 function mapExpense(record: typeof expenses.$inferSelect) {
+  const supplier = getOrm().select().from(contacts).where(eq(contacts.id, record.supplierContactId)).get();
+
   return {
     expenseId: record.id,
     slug: record.slug,
     supplierContactId: record.supplierContactId,
+    supplierDisplayName: supplier?.displayName ?? null,
+    supplierLegalName: supplier?.legalName ?? null,
+    supplierEmail: supplier?.email ?? null,
     documentId: record.documentId,
     invoiceNumber: record.invoiceNumber,
     invoiceDate: record.invoiceDate,
