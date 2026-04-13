@@ -14,7 +14,7 @@ COPY packages/business-schemas /workspace/packages/business-schemas/
 # We need a global typescript install to build the packages/business-schemas package
 # --node-llama-cpp-postinstall=skip is used to skip the postinstall script that 
 # builds the llama.cpp library that currently produce an error
-RUN rm -rf node_modules && npm install -g typescript@5.8.2 && npm install --node-llama-cpp-postinstall=skip
+RUN rm -rf node_modules && npm install -g typescript@5.8.2 zod@3.25 && npm install --node-llama-cpp-postinstall=skip
 
 COPY business-api /workspace/business-api
 
