@@ -3,4 +3,6 @@ frontbot-api/
 /openclaw/
 ._*
 test-data/
+node_modules
 business-api/eng.traineddata
+packages/business-schemas/dist/
