@@ -5,12 +5,16 @@ CMD=$1
 
 case "$CMD" in
   build)
+    docker compose down
     docker compose up --build
     ;;
   start)
     docker compose up
     ;;
   stop)
+    docker compose stop
+    ;;
+  remove)
     docker compose down
     ;;
   restart)
@@ -30,7 +34,7 @@ case "$CMD" in
     docker compose exec business-api "$@"
     ;;
   *)
-    echo "Usage: $0 {build|start|stop|restart|sh|exec <command>}"
+    echo "Usage: $0 {build|start|stop|remove|restart|sh|exec <command>}"
     exit 1
     ;;
 esac

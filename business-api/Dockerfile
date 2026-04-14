@@ -20,7 +20,7 @@ WORKDIR /workspace/business-api
 # We need a global typescript install to build the packages/business-schemas package
 # --node-llama-cpp-postinstall=skip is used to skip the postinstall script that 
 # builds the llama.cpp library that currently produce an error
-RUN rm -rf node_modules && npm --prefix /workspace/business-api install --node-llama-cpp-postinstall=skip
+RUN npm --prefix /workspace/business-api install --node-llama-cpp-postinstall=skip
 
 COPY business-api /workspace/business-api
 
