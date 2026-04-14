@@ -3,8 +3,8 @@ services:
     build:
       context: ..
       dockerfile: business-api/Dockerfile
-    working_dir: /workspace/business-api
-    command: sh -c "npm install --node-llama-cpp-postinstall=skip && npm run dev"
+    working_dir: /workspace/business-api    
+    command: sh -c "npm run dev"
     ports:
       - "3100:3100"
     environment:
@@ -15,8 +15,10 @@ services:
     volumes:
       - ..:/workspace
       - business_api_node_modules:/workspace/business-api/node_modules
+      - business_schemas_node_modules:/workspace/packages/business-schemas/node_modules
       - ./data:/data
       - ./test-data:/workspace/business-api/test-data
 
 volumes:
   business_api_node_modules:
+  business_schemas_node_modules:

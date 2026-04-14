@@ -11,16 +11,23 @@ RUN rm -rf /var/lib/apt/lists/*
 COPY business-api/package*.json ./
 COPY packages/business-schemas /workspace/packages/business-schemas/
 
+WORKDIR /workspace/business-api/packages/business-schemas/
+RUN npm install -g typescript@5.8.2
+RUN npm --prefix /workspace/packages/business-schemas install && npm --prefix /workspace/packages/business-schemas run build
+
+WORKDIR /workspace/business-api
+
 # We need a global typescript install to build the packages/business-schemas package
 # --node-llama-cpp-postinstall=skip is used to skip the postinstall script that 
 # builds the llama.cpp library that currently produce an error
-RUN rm -rf node_modules && npm install -g typescript@5.8.2 zod@3.25 && npm install --node-llama-cpp-postinstall=skip
+RUN rm -rf node_modules && npm --prefix /workspace/business-api install --node-llama-cpp-postinstall=skip
 
 COPY business-api /workspace/business-api
 
-RUN npm run build
-RUN mkdir -p dist/src/db/migrations && cp src/db/migrations/*.sql dist/src/db/migrations/
+# For now, we don't build the business-api and run the dev version
+#RUN npm --prefix /workspace/business-api run build
+#RUN mkdir -p dist/src/db/migrations && cp src/db/migrations/*.sql dist/src/db/migrations/
 
 EXPOSE 3100
 
-CMD ["npm", "run", "start"]
+#CMD ["npm", "run", "start"]
