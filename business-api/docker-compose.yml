@@ -15,6 +15,7 @@ services:
     volumes:
       - ..:/workspace
       - business_api_node_modules:/workspace/business-api/node_modules
+      - business_api_dist:/workspace/business-api/dist
       - business_schemas_node_modules:/workspace/packages/business-schemas/node_modules
       - business_schemas_dist:/workspace/packages/business-schemas/dist
       - ./data:/data
@@ -23,4 +24,5 @@ services:
 volumes:
   business_api_node_modules:
   business_schemas_node_modules:
+  business_api_dist:
   business_schemas_dist:
