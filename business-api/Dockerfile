@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y git make poppler-utils tesseract-ocr li
 RUN rm -rf /var/lib/apt/lists/*
 
 COPY business-api/package*.json ./
+COPY business-api /workspace/business-api
+RUN rm -rf node_modules
 COPY packages/business-schemas /workspace/packages/business-schemas/
 
 WORKDIR /workspace/business-api/packages/business-schemas/
@@ -24,10 +26,8 @@ RUN npm --prefix /workspace/business-api install --node-llama-cpp-postinstall=sk
 
 COPY business-api /workspace/business-api
 
-# For now, we don't build the business-api and run the dev version
-#RUN npm --prefix /workspace/business-api run build
-#RUN mkdir -p dist/src/db/migrations && cp src/db/migrations/*.sql dist/src/db/migrations/
+# Though we're building API, we'll run the dev version for now
+RUN npm --prefix /workspace/business-api run build
+RUN mkdir -p dist/src/db/migrations && cp src/db/migrations/*.sql dist/src/db/migrations/
 
 EXPOSE 3100
-
-#CMD ["npm", "run", "start"]
