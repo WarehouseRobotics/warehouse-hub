@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const TRUTHY_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
+const TRUTHY_ENV_VALUES = new Set(["1", "t", "true", "yes", "on"]);
 
 function isTruthyEnvValue(value) {
   return typeof value === "string" && TRUTHY_ENV_VALUES.has(value.trim().toLowerCase());

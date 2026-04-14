@@ -4,7 +4,7 @@ COMMAND="$1"
 
 case "$COMMAND" in
   help|"")
-    echo "wrobo - WroboHub control CLI"
+    echo "wrobohub-control - WroboHub control CLI"
     echo ""
     echo "Usage: wrobo <command>"
     echo ""
