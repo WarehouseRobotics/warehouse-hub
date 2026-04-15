@@ -1,8 +1,8 @@
 #!/bin/sh
 # Installs the warehouse-hub CLI control scripts to /usr/bin
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" &> /dev/null && pwd)
-REPO_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
+SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" &> /dev/null && pwd)/bin
+REPO_DIR=$(cd -- "$SCRIPT_DIR/../.." &> /dev/null && pwd)
 BUSINESS_API_CLI="$REPO_DIR/business-api/bin/wrobo-biz"
 
 echo $SCRIPT_DIR
