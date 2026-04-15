@@ -1,0 +1,226 @@
+---
+name: business-api
+description: Explains how to use the Business API CLI for CRM and accounting operations.
+metadata:
+  {
+    "openclaw":
+      {
+        "requires": { "bins": ["docker"], "env": [], "config": [] }
+      },
+  }
+---
+
+# Business API CLI Skill
+
+Use the Warehouse Hub Business API CLI when an Openclaw agent needs deterministic business operations against local hub data: company card setup, contacts, deals, documents, expenses, sales invoices, projects, and tasks.
+
+This CLI is the preferred path for structured CRUD-style work that should not depend on an LLM.
+
+## Default Command Pattern
+
+Prefer the `wrobo-biz` wrapper script as the default agent-facing interface:
+
+```bash
+wrobo-biz <command> <subcommand> ...
+```
+
+Examples:
+
+```bash
+wrobo-biz company-card get
+wrobo-biz contacts get ct_000245
+wrobo-biz expenses list --since 1m
+```
+
+The wrapper is simpler for agents because it hides whether the CLI is running directly or inside the Business API container.
+
+If you need the lower-level equivalent for debugging, repo-local development typically maps to:
+
+```bash
+cd /Users/denis/src/warehouse-hub/business-api
+./container.sh exec env WROBO_BUSINESS_API_CONTAINER_ENABLED= node ./dist/src/cli.js <command> <subcommand> ...
+```
+
+Use the lower-level container command only when troubleshooting the wrapper or working on the CLI implementation itself.
+
+## Output And Error Model
+
+- Successful command results are printed as formatted JSON on stdout.
+- Operational logging uses Winston JSON logs and is emitted separately from the command payload.
+- Validation failures and unknown commands exit non-zero and print an error message on stderr.
+- Treat stdout as the business result to parse or summarize.
+
+## Command Families
+
+Supported top-level commands:
+
+- `db init`
+- `db migrate`
+- `company-card get`
+- `company-card set '<json>'`
+- `contacts list`
+- `contacts create '<json>'`
+- `contacts get <id-or-slug>`
+- `contacts resolve '<json>'`
+- `documents upload <file-path> '<json-meta>'`
+- `documents ingest <file-path> '<json-meta>'`
+- `documents list [filters]`
+- `documents get <id-or-slug>`
+- `documents download <id-or-slug> <output-path>`
+- `expenses create '<json>'`
+- `expenses get <id-or-slug>`
+- `expenses list [filters]`
+- `expenses update <id-or-slug> '<json-patch>'`
+- `deals create '<json>'`
+- `deals get <id-or-slug>`
+- `deals list`
+- `sales-invoices generate '<json>'`
+- `sales-invoices get <id-or-slug>`
+- `sales-invoices list [filters]`
+- `sales-invoices update <id-or-slug> '<json-patch>'`
+- `projects create '<json>'`
+- `projects get <id-or-slug>`
+- `projects list`
+- `tasks create '<json>'`
+- `tasks get <id-or-slug>`
+- `tasks list`
+- `tasks update <id-or-slug> '<json-patch>'`
+
+## Safe Usage Rules
+
+- Prefer `wrobo-biz ...` over direct `container.sh` or `npm run cli` invocations.
+- Pass JSON arguments as **valid JSON objects**, wrapped in single quotes.
+- Use double quotes inside JSON keys and values.
+- Prefer fetching existing entities before updating related records when IDs are uncertain.
+- Treat `<id-or-slug>` literally: many `get` and `update` commands accept either the internal ID or slug.
+- For file ingestion, confirm the source path exists before calling `documents upload` or `documents ingest`.
+- For downloads, choose an explicit output path and expect the command to write a file.
+
+## List Filters
+
+Only these list commands accept CLI filters:
+
+- `documents list`
+- `expenses list`
+- `sales-invoices list`
+
+Supported filter flags:
+
+- `--similar <text>` for semantic search
+- `--limit <n>` for a positive integer limit
+- `--since <duration>` where duration uses `d`, `w`, `m`, or `y`, for example `7d`, `2w`, `3m`
+- `--before <YYYY-MM-DD>`
+- `--after <YYYY-MM-DD>`
+
+Important filter behavior:
+
+- Unknown list flags fail validation.
+- `--before` and `--after` must use `YYYY-MM-DD`.
+- `--since` must use a relative duration like `1d`, `2m`, or `1y`.
+- Other list endpoints such as `contacts list`, `deals list`, `projects list`, and `tasks list` do not currently accept these filters.
+
+## Recommended Workflows
+
+### 1. Read Before Write
+
+When possible, inspect current state before mutating records:
+
+```bash
+wrobo-biz company-card get
+wrobo-biz contacts list
+wrobo-biz expenses get exp_000123
+```
+
+### 2. Use `contacts resolve` For Matching
+
+When you have partial external contact data and want stable matching with optional autocreation, prefer:
+
+```bash
+wrobo-biz contacts resolve '{"autoCreate":true,"matchBy":["taxId","email","canonicalName"],"contact":{"type":"company","status":"active","roles":["supplier"],"displayName":"Papeleria Centro SL","legalName":"Papeleria Centro SL","taxId":"B87654321","email":"facturas@papeleriacentro.example"}}'
+```
+
+This is better than creating duplicates when an email, tax ID, or normalized name may already exist.
+
+### 3. Use Document Ingestion For OCR-Backed Records
+
+Use `documents ingest` when the uploaded file should also be processed into a business record such as an expense invoice:
+
+```bash
+wrobo-biz documents ingest ./test-data/expenses/invoice_do_2026_03.pdf '{"kind":"expense_invoice","source":"email_forward","overrides":{"invoiceDate":"2026-03-26","category":"office_supplies"}}'
+```
+
+Use `documents upload` when you only want to store the file and metadata without running ingestion logic.
+
+### 4. Use Semantic Search Sparingly But Intentionally
+
+Semantic search is available on selected list endpoints and is useful when exact IDs or dates are unknown:
+
+```bash
+wrobo-biz expenses list --similar "printer toner invoice from papeleria centro" --since 3m
+wrobo-biz sales-invoices list --similar "warehouse onboarding consulting" --after 2026-01-01
+```
+
+Prefer exact `get` commands when you already have an ID or slug.
+
+## Common Examples
+
+Create a contact:
+
+```bash
+wrobo-biz contacts create '{"type":"company","status":"active","roles":["customer"],"displayName":"Acme Retail GmbH","legalName":"Acme Retail GmbH","taxId":"DE123456789","email":"ap@acme-retail.example"}'
+```
+
+Create an expense:
+
+```bash
+wrobo-biz expenses create '{"supplierContactId":"ct_000245","invoiceNumber":"FC-2026-0042","invoiceDate":"2026-03-25","dueDate":"2026-04-24","currency":"EUR","totals":{"net":"120.00","tax":"25.20","gross":"145.20"},"category":"office_supplies","notes":"Printer paper and toner.","status":"recorded"}'
+```
+
+Patch an expense:
+
+```bash
+wrobo-biz expenses update exp_000123 '{"status":"paid","notes":"Paid by bank transfer on 2026-04-10."}'
+```
+
+Generate a sales invoice:
+
+```bash
+wrobo-biz sales-invoices generate '{"customerContactId":"ct_000310","dealId":"deal_000041","issueDate":"2026-04-02"}'
+```
+
+Create a task:
+
+```bash
+wrobo-biz tasks create '{"projectId":"proj_000101","title":"Review Q2 expense backlog","status":"todo","priority":"high"}'
+```
+
+Download a stored document:
+
+```bash
+wrobo-biz documents download doc_000050 /tmp/vendor-invoice.pdf
+```
+
+## Agent Decision Guide
+
+Use the Business API CLI when:
+
+- You need deterministic CRUD or lookup behavior.
+- You need to manipulate canonical business records.
+- You need OCR-backed document ingestion into structured records.
+- You need semantic retrieval over documents, expenses, or sales invoices.
+
+Do not use the CLI as your first tool when:
+
+- The task is purely exploratory product research or web browsing.
+- You need to modify application code instead of business data.
+- The required operation is not implemented in `business-api/src/cli.ts`.
+
+## Skill Summary
+
+For Openclaw agents, the safe default is:
+
+1. Run `wrobo-biz ...`
+2. Pass valid JSON strings for structured inputs
+3. Read stdout JSON as the authoritative result
+4. Prefer lookup and resolve flows before mutating records
+5. Fall back to the lower-level `business-api/container.sh` path only for debugging

@@ -1,6 +1,5 @@
 file-manager/
 frontbot-api/
-/openclaw/
 ._*
 test-data/
 node_modules
