@@ -30,8 +30,199 @@ import {
 import { parseCliListFilters } from "./lib/list-filters.js";
 import { logger } from "./lib/logger.js";
 
+type HelpScope = {
+  description: string;
+  commands: string[];
+  examples: string[];
+  aliases?: string[];
+};
+
+const DEFAULT_CLI_PREFIX = "./container.sh exec npm run cli -- ";
+const DOCKER_WRAPPER_PREFIX = "wrobo-biz ";
+
+const HELP_SCOPES: Record<string, HelpScope> = {
+  db: {
+    description: "Database bootstrap and migration tasks.",
+    commands: ["init", "migrate"],
+    examples: ["db init", "db migrate"],
+  },
+  "company-card": {
+    description: "Read or update the owned company profile used across business workflows.",
+    commands: ["get", "set <json>"],
+    examples: [
+      "company-card get",
+      'company-card set \'{"legalName":"Northwind Robotics SL","displayName":"Northwind Robotics"}\'',
+    ],
+    aliases: ["company"],
+  },
+  contacts: {
+    description: "Create, inspect, list, or resolve contacts.",
+    commands: ["list", "create <json>", "get <id-or-slug>", "resolve <json>"],
+    examples: [
+      "contacts list",
+      'contacts create \'{"type":"company","status":"active","roles":["customer"],"displayName":"Acme Retail GmbH"}\'',
+      'contacts resolve \'{"autoCreate":true,"matchBy":["taxId","email"],"contact":{"type":"company","displayName":"Acme Retail GmbH"}}\'',
+    ],
+  },
+  documents: {
+    description: "Upload, ingest, search, inspect, and download business documents.",
+    commands: [
+      "upload <file-path> <json-meta>",
+      "ingest <file-path> <json-meta>",
+      "list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
+      "get <id-or-slug>",
+      "download <id-or-slug> <output-path>",
+    ],
+    examples: [
+      'documents upload ./samples/docs/reference.pdf \'{"kind":"other","source":"manual_upload"}\'',
+      'documents ingest ./test-data/expenses/invoice_do_2026_03.pdf \'{"kind":"expense_invoice","source":"email_forward"}\'',
+      "documents list --after 2026-04-01 --before 2026-05-01",
+    ],
+  },
+  expenses: {
+    description: "Manage expense invoices and supplier bills.",
+    commands: [
+      "create <json>",
+      "get <id-or-slug>",
+      "list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
+      "update <id-or-slug> <json>",
+    ],
+    examples: [
+      'expenses create \'{"supplierContactId":"ct_000245","invoiceNumber":"FC-2026-0042","invoiceDate":"2026-03-25","currency":"EUR"}\'',
+      "expenses list --status recorded",
+      'expenses list --similar "office toner cartridges from papeleria centro" --since 2m',
+    ],
+  },
+  deals: {
+    description: "Create, inspect, and list sales deals.",
+    commands: ["create <json>", "get <id-or-slug>", "list"],
+    examples: [
+      'deals create \'{"title":"Warehouse audit consulting","stage":"qualified"}\'',
+      "deals list",
+    ],
+  },
+  "sales-invoices": {
+    description: "Generate, inspect, search, and update outgoing sales invoices.",
+    commands: [
+      "generate <json>",
+      "get <id-or-slug>",
+      "list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
+      "update <id-or-slug> <json>",
+    ],
+    examples: [
+      'sales-invoices generate \'{"customerContactId":"ct_000310","dealId":"deal_000041","issueDate":"2026-04-02"}\'',
+      "sales-invoices list --status finalized --after 2026-04-01 --before 2026-05-01",
+      'sales-invoices list --similar "warehouse audit consulting sprint" --since 1m',
+    ],
+    aliases: ["invoice", "invoices", "sales-invoice"],
+  },
+  projects: {
+    description: "Create, inspect, and list projects.",
+    commands: ["create <json>", "get <id-or-slug>", "list"],
+    examples: [
+      'projects create \'{"ownerEntityId":"comp_000001","name":"Customer onboarding"}\'',
+      "projects list",
+    ],
+  },
+  tasks: {
+    description: "Create, inspect, list, and update tasks.",
+    commands: ["create <json>", "get <id-or-slug>", "list", "update <id-or-slug> <json>"],
+    examples: [
+      'tasks create \'{"projectId":"proj_000101","title":"Review Q2 expense backlog","status":"todo","priority":"high"}\'',
+      "tasks list",
+      'tasks update task_000123 \'{"status":"done"}\'',
+    ],
+  },
+};
+
+const TOP_LEVEL_COMMANDS = [
+  "help [scope]",
+  "serve",
+  "db <subcommand>",
+  "company-card <subcommand>",
+  "contacts <subcommand>",
+  "documents <subcommand>",
+  "expenses <subcommand>",
+  "deals <subcommand>",
+  "sales-invoices <subcommand>",
+  "projects <subcommand>",
+  "tasks <subcommand>",
+];
+
 function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function printLines(lines: string[]): void {
+  process.stdout.write(`${lines.join("\n")}\n`);
+}
+
+function getCliPrefix(args: string[]): string {
+  return args.includes("--in-docker") ? DOCKER_WRAPPER_PREFIX : DEFAULT_CLI_PREFIX;
+}
+
+function formatExample(command: string, prefix: string): string {
+  return `${prefix}${command}`;
+}
+
+function getCanonicalScope(scope: string | undefined): string | undefined {
+  if (!scope) {
+    return undefined;
+  }
+
+  if (scope in HELP_SCOPES) {
+    return scope;
+  }
+
+  const normalizedScope = scope.toLowerCase();
+
+  return Object.entries(HELP_SCOPES).find(([, helpScope]) =>
+    helpScope.aliases?.some((alias) => alias.toLowerCase() === normalizedScope),
+  )?.[0];
+}
+
+function printTopLevelHelp(args: string[]): void {
+  const prefix = getCliPrefix(args);
+  const scopeNames = Object.keys(HELP_SCOPES);
+
+  printLines([
+    "Warehouse Hub Business API CLI",
+    "",
+    "Top-level commands:",
+    ...TOP_LEVEL_COMMANDS.map((command) => `  - ${command}`),
+    "",
+    "Scopes:",
+    ...scopeNames.map((scope) => `  - ${scope}: ${HELP_SCOPES[scope].description}`),
+    "",
+    "Examples:",
+    `  - ${formatExample("help projects", prefix)}`,
+    `  - ${formatExample("help invoices", prefix)}`,
+    `  - ${formatExample("contacts list", prefix)}`,
+  ]);
+}
+
+function printScopeHelp(scope: string, args: string[]): void {
+  const canonicalScope = getCanonicalScope(scope);
+
+  if (!canonicalScope) {
+    const knownScopes = Object.keys(HELP_SCOPES).join(", ");
+    throw new Error(`Unknown help scope: ${scope}. Known scopes: ${knownScopes}`);
+  }
+
+  const prefix = getCliPrefix(args);
+  const helpScope = HELP_SCOPES[canonicalScope];
+
+  printLines([
+    `Help for ${canonicalScope}`,
+    "",
+    helpScope.description,
+    "",
+    "Commands:",
+    ...helpScope.commands.map((command) => `  - ${canonicalScope} ${command}`),
+    "",
+    "Examples:",
+    ...helpScope.examples.map((example) => `  - ${formatExample(example, prefix)}`),
+  ]);
 }
 
 function parseJsonArg(value: string | undefined, label: string): unknown {
@@ -53,44 +244,20 @@ function parseJsonArg(value: string | undefined, label: string): unknown {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const [command, subcommand, ...rest] = args;
+  const positionalArgs = args.filter((arg) => arg !== "--in-docker");
+  const [command, subcommand, ...rest] = positionalArgs;
 
   if (!command) {
-    printJson({
-      usage: [
-        "tsx src/cli.ts serve",
-        "tsx src/cli.ts db init",
-        "tsx src/cli.ts company-card get",
-        "tsx src/cli.ts company-card set '<json>'",
-        "tsx src/cli.ts contacts list",
-        "tsx src/cli.ts contacts create '<json>'",
-        "tsx src/cli.ts contacts get <id-or-slug>",
-        "tsx src/cli.ts contacts resolve '<json>'",
-        "tsx src/cli.ts documents upload <file-path> '<json-meta>'",
-        "tsx src/cli.ts documents ingest <file-path> '<json-meta>'",
-        "tsx src/cli.ts documents list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
-        "tsx src/cli.ts documents get <id-or-slug>",
-        "tsx src/cli.ts documents download <id-or-slug> <output-path>",
-        "tsx src/cli.ts expenses create '<json>'",
-        "tsx src/cli.ts expenses get <id-or-slug>",
-        "tsx src/cli.ts expenses list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
-        "tsx src/cli.ts expenses update <id-or-slug> '<json>'",
-        "tsx src/cli.ts deals create '<json>'",
-        "tsx src/cli.ts deals get <id-or-slug>",
-        "tsx src/cli.ts deals list",
-        "tsx src/cli.ts sales-invoices generate '<json>'",
-        "tsx src/cli.ts sales-invoices get <id-or-slug>",
-        "tsx src/cli.ts sales-invoices list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
-        "tsx src/cli.ts sales-invoices update <id-or-slug> '<json>'",
-        "tsx src/cli.ts projects create '<json>'",
-        "tsx src/cli.ts projects get <id-or-slug>",
-        "tsx src/cli.ts projects list",
-        "tsx src/cli.ts tasks create '<json>'",
-        "tsx src/cli.ts tasks get <id-or-slug>",
-        "tsx src/cli.ts tasks list",
-        "tsx src/cli.ts tasks update <id-or-slug> '<json>'",
-      ],
-    });
+    printTopLevelHelp(args);
+    return;
+  }
+
+  if (command === "help") {
+    if (subcommand) {
+      printScopeHelp(subcommand, args);
+    } else {
+      printTopLevelHelp(args);
+    }
     return;
   }
 
@@ -323,13 +490,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  throw new Error(`Unknown command: ${args.join(" ")}`);
+  throw new Error(`Unknown command: ${positionalArgs.join(" ")}`);
 }
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
+  const positionalArgs = process.argv.slice(2).filter((arg) => arg !== "--in-docker");
   logger.error("Business API CLI command failed", {
-    command: process.argv.slice(2).join(" "),
+    command: positionalArgs.join(" "),
     error,
   });
   process.stderr.write(`${message}\n`);

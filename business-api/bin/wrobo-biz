@@ -22,6 +22,7 @@ function runCliInContainer() {
       "WROBO_BUSINESS_API_CONTAINER_ENABLED=",
       "node",
       "./dist/src/cli.js",
+      "--in-docker",
       ...process.argv.slice(2),
     ],
     {

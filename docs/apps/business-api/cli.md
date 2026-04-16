@@ -18,6 +18,21 @@ wrobo-biz invoices list
 
 This is the preferred way for production and testing.
 
+The wrapper also enables CLI help output to use `wrobo-biz ...` examples instead of container-specific commands:
+
+```bash
+wrobo-biz
+wrobo-biz help
+wrobo-biz help invoices
+wrobo-biz help projects
+```
+
+When you run the raw CLI directly inside the repo container, examples keep the explicit container form:
+
+```bash
+./container.sh exec npm run cli -- help documents
+```
+
 ## Database and Company Card
 
 Initialize or migrate the local database:
