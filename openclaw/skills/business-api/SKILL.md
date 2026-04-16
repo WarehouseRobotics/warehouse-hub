@@ -12,13 +12,13 @@ metadata:
 
 # Business API CLI Skill
 
-Use the Warehouse Hub Business API CLI when an Openclaw agent needs deterministic business operations against local hub data: company card setup, contacts, deals, documents, expenses, sales invoices, projects, and tasks.
+Use the Warehouse Hub Business API CLI `wrobo-biz` command when an Openclaw agent needs deterministic business operations against local hub data: company card setup, contacts, deals, documents, expenses, sales invoices, projects, and tasks.
 
 This CLI is the preferred path for structured CRUD-style work that should not depend on an LLM.
 
 ## Default Command Pattern
 
-Prefer the `wrobo-biz` wrapper script as the default agent-facing interface:
+General pattern (wrobo-biz is linked to /usr/bin which is in PATH):
 
 ```bash
 wrobo-biz <command> <subcommand> ...
@@ -213,7 +213,7 @@ Do not use the CLI as your first tool when:
 
 - The task is purely exploratory product research or web browsing.
 - You need to modify application code instead of business data.
-- The required operation is not implemented in `business-api/src/cli.ts`.
+- The required operation is not implemented in the business-api CLI`.
 
 ## Skill Summary
 
@@ -223,4 +223,3 @@ For Openclaw agents, the safe default is:
 2. Pass valid JSON strings for structured inputs
 3. Read stdout JSON as the authoritative result
 4. Prefer lookup and resolve flows before mutating records
-5. Fall back to the lower-level `business-api/container.sh` path only for debugging
