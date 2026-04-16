@@ -2,10 +2,21 @@
 
 The `business-api` CLI is typically run inside the Docker development container:
 
+
 ```bash
 cd business-api
 ./container.sh exec npm run cli -- <command>
 ```
+
+## Convenience wrapper
+
+The `business-api/bin/wrobo-biz` is normally installed to /usr/bin and should be available system-wide. With this wrapper the calls tranform to something like this:
+
+```bash
+wrobo-biz invoices list
+```
+
+This is the preferred way for production and testing.
 
 ## Database and Company Card
 
@@ -41,6 +52,12 @@ Read it back:
 
 ```bash
 ./container.sh exec npm run cli -- company-card get
+```
+
+or with the CLI wrapper, simply:
+
+```bash
+wrobo-biz company-card get
 ```
 
 ## Contacts
