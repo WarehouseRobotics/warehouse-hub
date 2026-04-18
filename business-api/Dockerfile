@@ -26,6 +26,10 @@ RUN npm --prefix /workspace/business-api install --node-llama-cpp-postinstall=sk
 
 COPY business-api /workspace/business-api
 
+# Ensure that data/tmp and data/uploads directories are created
+RUN mkdir -p data/tmp data/uploads
+RUN touch data/tmp/.keep data/uploads/.keep
+
 # Though we're building API, we'll run the dev version for now
 RUN rm -rf dist
 RUN npm --prefix /workspace/business-api run build
