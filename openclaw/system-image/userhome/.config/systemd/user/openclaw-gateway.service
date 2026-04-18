@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenClaw Gateway (Dev Mode)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/denis/src/openclaw
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:%h/.nvm/versions/node/v22.22.0/bin"
+Environment="NODE_ENV=development"
+Environment="OPENCLAW_FORCE_NO_BUILD=1"
+ExecStart=/home/denis/.nvm/versions/node/v22.22.0/bin/pnpm --reporter append-only run openclaw gateway --port 18789
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw-gateway
+
+[Install]
+WantedBy=default.target

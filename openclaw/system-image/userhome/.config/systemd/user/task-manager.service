@@ -1,0 +1,18 @@
+[Unit]
+Description=Task Manager Node.js App
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.openclaw/workspace/shared-projects/task-manager
+Environment="NODE_ENV=production"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:%h/.nvm/versions/node/v22.22.0/bin"
+ExecStart=%h/.nvm/versions/node/v22.22.0/bin/npm run local
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=task-manager
+
+[Install]
+WantedBy=default.target

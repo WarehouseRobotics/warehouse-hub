@@ -1,0 +1,20 @@
+[Unit]
+Description=Dev Server Dashboard
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/denis/.openclaw/workspace/dev-dashboard
+Environment="NODE_ENV=production"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:%h/.nvm/versions/node/v22.22.0/bin"
+Environment="PORT=3333"
+Environment="CONFIG_PATH=/home/denis/.openclaw/workspace/dev-dashboard/servers.json"
+ExecStart=/home/denis/.nvm/versions/node/v22.22.0/bin/node server.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dev-dashboard
+
+[Install]
+WantedBy=default.target
