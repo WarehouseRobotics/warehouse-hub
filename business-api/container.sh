@@ -11,6 +11,9 @@ case "$CMD" in
   start)
     docker compose up
     ;;
+  startd)
+    docker compose up -d
+    ;;
   stop)
     docker compose stop
     ;;
