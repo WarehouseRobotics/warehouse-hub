@@ -24,6 +24,18 @@ General pattern (wrobo-biz is linked to /usr/bin which is in PATH):
 wrobo-biz <command> <subcommand> ...
 ```
 
+For command discovery and examples, the CLI now has layered help:
+
+```bash
+wrobo-biz
+wrobo-biz help
+wrobo-biz help contacts
+wrobo-biz help expenses
+wrobo-biz help invoices
+```
+
+Use top-level help when you need to recall available scopes. Use scoped help when you need the command list and example syntax for a specific area such as contacts, expenses, projects, tasks, or invoices.
+
 Examples:
 
 ```bash
@@ -38,7 +50,7 @@ If you need the lower-level equivalent for debugging, repo-local development typ
 
 ```bash
 cd /Users/denis/src/warehouse-hub/business-api
-./container.sh exec env WROBO_BUSINESS_API_CONTAINER_ENABLED= node ./dist/src/cli.js <command> <subcommand> ...
+./container.sh exec npm run cli -- <command> <subcommand> ...
 ```
 
 Use the lower-level container command only when troubleshooting the wrapper or working on the CLI implementation itself.
@@ -52,7 +64,21 @@ Use the lower-level container command only when troubleshooting the wrapper or w
 
 ## Command Families
 
-Supported top-level commands:
+Top-level commands:
+
+- `help [scope]`
+- `serve`
+- `db <subcommand>`
+- `company-card <subcommand>`
+- `contacts <subcommand>`
+- `documents <subcommand>`
+- `expenses <subcommand>`
+- `deals <subcommand>`
+- `sales-invoices <subcommand>`
+- `projects <subcommand>`
+- `tasks <subcommand>`
+
+Supported subcommands by scope:
 
 - `db init`
 - `db migrate`
@@ -89,6 +115,7 @@ Supported top-level commands:
 ## Safe Usage Rules
 
 - Prefer `wrobo-biz ...` over direct `container.sh` or `npm run cli` invocations.
+- Prefer `wrobo-biz help` or `wrobo-biz help <scope>` before guessing syntax.
 - Pass JSON arguments as **valid JSON objects**, wrapped in single quotes.
 - Use double quotes inside JSON keys and values.
 - Prefer fetching existing entities before updating related records when IDs are uncertain.
@@ -126,6 +153,7 @@ Important filter behavior:
 When possible, inspect current state before mutating records:
 
 ```bash
+wrobo-biz help expenses
 wrobo-biz company-card get
 wrobo-biz contacts list
 wrobo-biz expenses get exp_000123
@@ -164,10 +192,32 @@ Prefer exact `get` commands when you already have an ID or slug.
 
 ## Common Examples
 
+### Contacts
+
+Inspect the contact scope help:
+
+```bash
+wrobo-biz help contacts
+```
+
 Create a contact:
 
 ```bash
 wrobo-biz contacts create '{"type":"company","status":"active","roles":["customer"],"displayName":"Acme Retail GmbH","legalName":"Acme Retail GmbH","taxId":"DE123456789","email":"ap@acme-retail.example"}'
+```
+
+Resolve a contact, creating it if needed:
+
+```bash
+wrobo-biz contacts resolve '{"autoCreate":true,"matchBy":["taxId","email","canonicalName"],"contact":{"type":"company","status":"active","roles":["supplier"],"displayName":"Papeleria Centro SL","legalName":"Papeleria Centro SL","taxId":"B87654321","email":"facturas@papeleriacentro.example"}}'
+```
+
+### Expenses
+
+Inspect the expense scope help:
+
+```bash
+wrobo-biz help expenses
 ```
 
 Create an expense:
@@ -182,10 +232,30 @@ Patch an expense:
 wrobo-biz expenses update exp_000123 '{"status":"paid","notes":"Paid by bank transfer on 2026-04-10."}'
 ```
 
+Search recent expenses semantically:
+
+```bash
+wrobo-biz expenses list --similar "office toner cartridges from papeleria centro" --since 2m
+```
+
+### Invoices
+
+Inspect the invoice scope help:
+
+```bash
+wrobo-biz help invoices
+```
+
 Generate a sales invoice:
 
 ```bash
 wrobo-biz sales-invoices generate '{"customerContactId":"ct_000310","dealId":"deal_000041","issueDate":"2026-04-02"}'
+```
+
+List recent finalized invoices:
+
+```bash
+wrobo-biz sales-invoices list --status finalized --after 2026-04-01 --before 2026-05-01
 ```
 
 Create a task:
@@ -220,6 +290,7 @@ Do not use the CLI as your first tool when:
 For Openclaw agents, the safe default is:
 
 1. Run `wrobo-biz ...`
-2. Pass valid JSON strings for structured inputs
-3. Read stdout JSON as the authoritative result
-4. Prefer lookup and resolve flows before mutating records
+2. Use `wrobo-biz help` or `wrobo-biz help <scope>` when syntax is uncertain
+3. Pass valid JSON strings for structured inputs
+4. Read stdout JSON as the authoritative result
+5. Prefer lookup and resolve flows before mutating records
