@@ -34,17 +34,40 @@ wrobo-biz help expenses
 wrobo-biz help invoices
 ```
 
+The "help" command, scope name and action names do not use the "--" prefix, while command arguments always are prefixed with "--" (example: "... --after 2025-01-30")
+
 Use top-level help when you need to recall available scopes. Use scoped help when you need the command list and example syntax for a specific area such as contacts, expenses, projects, tasks, or invoices.
 
-Examples:
+## General Examples
+
+Some basic examples 
 
 ```bash
+# Owner company card info
 wrobo-biz company-card get
+
+# Get a contact by ID or slug
 wrobo-biz contacts get ct_000245
+
+# For bills/purchases
 wrobo-biz expenses list --since 1m
+
+# For sales
+wrobo-biz sales-invoices list --after 2025-01-30
 ```
 
+For more filters consult scope help with `wrobo-biz help <scope>`.
+
 The wrapper is simpler for agents because it hides whether the CLI is running directly or inside the Business API container.
+
+### Common Command Arguments for Date Ranges
+
+--since 30d, 4w, 1m: allows simple filtering for the "last N days/weeks/months"
+--before YYYY-MM-DD: before date filter
+--after YYYY-MM-DD: after date filter
+--limit 30: limit the number of results
+
+## Debugging Commands
 
 If you need the lower-level equivalent for debugging, repo-local development typically maps to:
 
