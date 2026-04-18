@@ -92,6 +92,7 @@ const HELP_SCOPES: Record<string, HelpScope> = {
       "expenses list --status recorded",
       'expenses list --similar "office toner cartridges from papeleria centro" --since 2m',
     ],
+    aliases: ["purchase-invoices", "expense-invoices", "bills"],
   },
   deals: {
     description: "Create, inspect, and list sales deals.",
@@ -245,7 +246,8 @@ function parseJsonArg(value: string | undefined, label: string): unknown {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const positionalArgs = args.filter((arg) => arg !== "--in-docker");
-  const [command, subcommand, ...rest] = positionalArgs;
+  const [rawCommand, subcommand, ...rest] = positionalArgs;
+  const command = getCanonicalScope(rawCommand) ?? rawCommand;
 
   if (!command) {
     printTopLevelHelp(args);

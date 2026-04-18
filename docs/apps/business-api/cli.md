@@ -18,6 +18,17 @@ wrobo-biz invoices list
 
 This is the preferred way for production and testing.
 
+Common semantic aliases are accepted for agent-friendly command matching:
+
+```bash
+wrobo-biz invoices list
+wrobo-biz purchase-invoices list
+wrobo-biz expense-invoices list
+wrobo-biz bills list
+```
+
+These map to the canonical scopes `sales-invoices` and `expenses`.
+
 The wrapper also enables CLI help output to use `wrobo-biz ...` examples instead of container-specific commands:
 
 ```bash
@@ -207,6 +218,12 @@ Find sales invoices by semantic similarity:
 
 ```bash
 ./container.sh exec npm run cli -- sales-invoices list --similar "warehouse audit consulting sprint" --since 1m
+```
+
+The semantic alias also works:
+
+```bash
+wrobo-biz invoices list --status finalized
 ```
 
 ## Tasks and Projects
