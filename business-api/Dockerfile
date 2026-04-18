@@ -27,6 +27,7 @@ RUN npm --prefix /workspace/business-api install --node-llama-cpp-postinstall=sk
 COPY business-api /workspace/business-api
 
 # Though we're building API, we'll run the dev version for now
+RUN rm -rf dist
 RUN npm --prefix /workspace/business-api run build
 RUN mkdir -p dist/src/db/migrations && cp src/db/migrations/*.sql dist/src/db/migrations/
 
