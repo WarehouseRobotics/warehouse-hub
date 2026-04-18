@@ -26,6 +26,14 @@ export type ResolvedListFilters = {
   afterDate?: string;
 };
 
+const CLI_LIST_FILTER_ALIASES: Record<string, string> = {
+  last: "since",
+  until: "before",
+  from: "after",
+};
+
+const CLI_LIST_FILTER_KEYS = new Set(["similar", "limit", "since", "before", "after"]);
+
 export function parseCliListFilters(args: string[]): ListFilters {
   const values: Record<string, string | undefined> = {};
 
@@ -38,8 +46,9 @@ export function parseCliListFilters(args: string[]): ListFilters {
       });
     }
 
-    const key = arg.slice(2);
-    if (!["similar", "limit", "since", "before", "after"].includes(key)) {
+    const rawKey = arg.slice(2);
+    const key = CLI_LIST_FILTER_ALIASES[rawKey] ?? rawKey;
+    if (!CLI_LIST_FILTER_KEYS.has(key)) {
       throw new AppError(`Unknown list option: ${arg}`, {
         statusCode: 400,
         code: "validation_error",
@@ -49,6 +58,13 @@ export function parseCliListFilters(args: string[]): ListFilters {
     const value = args[index + 1];
     if (!value || value.startsWith("--")) {
       throw new AppError(`Missing value for option: ${arg}`, {
+        statusCode: 400,
+        code: "validation_error",
+      });
+    }
+
+    if (values[key] !== undefined) {
+      throw new AppError(`Duplicate list option for '${key}': ${arg}`, {
         statusCode: 400,
         code: "validation_error",
       });

@@ -21,11 +21,52 @@ describe("list filters", () => {
     });
   });
 
+  it("accepts CLI aliases for relative and date list filters", () => {
+    expect(parseCliListFilters(["--last", "1w"])).toEqual({
+      similar: undefined,
+      limit: undefined,
+      since: "1w",
+      before: undefined,
+      after: undefined,
+    });
+
+    expect(parseCliListFilters(["--until", "2026-04-01"])).toEqual({
+      similar: undefined,
+      limit: undefined,
+      since: undefined,
+      before: "2026-04-01",
+      after: undefined,
+    });
+
+    expect(parseCliListFilters(["--from", "2026-03-01"])).toEqual({
+      similar: undefined,
+      limit: undefined,
+      since: undefined,
+      before: undefined,
+      after: "2026-03-01",
+    });
+  });
+
+  it("parses mixed canonical and alias CLI flags together", () => {
+    expect(parseCliListFilters(["--similar", "toner invoice", "--last", "1w", "--from", "2026-03-01"])).toEqual({
+      similar: "toner invoice",
+      limit: undefined,
+      since: "1w",
+      before: undefined,
+      after: "2026-03-01",
+    });
+  });
+
   it("rejects invalid list filter inputs", () => {
     expect(() => parseListFilters({ limit: "0" })).toThrow(/positive integer/);
     expect(() => parseListFilters({ before: "04-01-2026" })).toThrow(/YYYY-MM-DD/);
     expect(() => parseListFilters({ since: "later" })).toThrow(/relative duration/);
     expect(() => parseCliListFilters(["--since"])).toThrow(/Missing value/);
+    expect(() => parseCliListFilters(["--last"])).toThrow(/Missing value/);
+    expect(() => parseCliListFilters(["--since", "1w", "--last", "2w"])).toThrow(/Duplicate list option/);
+    expect(() => parseCliListFilters(["--before", "2026-04-01", "--until", "2026-05-01"])).toThrow(
+      /Duplicate list option/,
+    );
   });
 
   it("resolves relative since dates against a base time", () => {

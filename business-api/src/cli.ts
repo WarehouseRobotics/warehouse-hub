@@ -254,7 +254,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === "help") {
+  if (command === "help" || command === "--help") {
     if (subcommand) {
       printScopeHelp(subcommand, args);
     } else {
