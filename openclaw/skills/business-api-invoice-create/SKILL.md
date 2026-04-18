@@ -16,7 +16,7 @@ Use this skill when you need to:
 
 - Record an **incoming expense invoice** (a supplier billed you)
 - Generate an **outgoing sales invoice** (you are billing a customer)
-- Handle either case when a **PDF file** arrives via Slack, email forward, or another agent
+- Handle either case when a **PDF or image file** arrives via Slack, email forward, or another agent
 
 ## Two Invoice Directions
 
@@ -40,11 +40,11 @@ Use `documents ingest` with `kind: "expense_invoice"`. The OCR pipeline extracts
 
 ```bash
 # Minimal — let OCR extract everything
-wrobo-biz documents ingest /tmp/supplier-invoice.pdf \
+wrobo-biz documents ingest /data/tmp/supplier-invoice.pdf \
   '{"kind":"expense_invoice","source":"slack_upload"}'
 
 # With overrides to fix or supplement OCR output
-wrobo-biz documents ingest /tmp/supplier-invoice.pdf \
+wrobo-biz documents ingest /data/tmp/supplier-invoice.pdf \
   '{"kind":"expense_invoice","source":"email_forward","overrides":{"invoiceDate":"2026-04-15","category":"office_supplies","supplierContactId":"ct_000245"}}'
 ```
 
@@ -56,7 +56,7 @@ The command returns a document record and a linked expense record. Confirm both 
 - `category` — to force a specific expense category
 - `totals` — to correct OCR-extracted amounts (`{"net":"120.00","tax":"25.20","gross":"145.20"}`)
 
-### Path B — Manual entry (no file)
+### Path B — Manual entry (no file provided by the user)
 
 Step 1: Resolve the supplier contact (creates it if absent):
 
@@ -112,7 +112,7 @@ wrobo-biz sales-invoices update sinv_000087 '{"status":"paid"}'
 Use this when a PDF of an outgoing invoice already exists and needs to be stored and linked:
 
 ```bash
-wrobo-biz documents ingest /tmp/my-sales-invoice.pdf \
+wrobo-biz documents ingest /data/tmp/my-sales-invoice.pdf \
   '{"kind":"sales_invoice","source":"manual_upload","overrides":{"customerContactId":"ct_000310","issueDate":"2026-04-19","status":"finalized"}}'
 ```
 
@@ -120,19 +120,30 @@ wrobo-biz documents ingest /tmp/my-sales-invoice.pdf \
 
 ## Handling Files from Agent Channels (Slack, etc.)
 
-When a file arrives through a channel or is passed between agents:
+The business-api CLI runs inside a Docker container. The container mounts the host directory `business-api/data/` at `/data/` inside the container. File paths passed to `documents ingest` must be container-visible paths.
 
-1. Confirm the local file path is accessible (the file must exist on disk before calling any CLI command).
-2. Pass the path directly to `documents ingest` — the CLI reads the file from disk.
-3. Prefer `source` values that reflect origin: `"slack_upload"`, `"email_forward"`, `"manual_upload"`.
+**Staging directory for incoming files:**
+
+```yaml
+file_staging:
+  host_path: $WAREHOUSE_HUB_DIR/business-api/data/tmp/
+  container_path: /data/tmp/
+  use_for: all files received from Slack, email, or other agents before ingestion
+```
+
+Steps when a file arrives from an agent channel:
+
+1. Save the file to `$WAREHOUSE_HUB_DIR/business-api/data/tmp/<filename>` on the host.
+2. Pass the container path `/data/tmp/<filename>` to `documents ingest`.
+3. Use a `source` value that reflects the origin: `"slack_upload"`, `"email_forward"`, `"manual_upload"`.
 
 ```bash
-# File saved from Slack to /tmp/invoice_april.pdf
-wrobo-biz documents ingest /tmp/invoice_april.pdf \
+# File saved from Slack → business-api/data/tmp/invoice_april.pdf on the host
+wrobo-biz documents ingest /data/tmp/invoice_april.pdf \
   '{"kind":"expense_invoice","source":"slack_upload"}'
 ```
 
-If the file path is unknown or the file has not been saved yet, ask for the file path before proceeding.
+If the file has not been saved to the staging directory yet, do that first before calling `documents ingest`.
 
 ---
 
