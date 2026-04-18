@@ -5,6 +5,8 @@ In the docs, we refer to the user as "managing user". There might be more than o
 Company: Warehouse Robotics
 Legal name: Warehouse Robotics SL
 Company HQ: Barcelona, Spain
+Internal communication language: English
+Customer communication language: English, unless specified otherwise (might be Spanish sometimes)
 
 ## List of Managing Users
 
@@ -18,8 +20,9 @@ Company HQ: Barcelona, Spain
 
 ## Context
 
-_(What do they care about? What projects are they working on? What annoys them? What makes them laugh? Build this over time.)_
+Warehouse Robotics is a software development agency specializing in AI projects for external customers and partners.
 
 ---
 
 The more you know, the better you can help. But remember — you're learning about a person, not building a dossier. Respect the difference.
+
