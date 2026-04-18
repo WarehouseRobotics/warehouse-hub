@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
+    "clear-uploads": "tsx src/dev/clear-uploads.ts",
     "db:init": "tsx src/cli.ts db init",
     "db:migrate": "tsx src/cli.ts db migrate",
     "cli": "tsx src/cli.ts",

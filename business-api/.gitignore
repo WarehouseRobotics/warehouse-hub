@@ -1,7 +1,10 @@
 node_modules/
 dist/
 .env
-data/
+data/*
+!data/uploads/
+data/uploads/*
+!data/uploads/.keep
 ._*
 .DS_Store
 uploads/*
