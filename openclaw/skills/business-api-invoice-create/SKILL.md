@@ -36,7 +36,7 @@ directions:
 
 ### Path A — File received (PDF or image from Slack, email, etc.)
 
-Copy the uploaded file to $HUB_TMP_DIR to make it available to the API in the container. Then use `documents ingest` with `kind: "expense_invoice"`. The OCR pipeline extracts totals, dates, and supplier info automatically. Use `overrides` only to correct or supplement what OCR may miss.
+Copy the uploaded file to $HUB_TMP_DIR to make it available to the API in the container. Then use `documents ingest` with `kind: "expense_invoice"`. The OCR pipeline extracts totals, dates, and supplier info automatically. Use `overrides` only to correct or supplement what OCR may miss. The CLI ingest tool will also automatically match the document to the right contract or will automatically create a new contact. 
 
 ```bash
 # Minimal — let OCR extract everything
