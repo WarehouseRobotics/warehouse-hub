@@ -133,10 +133,12 @@ describe("embedding service with mocked provider", () => {
       ],
     });
 
-    expect(text).toContain("2026-0001");
-    expect(text).toContain("Acme Retail GmbH");
-    expect(text).toContain("Warehouse audit and automation proposal");
-    expect(text).toContain("EUR");
+    expect(text).toContain('entity_type: "sales_invoice"');
+    expect(text).toContain('invoice_number: "2026-0001"');
+    expect(text).toContain('customer_display_name: "Acme Retail GmbH"');
+    expect(text).toContain("line_items:");
+    expect(text).toContain('description: "Warehouse audit and automation proposal"');
+    expect(text).toContain('tax_rate: "21.00"');
   });
 
   it("builds rich expense embedding text including supplier and line item details", async () => {
@@ -167,9 +169,11 @@ describe("embedding service with mocked provider", () => {
       status: "recorded",
     });
 
-    expect(text).toContain("Papeleria Centro SL");
-    expect(text).toContain("FC-2026-0042");
-    expect(text).toContain("Printer paper and toner");
-    expect(text).toContain("EUR");
+    expect(text).toContain('entity_type: "expense_invoice"');
+    expect(text).toContain('supplier_display_name: "Papeleria Centro SL"');
+    expect(text).toContain('invoice_number: "FC-2026-0042"');
+    expect(text).toContain("tax_lines:");
+    expect(text).toContain('description: "Printer paper and toner"');
+    expect(text).toContain('category: "office_supplies"');
   });
 });

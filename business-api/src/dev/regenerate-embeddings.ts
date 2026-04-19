@@ -106,9 +106,7 @@ async function regenerateDocumentEmbeddings(): Promise<number> {
         source: row.source,
         originalFilename: row.originalFilename,
         mimeType: row.mimeType,
-        ocrStatus: row.ocrStatus,
         ocrText: row.ocrText,
-        extractedData: row.extractedDataJson ? (JSON.parse(row.extractedDataJson) as unknown) : undefined,
       }),
     );
   }

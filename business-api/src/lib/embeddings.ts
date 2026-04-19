@@ -38,115 +38,166 @@ export function getExpectedEmbeddingDimensions(): number {
   return getConfiguredEmbeddingDimensions();
 }
 
-export function computeEmbeddingText(entityType: EmbeddingEntityType, entity: Record<string, unknown>): string {
+function toSnakeCase(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[\s-]+/g, "_")
+    .toLowerCase();
+}
+
+function normalizeEmbeddingValue(value: unknown): unknown {
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const normalizedItems = value
+      .map((item) => normalizeEmbeddingValue(item))
+      .filter((item) => item !== undefined);
+
+    return normalizedItems.length > 0 ? normalizedItems : undefined;
+  }
+
+  if (typeof value === "object") {
+    const normalizedEntries = Object.entries(value).flatMap(([key, nestedValue]) => {
+      const normalizedValue = normalizeEmbeddingValue(nestedValue);
+      return normalizedValue === undefined ? [] : [[toSnakeCase(key), normalizedValue] as const];
+    });
+
+    return normalizedEntries.length > 0 ? Object.fromEntries(normalizedEntries) : undefined;
+  }
+
+  return value;
+}
+
+function formatYamlScalar(value: string | number | boolean): string {
+  if (typeof value === "string") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function toYaml(value: unknown, indent = 0): string {
+  const prefix = " ".repeat(indent);
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (Array.isArray(item) || (typeof item === "object" && item !== null)) {
+          return `${prefix}-\n${toYaml(item, indent + 2)}`;
+        }
+
+        return `${prefix}- ${formatYamlScalar(item as string | number | boolean)}`;
+      })
+      .join("\n");
+  }
+
+  if (typeof value === "object" && value !== null) {
+    return Object.entries(value)
+      .map(([key, nestedValue]) => {
+        if (Array.isArray(nestedValue) || (typeof nestedValue === "object" && nestedValue !== null)) {
+          return `${prefix}${key}:\n${toYaml(nestedValue, indent + 2)}`;
+        }
+
+        return `${prefix}${key}: ${formatYamlScalar(nestedValue as string | number | boolean)}`;
+      })
+      .join("\n");
+  }
+
+  return `${prefix}${formatYamlScalar(value as string | number | boolean)}`;
+}
+
+function createEmbeddingDocument(entityType: EmbeddingEntityType, entity: Record<string, unknown>): Record<string, unknown> {
   switch (entityType) {
     case "company_card":
-      return [
-        entity.displayName,
-        entity.legalName,
-        entity.taxId,
-        entity.email,
-        entity.phone,
-        entity.website,
-      ]
-        .filter(Boolean)
-        .join(" ");
+      return {
+        entityType,
+        displayName: entity.displayName,
+        legalName: entity.legalName,
+        taxId: entity.taxId,
+        email: entity.email,
+        phone: entity.phone,
+        website: entity.website,
+      };
     case "contact":
-      return [
-        entity.displayName,
-        entity.legalName,
-        Array.isArray(entity.roles) ? entity.roles.join(" ") : entity.roles,
-        entity.taxId,
-        entity.email,
-        entity.notes,
-      ]
-        .filter(Boolean)
-        .join(" ");
+      return {
+        entityType,
+        displayName: entity.displayName,
+        legalName: entity.legalName,
+        roles: entity.roles,
+        taxId: entity.taxId,
+        email: entity.email,
+        notes: entity.notes,
+      };
     case "document":
-      return [
-        entity.kind,
-        entity.source,
-        entity.originalFilename,
-        entity.filename,
-        entity.mimeType,
-        entity.ocrStatus,
-        entity.ocrText,
-        typeof entity.extractedData === "object" && entity.extractedData ? JSON.stringify(entity.extractedData) : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
+      return {
+        entityType,
+        kind: entity.kind,
+        source: entity.source,
+        originalFilename: entity.originalFilename,
+        filename: entity.filename,
+        mimeType: entity.mimeType,
+        ocrStatus: entity.ocrStatus,
+        ocrText: entity.ocrText,
+        extractedData: entity.extractedData,
+      };
     case "expense_invoice":
-      return [
-        entity.supplierDisplayName,
-        entity.supplierLegalName,
-        entity.supplierEmail,
-        entity.invoiceNumber,
-        entity.invoiceDate,
-        entity.dueDate,
-        entity.currency,
-        entity.net,
-        entity.tax,
-        entity.gross,
-        entity.taxLines,
-        Array.isArray(entity.lineItems)
-          ? entity.lineItems
-              .map((lineItem) =>
-                typeof lineItem === "object" && lineItem
-                  ? Object.values(lineItem as Record<string, unknown>).join(" ")
-                  : "",
-              )
-              .join(" ")
-          : "",
-        entity.category,
-        entity.notes,
-        entity.status,  
-      ]
-        .filter(Boolean)
-        .join(" ");
+      return {
+        entityType,
+        supplierDisplayName: entity.supplierDisplayName,
+        supplierLegalName: entity.supplierLegalName,
+        supplierEmail: entity.supplierEmail,
+        invoiceNumber: entity.invoiceNumber,
+        invoiceDate: entity.invoiceDate,
+        dueDate: entity.dueDate,
+        currency: entity.currency,
+        net: entity.net,
+        tax: entity.tax,
+        gross: entity.gross,
+        taxLines: entity.taxLines,
+        lineItems: entity.lineItems,
+        category: entity.category,
+        notes: entity.notes,
+        status: entity.status,
+      };
     case "deal":
-      return [
-        entity.title,
-        entity.stage,
-        entity.notes,
-        Array.isArray(entity.lineItems)
-          ? entity.lineItems
-              .map((lineItem) =>
-                typeof lineItem === "object" && lineItem
-                  ? Object.values(lineItem as Record<string, unknown>).join(" ")
-                  : "",
-              )
-              .join(" ")
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
+      return {
+        entityType,
+        title: entity.title,
+        stage: entity.stage,
+        notes: entity.notes,
+        lineItems: entity.lineItems,
+      };
     case "sales_invoice":
-      return [
-        entity.invoiceNumber,
-        entity.status,
-        entity.customerDisplayName,
-        entity.customerLegalName,
-        entity.customerEmail,
-        entity.currency,
-        entity.issueDate,
-        entity.serviceDate,
-        entity.dueDate,
-        entity.notes,
-        Array.isArray(entity.lineItems)
-          ? entity.lineItems
-              .map((lineItem) =>
-                typeof lineItem === "object" && lineItem
-                  ? Object.values(lineItem as Record<string, unknown>).join(" ")
-                  : "",
-              )
-              .join(" ")
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
+      return {
+        entityType,
+        invoiceNumber: entity.invoiceNumber,
+        status: entity.status,
+        customerDisplayName: entity.customerDisplayName,
+        customerLegalName: entity.customerLegalName,
+        customerEmail: entity.customerEmail,
+        currency: entity.currency,
+        issueDate: entity.issueDate,
+        serviceDate: entity.serviceDate,
+        dueDate: entity.dueDate,
+        notes: entity.notes,
+        lineItems: entity.lineItems,
+      };
     case "task":
-      return [entity.title, entity.description, entity.status, entity.priority].filter(Boolean).join(" ");
+      return {
+        entityType,
+        title: entity.title,
+        description: entity.description,
+        status: entity.status,
+        priority: entity.priority,
+      };
   }
+}
+
+export function computeEmbeddingText(entityType: EmbeddingEntityType, entity: Record<string, unknown>): string {
+  const normalizedDocument = normalizeEmbeddingValue(createEmbeddingDocument(entityType, entity));
+  return typeof normalizedDocument === "object" && normalizedDocument ? toYaml(normalizedDocument) : "";
 }
 
 export async function createEmbeddingVector(text: string): Promise<{ model: string; vector: number[]; dimensions: number }> {
