@@ -8,6 +8,7 @@ import {
   structuredInvoiceSchema,
   type StructuredInvoice,
 } from "../schemas/structured-ocr.js";
+import { logger } from "../lib/logger.js";
 
 type StructuredOcrPage = {
   mediaType: string;
@@ -268,6 +269,10 @@ async function runStructuredExtraction<T>({
   });
 
   if (!response.ok) {
+    logger.error(`Structured OCR provider request failed with status ${response.status}`, {
+      status: response.status,
+      body: await safeReadText(response),
+    });
     throw new AppError(`Structured OCR provider request failed with status ${response.status}`, {
       statusCode: 502,
       code: "structured_ocr_failed",
@@ -307,7 +312,7 @@ export async function extractStructuredInvoiceFromPages(
     schema: structuredInvoiceJsonSchema.schema,
     validator: structuredInvoiceSchema,
     prompt:
-      "Parse these invoice scans into structured JSON. Preserve invoice identity, seller/buyer parties, totals, taxes, line items, payment terms, and any available raw OCR notes.",
+      "Parse these invoice scans into structured JSON. Ensure that data expected by the JSON schema is included in the result. Things like but not limited to: invoice identity (like date, number, currency, status), seller/buyer parties, totals, taxes, line items, payment terms, and any available raw OCR notes.",
   });
 }
 

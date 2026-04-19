@@ -213,10 +213,10 @@ function mapStructuredParty(
 
   return {
     name,
-    legalName: party.legalName ?? name,
-    taxId: party.taxId,
-    email: party.email,
-    phone: party.phone,
+    legalName: party.legalName ? party.legalName : name,
+    taxId: party.taxId ? party.taxId : undefined,
+    email: party.email ? party.email : undefined,
+    phone: party.phone ? party.phone : undefined,
     billingAddress: party.address
       ? {
           street1: party.address.street1 ?? "",
@@ -254,16 +254,16 @@ function mapStructuredInvoiceToExtracted(
     invoiceNumber: structured.invoiceNumber,
     invoiceDate: toParsedDate(structured.invoiceDate),
     issueDate: toParsedDate(structured.issueDate ?? structured.invoiceDate),
-    dueDate: toParsedDate(structured.dueDate),
-    serviceDate: toParsedDate(structured.serviceDate),
+    dueDate: structured.dueDate ? toParsedDate(structured.dueDate) : undefined,
+    serviceDate: structured.serviceDate ? toParsedDate(structured.serviceDate) : undefined,
     currency: structured.currency,
-    notes: structured.notes,
+    notes: structured.notes ? structured.notes : undefined,
     supplier: kind === "expense_invoice" ? supplier : seller,
     customer: kind === "sales_invoice" ? customer : undefined,
     totals: structured.totals,
     taxLines: structured.taxLines,
     lineItems: structured.lineItems,
-    paymentTermsDays: structured.paymentTermsDays,
+    paymentTermsDays: structured.paymentTermsDays ? structured.paymentTermsDays : undefined,
     structuredData: structured,
   };
 }

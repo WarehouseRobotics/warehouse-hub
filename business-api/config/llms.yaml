@@ -18,9 +18,9 @@ llms:
   structured_ocr:
     style: openai-compatible
     endpoint: https://openrouter.ai/api/v1
-    model_name: google/gemini-3-flash-preview
+    model_name: openai/gpt-5-mini
     apiKey: "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"
-    thinking: off
+    thinking: on
   nano:
     style: openai-compatible
     endpoint: http://192.168.0.25:1234/v1
