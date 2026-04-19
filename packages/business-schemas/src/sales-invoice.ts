@@ -16,7 +16,7 @@ export const salesInvoicePatchSchema = z
     serviceDate: z.string().optional(),
     dueDate: z.string().optional(),
     paymentTermsDays: z.number().int().positive().optional(),
-    status: z.enum(["draft", "finalized", "paid", "cancelled"]).optional(),
+    status: z.enum(["draft", "sent", "overdue", "finalized", "paid", "cancelled"]).optional(),
     pdfDocumentId: z.string().optional(),
   })
   .strict();

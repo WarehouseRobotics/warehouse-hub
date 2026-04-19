@@ -74,7 +74,7 @@ type IngestResponseLike = {
     lineItems?: Array<Record<string, unknown>>;
     category?: string;
     paymentTermsDays?: number;
-    status?: "draft" | "finalized" | "paid" | "cancelled";
+    status?: "draft" | "sent" | "overdue" | "finalized" | "paid" | "cancelled";
   };
   linkedEntity: IngestLinkedEntity;
 };

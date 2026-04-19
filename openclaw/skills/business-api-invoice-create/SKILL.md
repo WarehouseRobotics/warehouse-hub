@@ -18,6 +18,8 @@ Use this skill when you need to:
 - Generate an **outgoing sales invoice** (you are billing a customer)
 - Handle either case when a **PDF or image file** arrives via Slack, email forward, or another agent
 
+Sales invoices and expenses must be created with "paid" status unless specified otherwise. Allowed invoice statuses are: "draft" | "sent" | "overdue" | "finalized" | "paid" | "cancelled". Let the user know which status you used when creating.
+
 ## Two Invoice Directions
 
 ```yaml

@@ -105,7 +105,9 @@ function nextInvoiceNumber(issueDate: string): string {
 
 function assertInvoiceTransition(fromStatus: string, toStatus: string): void {
   const allowedTransitions: Record<string, string[]> = {
-    draft: ["draft", "finalized", "cancelled"],
+    draft: ["draft", "sent", "finalized", "cancelled"],
+    sent: ["sent", "overdue", "finalized", "cancelled"],
+    overdue: ["overdue", "finalized", "cancelled"],
     finalized: ["finalized", "paid", "cancelled"],
     paid: ["paid"],
     cancelled: ["cancelled"],
@@ -276,7 +278,7 @@ type ImportSalesInvoiceInput = {
     tax: string;
     gross: string;
   };
-  status?: "draft" | "finalized" | "paid" | "cancelled";
+  status?: "draft" | "sent" | "overdue" | "finalized" | "paid" | "cancelled";
   pdfDocumentId?: string;
   overrideFields?: string[];
 };
