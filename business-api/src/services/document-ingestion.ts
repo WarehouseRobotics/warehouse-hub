@@ -281,6 +281,40 @@ function mapStructuredInvoiceToExtracted(
   };
 }
 
+function normalizeOverrideLineItems(lineItems: unknown): ExtractedLineItem[] | undefined {
+  if (!Array.isArray(lineItems)) {
+    return undefined;
+  }
+
+  const normalized = lineItems.flatMap((lineItem) => {
+    if (!lineItem || typeof lineItem !== "object") {
+      return [];
+    }
+
+    const candidate = lineItem as Record<string, unknown>;
+    if (
+      typeof candidate.description !== "string" ||
+      !candidate.description.trim() ||
+      (typeof candidate.quantity !== "string" && typeof candidate.quantity !== "number") ||
+      typeof candidate.unitPrice !== "string"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        description: candidate.description,
+        quantity: candidate.quantity,
+        unitPrice: candidate.unitPrice,
+        taxRate: typeof candidate.taxRate === "string" ? candidate.taxRate : undefined,
+        total: typeof candidate.total === "string" ? candidate.total : undefined,
+      },
+    ];
+  });
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function mergeExtractedWithOverrides(
   extracted: ExtractedDocumentData,
   overrides: DocumentIngestOverrides | undefined,
@@ -310,7 +344,7 @@ function mergeExtractedWithOverrides(
     },
     totals: overrides.totals ?? extracted.totals,
     taxLines: overrides.taxLines ?? extracted.taxLines,
-    lineItems: overrides.lineItems ?? extracted.lineItems,
+    lineItems: normalizeOverrideLineItems(overrides.lineItems) ?? extracted.lineItems,
     category: overrides.category ?? extracted.category,
     paymentTermsDays: overrides.paymentTermsDays ?? extracted.paymentTermsDays,
     status: overrides.status ?? extracted.status,
