@@ -470,8 +470,23 @@ export async function ingestDocument(
 
       const invoiceNumber = extracted.invoiceNumber;
       const issueDate = extracted.issueDate ?? extracted.invoiceDate;
-      if (!invoiceNumber || !issueDate || !extracted.currency) {
-        throw new AppError("Missing sales invoice identity after OCR and overrides", {
+      
+      if (!invoiceNumber) {
+        throw new AppError("Missing sales invoice number after OCR and overrides", {
+          statusCode: 422,
+          code: "document_extraction_incomplete",
+        });
+      }
+
+      if (!extracted.currency) {
+        throw new AppError("Missing sales invoice currency after OCR and overrides", {
+          statusCode: 422,
+          code: "document_extraction_incomplete",
+        });
+      }
+
+      if (!issueDate) {
+        throw new AppError("Missing sales invoice issue date after OCR and overrides", {
           statusCode: 422,
           code: "document_extraction_incomplete",
         });

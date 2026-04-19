@@ -34,17 +34,17 @@ directions:
 
 ## Inbound: Recording an Expense Invoice
 
-### Path A — File received (PDF from Slack, email, etc.)
+### Path A — File received (PDF or image from Slack, email, etc.)
 
-Use `documents ingest` with `kind: "expense_invoice"`. The OCR pipeline extracts totals, dates, and supplier info automatically. Use `overrides` only to correct or supplement what OCR may miss.
+Copy the uploaded file to $HUB_TMP_DIR to make it available to the API in the container. Then use `documents ingest` with `kind: "expense_invoice"`. The OCR pipeline extracts totals, dates, and supplier info automatically. Use `overrides` only to correct or supplement what OCR may miss.
 
 ```bash
 # Minimal — let OCR extract everything
-wrobo-biz documents ingest /workspace/business-api/data/tmp/supplier-invoice.pdf \
+wrobo-biz documents ingest supplier-invoice.pdf \
   '{"kind":"expense_invoice","source":"slack_upload"}'
 
 # With overrides to fix or supplement OCR output
-wrobo-biz documents ingest /workspace/business-api/data/tmp/supplier-invoice.pdf \
+wrobo-biz documents ingest supplier-invoice.pdf \
   '{"kind":"expense_invoice","source":"email_forward","overrides":{"invoiceDate":"2026-04-15","category":"office_supplies","supplierContactId":"ct_000245"}}'
 ```
 
@@ -56,7 +56,8 @@ The command returns a document record and a linked expense record. Confirm both 
 - `category` — to force a specific expense category
 - `totals` — to correct OCR-extracted amounts (`{"net":"120.00","tax":"25.20","gross":"145.20"}`)
 
-### Path B — Manual entry (no file provided by the user)
+
+### Path B — Manual entry (when no file provided by the user)
 
 Step 1: Resolve the supplier contact (creates it if absent):
 
@@ -112,7 +113,7 @@ wrobo-biz sales-invoices update sinv_000087 '{"status":"paid"}'
 Use this when a PDF of an outgoing invoice already exists and needs to be stored and linked:
 
 ```bash
-wrobo-biz documents ingest /workspace/business-api/data/tmp/my-sales-invoice.pdf \
+wrobo-biz documents ingest my-sales-invoice.pdf \
   '{"kind":"sales_invoice","source":"manual_upload","overrides":{"customerContactId":"ct_000310","issueDate":"2026-04-19","status":"finalized"}}'
 ```
 
@@ -120,7 +121,7 @@ wrobo-biz documents ingest /workspace/business-api/data/tmp/my-sales-invoice.pdf
 
 ## Handling Files from Agent Channels (Slack, etc.)
 
-The business-api CLI runs inside a Docker container. The container mounts the host directory `$HUB_DIR/data` at `/workspace/business-api/data/` inside the container. File paths passed to `documents ingest` must be container-visible paths. We normally copy such files to the $HUB_TMP_DIR dir. The `documents ingest` ingest command then treats it as the default path.
+The business-api CLI runs inside a Docker container. The container mounts the host directory `$HUB_DIR/data` at `/workspace/business-api/data/` inside the container. File paths passed to `documents ingest` must be container-visible paths. We normally copy such files to the $HUB_TMP_DIR dir. The `documents ingest` ingest command then treats it as **the default path**.
 
 **Staging directory for incoming files:**
 
