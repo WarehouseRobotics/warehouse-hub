@@ -60,3 +60,10 @@ During development, this commands must be run inside of the Docker container, vi
 The `business-api` uses `winston` for structured JSON logging. Operational logs from the API server, background processing, database fallback paths, and development scripts are emitted as JSON records and controlled with `LOG_LEVEL`.
 
 CLI command results still print their business payloads as JSON on stdout so they remain easy to pipe into other tools. Diagnostic logs are emitted separately via Winston.
+
+
+### Some Rules for Tests
+
+When writing tests:
+
+* Do not make existing required fields of objects nullable just to pass tests
