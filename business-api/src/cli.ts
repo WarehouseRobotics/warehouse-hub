@@ -255,7 +255,7 @@ function resolveDocumentCliInputPath(filePath: string): string {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const positionalArgs = args.filter((arg) => arg !== "--in-docker");
+  const positionalArgs = args.filter((arg) => arg !== "--in-docker" && arg !== "--verbose");
   const [rawCommand, subcommand, ...rest] = positionalArgs;
   const command = getCanonicalScope(rawCommand) ?? rawCommand;
 
@@ -508,7 +508,9 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  const positionalArgs = process.argv.slice(2).filter((arg) => arg !== "--in-docker");
+  const positionalArgs = process.argv
+    .slice(2)
+    .filter((arg) => arg !== "--in-docker" && arg !== "--verbose");
   logger.error("Business API CLI command failed", {
     command: positionalArgs.join(" "),
     error,
