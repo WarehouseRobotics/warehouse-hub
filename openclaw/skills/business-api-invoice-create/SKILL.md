@@ -5,7 +5,7 @@ metadata:
   {
     "openclaw":
       {
-        "requires": { "bins": ["docker"], "env": [], "config": [] }
+        "requires": { "bins": ["docker"], "env": ["HUB_TMP_DIR"], "config": [] }
       },
   }
 ---
@@ -40,11 +40,11 @@ Use `documents ingest` with `kind: "expense_invoice"`. The OCR pipeline extracts
 
 ```bash
 # Minimal — let OCR extract everything
-wrobo-biz documents ingest /workspace/data/tmp/supplier-invoice.pdf \
+wrobo-biz documents ingest /workspace/business-api/data/tmp/supplier-invoice.pdf \
   '{"kind":"expense_invoice","source":"slack_upload"}'
 
 # With overrides to fix or supplement OCR output
-wrobo-biz documents ingest /workspace/data/tmp/supplier-invoice.pdf \
+wrobo-biz documents ingest /workspace/business-api/data/tmp/supplier-invoice.pdf \
   '{"kind":"expense_invoice","source":"email_forward","overrides":{"invoiceDate":"2026-04-15","category":"office_supplies","supplierContactId":"ct_000245"}}'
 ```
 
@@ -112,7 +112,7 @@ wrobo-biz sales-invoices update sinv_000087 '{"status":"paid"}'
 Use this when a PDF of an outgoing invoice already exists and needs to be stored and linked:
 
 ```bash
-wrobo-biz documents ingest /workspace/data/tmp/my-sales-invoice.pdf \
+wrobo-biz documents ingest /workspace/business-api/data/tmp/my-sales-invoice.pdf \
   '{"kind":"sales_invoice","source":"manual_upload","overrides":{"customerContactId":"ct_000310","issueDate":"2026-04-19","status":"finalized"}}'
 ```
 
@@ -120,26 +120,26 @@ wrobo-biz documents ingest /workspace/data/tmp/my-sales-invoice.pdf \
 
 ## Handling Files from Agent Channels (Slack, etc.)
 
-The business-api CLI runs inside a Docker container. The container mounts the host directory `business-api/data/` at `/workspace/data/` inside the container. File paths passed to `documents ingest` must be container-visible paths.
+The business-api CLI runs inside a Docker container. The container mounts the host directory `$HUB_DIR/data` at `/workspace/business-api/data/` inside the container. File paths passed to `documents ingest` must be container-visible paths. We normally copy such files to the $HUB_TMP_DIR dir. The `documents ingest` ingest command then treats it as the default path.
 
 **Staging directory for incoming files:**
 
 ```yaml
 file_staging:
-  host_path: $WAREHOUSE_HUB_DIR/business-api/data/tmp/
-  container_path: /workspace/data/tmp/
+  host_path: $HUB_TMP_DIR
+  container_path: (default path, no need to specify)
   use_for: all files received from Slack, email, or other agents before ingestion
 ```
 
 Steps when a file arrives from an agent channel:
 
-1. Save the file to `$WAREHOUSE_HUB_DIR/business-api/data/tmp/<filename>` on the host.
-2. Pass the container path `/workspace/data/tmp/<filename>` to `documents ingest`.
+1. Save the file to `$HUB_TMP_DIR/<filename>` on the host.
+2. Pass the `<filename>` to `documents ingest`.
 3. Use a `source` value that reflects the origin: `"slack_upload"`, `"email_forward"`, `"manual_upload"`.
 
 ```bash
-# File saved from Slack → business-api/data/tmp/invoice_april.pdf on the host
-wrobo-biz documents ingest /workspace/data/tmp/invoice_april.pdf \
+# File saved from Slack → $HUB_TMP_DIR/invoice_april.pdf on the host
+wrobo-biz documents ingest invoice_april.pdf \
   '{"kind":"expense_invoice","source":"slack_upload"}'
 ```
 

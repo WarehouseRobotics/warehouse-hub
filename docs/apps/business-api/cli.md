@@ -150,6 +150,8 @@ Ingest an expense invoice and let OCR extract bookkeeping data:
 }'
 ```
 
+When `documents ingest` receives a bare filename like `invoice.pdf`, it resolves it from `TMP_DIR`. By default that is `business-api/data/tmp` locally and `/workspace/business-api/data/tmp` inside the Docker container.
+
 List documents from a time window:
 
 ```bash

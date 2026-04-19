@@ -9,6 +9,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3100),
   DATABASE_PATH: z.string().default("./data/business-api.sqlite"),
   UPLOAD_DIR: z.string().default("./uploads"),
+  TMP_DIR: z.string().default("./data/tmp"),
   API_KEY: z.string().optional(),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   LLMS_CONFIG_PATH: z.string().optional(),
@@ -32,6 +33,7 @@ export const config = {
   projectRoot,
   databasePath: path.resolve(projectRoot, parsed.DATABASE_PATH),
   uploadDir: path.resolve(projectRoot, parsed.UPLOAD_DIR),
+  tmpDir: path.resolve(projectRoot, parsed.TMP_DIR),
   llmsConfigPath: parsed.LLMS_CONFIG_PATH
     ? path.resolve(projectRoot, parsed.LLMS_CONFIG_PATH)
     : path.resolve(projectRoot, "config/llms.yaml"),

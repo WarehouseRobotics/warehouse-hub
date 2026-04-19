@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 
 import { config } from "./config.js";
 import { initializeDatabase } from "./db/connection.js";
@@ -76,6 +77,7 @@ const HELP_SCOPES: Record<string, HelpScope> = {
     examples: [
       'documents upload ./samples/docs/reference.pdf \'{"kind":"other","source":"manual_upload"}\'',
       'documents ingest ./test-data/expenses/invoice_do_2026_03.pdf \'{"kind":"expense_invoice","source":"email_forward"}\'',
+      'documents ingest invoice_do_2026_03.pdf \'{"kind":"expense_invoice","source":"email_forward"}\'',
       "documents list --after 2026-04-01 --before 2026-05-01",
     ],
   },
@@ -243,6 +245,14 @@ function parseJsonArg(value: string | undefined, label: string): unknown {
   return parsed;
 }
 
+function resolveDocumentCliInputPath(filePath: string): string {
+  if (path.isAbsolute(filePath) || filePath.includes("/") || filePath.includes("\\")) {
+    return filePath;
+  }
+
+  return path.join(config.tmpDir, filePath);
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const positionalArgs = args.filter((arg) => arg !== "--in-docker");
@@ -346,17 +356,18 @@ async function main(): Promise<void> {
   }
 
   if (command === "documents" && subcommand === "ingest") {
-    const filePath = rest[0];
+    const requestedFilePath = rest[0];
     const meta = documentIngestSchema.parse(parseJsonArg(rest[1], "document ingestion metadata"));
-    if (!filePath) {
+    if (!requestedFilePath) {
       throw new Error("Missing file path");
     }
 
+    const filePath = resolveDocumentCliInputPath(requestedFilePath);
     const fileBuffer = fs.readFileSync(filePath);
     const created = await ingestDocument(
       {
         fieldname: "file",
-        originalname: filePath.split("/").pop() ?? "upload.bin",
+        originalname: path.basename(filePath) || "upload.bin",
         encoding: "7bit",
         mimetype: filePath.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/png",
         size: fileBuffer.length,
