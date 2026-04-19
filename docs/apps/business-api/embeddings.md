@@ -32,6 +32,7 @@ The current implementation supports these entity types:
 - `contact`
 - `document`
 - `deal`
+- `expense_invoice`
 - `sales_invoice`
 - `task`
 
@@ -51,6 +52,7 @@ Embedding sync is currently triggered from these services:
 - [contacts.ts](/Users/denis/src/warehouse-hub/business-api/src/services/contacts.ts)
 - [documents.ts](/Users/denis/src/warehouse-hub/business-api/src/services/documents.ts)
 - [deals.ts](/Users/denis/src/warehouse-hub/business-api/src/services/deals.ts)
+- [expenses.ts](/Users/denis/src/warehouse-hub/business-api/src/services/expenses.ts)
 - [sales-invoices.ts](/Users/denis/src/warehouse-hub/business-api/src/services/sales-invoices.ts)
 - [tasks.ts](/Users/denis/src/warehouse-hub/business-api/src/services/tasks.ts)
 
@@ -205,71 +207,143 @@ This fallback exists because the current Docker environment cannot load the pack
 
 The semantic quality of search depends heavily on `computeEmbeddingText(...)` in [embeddings.ts](/Users/denis/src/warehouse-hub/business-api/src/lib/embeddings.ts).
 
-Current text composition:
+The current implementation does not build a hand-written prose summary. Instead it:
+
+1. Builds a small structured document for the entity type.
+2. Removes empty values:
+   - `null`
+   - `undefined`
+   - empty strings
+   - empty arrays
+   - empty objects
+3. Recursively converts object keys to `snake_case`.
+4. Serializes the normalized result into a deterministic YAML-like text block.
+
+Important current formatting rules:
+
+- strings are JSON-quoted
+- arrays stay as YAML lists rather than being flattened into free text
+- nested objects stay nested
+- if every field normalizes away, the result is an empty string
 
 ### `company_card`
 
 Includes:
 
-- display name
-- legal name
-- tax ID
-- email
-- phone
-- website
+- `entityType`
+- `displayName`
+- `legalName`
+- `taxId`
+- `email`
+- `phone`
+- `website`
 
 ### `contact`
 
 Includes:
 
-- display name
-- legal name
-- roles
-- tax ID
-- email
-- notes
+- `entityType`
+- `displayName`
+- `legalName`
+- `roles`
+- `taxId`
+- `email`
+- `notes`
 
 ### `document`
 
 Includes:
 
-- kind
-- source
-- original filename
-- MIME type
+- `entityType`
+- `kind`
+- `source`
+- `originalFilename`
+- `filename`
+- `mimeType`
+- `ocrStatus`
+- `ocrText`
+- `extractedData`
 
 ### `deal`
 
 Includes:
 
-- title
-- stage
-- notes
-- flattened line item values
+- `entityType`
+- `title`
+- `stage`
+- `notes`
+- `lineItems`
+
+`lineItems` are preserved as structured list items in the YAML output. They are not flattened into one text sentence.
+
+### `expense_invoice`
+
+Includes:
+
+- `entityType`
+- `supplierDisplayName`
+- `supplierLegalName`
+- `supplierEmail`
+- `invoiceNumber`
+- `invoiceDate`
+- `dueDate`
+- `currency`
+- `net`
+- `tax`
+- `gross`
+- `taxLines`
+- `lineItems`
+- `category`
+- `notes`
+- `status`
 
 ### `sales_invoice`
 
 Includes:
 
-- invoice number
-- status
-- customer display name
-- customer legal name
-- customer email
-- currency
-- issue date
-- service date
-- due date
-- flattened line item values
+- `entityType`
+- `invoiceNumber`
+- `status`
+- `customerDisplayName`
+- `customerLegalName`
+- `customerEmail`
+- `currency`
+- `issueDate`
+- `serviceDate`
+- `dueDate`
+- `notes`
+- `lineItems`
+
+Like `deal` and `expense_invoice`, `lineItems` remain structured in the output.
 
 ### `task`
 
 Includes:
 
-- title
-- description
-- status
-- priority
+- `entityType`
+- `title`
+- `description`
+- `status`
+- `priority`
+
+### Example Output Shape
+
+For example, a sales invoice embedding text currently looks more like:
+
+```yaml
+entity_type: "sales_invoice"
+invoice_number: "2026-0001"
+status: "draft"
+customer_display_name: "Acme Retail GmbH"
+currency: "EUR"
+line_items:
+  -
+    description: "Warehouse audit and automation proposal"
+    quantity: "1"
+    unit_price: "1500.00"
+```
+
+This exact structure matters for docs and tests. If you change the text-generation rules, update both the entity mapping and any tests that assert on the emitted YAML keys.
 
 ## Upsert Design
 
@@ -325,6 +399,7 @@ Examples:
 
 - company card service syncs after create/update
 - document service syncs after upload
+- expense service syncs after create/update
 - sales invoice service syncs after generate/update
 
 This fits the general Business API service design:
@@ -380,8 +455,10 @@ The safest place is `computeEmbeddingText(...)`.
 Guidelines:
 
 - prefer meaningful business fields over raw IDs
-- include names, concepts, statuses, notes, and line item descriptions
-- avoid large opaque JSON dumps
+- update `createEmbeddingDocument(...)` rather than appending prose later in the pipeline
+- keep nested business data structured when it is meaningful for search
+- remember that empty values are stripped before serialization
+- remember that keys are emitted as `snake_case` in the final text
 - keep representation deterministic
 
 ### Add another embedding provider style
