@@ -220,7 +220,7 @@ function mapStructuredParty(
     billingAddress: party.address
       ? {
           street1: party.address.street1 ?? "",
-          street2: party.address.street2,
+          street2: party.address.street2 ? party.address.street2 : undefined,
           city: party.address.city ?? "",
           postalCode: party.address.postalCode ?? "",
           countryCode: party.address.countryCode ?? "",
@@ -243,7 +243,7 @@ function compactBillingAddress(address: ContactInput["billingAddress"] | undefin
 
 function mapStructuredInvoiceToExtracted(
   structured: StructuredInvoice,
-  kind: "expense_invoice" | "sales_invoice",
+  kind: "expense_invoice" | "sales_invoice" | "expense" | "sales-invoice" | "expense-invoice",
 ): ExtractedDocumentData {
   const seller = mapStructuredParty(structured.seller);
   const buyer = mapStructuredParty(structured.buyer);

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { expenseTotalsSchema, taxLineSchema } from "./expense.js";
 
-export const documentKindSchema = z.enum(["expense_invoice", "sales_invoice", "contract", "other"]);
+export const documentKindSchema = z.enum(["expense_invoice", "sales_invoice", "contract", "other", "expense", "sales-invoice", "expense-invoice"]);
 
 export const documentUploadSchema = z
   .object({

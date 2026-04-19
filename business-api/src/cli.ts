@@ -28,6 +28,7 @@ import {
   taskInputSchema,
   taskPatchSchema,
 } from "@warehouse-hub/business-schemas";
+import { formatDocumentIngestCliOutput } from "./lib/cli-document-ingest-format.js";
 import { parseCliListFilters } from "./lib/list-filters.js";
 import { formatCliErrorAsMarkdown, isTruthyEnvValue } from "./lib/cli-error-format.js";
 import { logger } from "./lib/logger.js";
@@ -384,7 +385,12 @@ async function main(): Promise<void> {
       },
       meta,
     );
-    printJson(created);
+    const formatted = formatDocumentIngestCliOutput(created);
+    if (formatted) {
+      process.stdout.write(`${formatted}\n`);
+    } else {
+      printJson(created);
+    }
     return;
   }
 
