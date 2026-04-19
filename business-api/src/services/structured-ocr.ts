@@ -97,9 +97,40 @@ function parseParty(text: string, labels: string[]) {
   return {
     displayName,
     legalName: displayName,
-    taxId,
-    email,
-    phone,
+    taxId: taxId ?? null,
+    email: email ?? null,
+    phone: phone ?? null,
+    address: null,
+  };
+}
+
+function makeFallbackParty(
+  party: ReturnType<typeof parseParty> | undefined,
+  fallbackParty: ReturnType<typeof parseParty> | undefined,
+  fallbackName: string,
+) {
+  if (party) {
+    return party;
+  }
+
+  if (fallbackParty) {
+    return {
+      displayName: fallbackParty.displayName,
+      legalName: fallbackParty.legalName,
+      taxId: null,
+      email: null,
+      phone: null,
+      address: null,
+    };
+  }
+
+  return {
+    displayName: fallbackName,
+    legalName: fallbackName,
+    taxId: null,
+    email: null,
+    phone: null,
+    address: null,
   };
 }
 
@@ -115,39 +146,45 @@ function parseStubInvoice(text: string): StructuredInvoice {
 
   const lineItems = Array.from(
     text.matchAll(
-      /line item\s*:\s*description=(.*?)(?:;\s*quantity=([^;]+))?(?:;\s*unitPrice=([^;]+))?(?:;\s*taxRate=([^\n;]+))?/gim,
+      /line item\s*:\s*description=([^;]+)(?:;\s*quantity=([^;]+))?(?:;\s*unitPrice=([^;]+))?(?:;\s*taxRate=([^;\n]+))?(?:;\s*total=([^\n;]+))?/gim,
     ),
   ).map((match) => ({
     description: match[1].trim(),
     quantity: match[2]?.trim() || undefined,
     unitPrice: normalizeAmount(match[3]) ?? match[3]?.trim(),
     taxRate: normalizeAmount(match[4]) ?? match[4]?.trim(),
+    total: normalizeAmount(match[5]) ?? match[5]?.trim(),
   }));
+
+  const parsedSeller = parseParty(text, ["seller", "issuer", "from", "supplier", "vendor"]);
+  const parsedBuyer = parseParty(text, ["buyer", "customer", "bill to", "to"]);
+  const seller = makeFallbackParty(parsedSeller, parsedBuyer, "Unknown seller");
+  const buyer = makeFallbackParty(parsedBuyer, parsedSeller, "Unknown buyer");
 
   const parsedResult = structuredInvoiceSchema.parse({
     schemaVersion: "invoice.v1",
     documentType: firstMatch(text, [/document type\s*:\s*(expense_invoice|sales_invoice|invoice)/im]) ?? "invoice",
     invoiceNumber: firstMatch(text, [/invoice(?: number| no\.?| #)?\s*:\s*(.+)/im]),
     invoiceDate: parseDateValue(firstMatch(text, [/invoice date\s*:\s*(.+)/im, /date\s*:\s*(.+)/im])),
-    issueDate: parseDateValue(firstMatch(text, [/issue date\s*:\s*(.+)/im])),
-    dueDate: parseDateValue(firstMatch(text, [/due date\s*:\s*(.+)/im])),
-    serviceDate: parseDateValue(firstMatch(text, [/service date\s*:\s*(.+)/im])),
+    issueDate: parseDateValue(firstMatch(text, [/issue date\s*:\s*(.+)/im])) ?? null,
+    dueDate: parseDateValue(firstMatch(text, [/due date\s*:\s*(.+)/im])) ?? null,
+    serviceDate: parseDateValue(firstMatch(text, [/service date\s*:\s*(.+)/im])) ?? null,
     currency:
       firstMatch(text, [/currency\s*:\s*([A-Z]{3})/im]) ??
       (text.includes("EUR") || text.includes("€") ? "EUR" : undefined),
-    paymentTermsDays: Number.parseInt(firstMatch(text, [/payment terms(?: days)?\s*:\s*(\d+)/im]) ?? "", 10) || undefined,
-    seller: parseParty(text, ["seller", "issuer", "from"]),
-    buyer: parseParty(text, ["buyer", "customer", "bill to", "to", "supplier", "vendor"]),
+    paymentTermsDays: Number.parseInt(firstMatch(text, [/payment terms(?: days)?\s*:\s*(\d+)/im]) ?? "", 10) || null,
+    seller,
+    buyer,
     totals: {
       net: normalizeAmount(firstMatch(text, [/net(?: total)?\s*:\s*([^\n]+)/im])),
       tax: normalizeAmount(firstMatch(text, [/tax(?: total)?\s*:\s*([^\n]+)/im, /vat(?: total)?\s*:\s*([^\n]+)/im])),
       gross: normalizeAmount(firstMatch(text, [/gross(?: total)?\s*:\s*([^\n]+)/im, /total(?: amount)?\s*:\s*([^\n]+)/im])),
     },
-    taxLines: taxLines.length > 0 ? taxLines : undefined,
-    lineItems: lineItems.length > 0 ? lineItems : undefined,
-    notes: firstMatch(text, [/notes?\s*:\s*(.+)/im]),
+    taxLines,
+    lineItems,
+    notes: firstMatch(text, [/notes?\s*:\s*(.+)/im]) ?? null,
     rawText: text.trim() || undefined,
-    pageNotes: text.trim() ? text.split(/\n\s*\n/).map((chunk) => chunk.trim()).filter(Boolean) : undefined,
+    pageNotes: text.trim() ? text.split(/\n\s*\n/).map((chunk) => chunk.trim()).filter(Boolean) : null,
   });
 
   return parsedResult;

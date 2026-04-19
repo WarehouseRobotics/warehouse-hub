@@ -291,6 +291,14 @@ describe("business-api service flows", () => {
           amount: "25.2",
         },
       ],
+      lineItems: [
+        {
+          description: "Printer paper and toner",
+          quantity: "1",
+          unitPrice: "120.00",
+          taxRate: "21.00",
+        },
+      ],
       category: "office_supplies",
       notes: "Printer paper and toner.",
       status: "recorded",
@@ -304,6 +312,14 @@ describe("business-api service flows", () => {
     expect(expense.supplierDisplayName).toBe("Papeleria Centro SL");
     expect(expense.supplierLegalName).toBe("Papeleria Centro SL");
     expect(expense.supplierEmail).toBe("facturas@papeleriacentro.example");
+    expect(expense.lineItems).toEqual([
+      {
+        description: "Printer paper and toner",
+        quantity: "1",
+        unitPrice: "120.00",
+        taxRate: "21.00",
+      },
+    ]);
     expect(fs.existsSync(getDocumentDownload(document.documentId).path)).toBe(true);
 
     const paid = updateExpense(expense.expenseId, {
@@ -756,6 +772,7 @@ describe("business-api service flows", () => {
             "category: office_supplies",
             "notes: Printer paper and toner.",
             "tax line: name=IVA; rate=21; base=120.00; amount=25.20",
+            "line item: description=Laser toner cartridge; quantity=2; unitPrice=60.00; taxRate=21.00; total=120.00",
           ].join("\n"),
         ),
         stream: undefined as never,
@@ -780,6 +797,15 @@ describe("business-api service flows", () => {
       expect.objectContaining({
         invoiceDate: "2026-03-26",
         supplierContactId: expect.stringMatching(/^ct_/),
+        lineItems: [
+          {
+            description: "Laser toner cartridge",
+            quantity: "2",
+            unitPrice: "60.00",
+            taxRate: "21.00",
+            total: "120.00",
+          },
+        ],
       }),
     );
 

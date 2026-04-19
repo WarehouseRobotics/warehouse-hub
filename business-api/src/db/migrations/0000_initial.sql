@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   tax TEXT NOT NULL,
   gross TEXT NOT NULL,
   tax_lines TEXT,
+  line_items TEXT NOT NULL,
   category TEXT,
   notes TEXT,
   status TEXT NOT NULL DEFAULT 'recorded',

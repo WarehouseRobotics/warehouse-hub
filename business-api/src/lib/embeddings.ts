@@ -88,6 +88,15 @@ export function computeEmbeddingText(entityType: EmbeddingEntityType, entity: Re
         entity.tax,
         entity.gross,
         entity.taxLines,
+        Array.isArray(entity.lineItems)
+          ? entity.lineItems
+              .map((lineItem) =>
+                typeof lineItem === "object" && lineItem
+                  ? Object.values(lineItem as Record<string, unknown>).join(" ")
+                  : "",
+              )
+              .join(" ")
+          : "",
         entity.category,
         entity.notes,
         entity.status,  

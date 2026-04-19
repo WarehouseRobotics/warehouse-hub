@@ -25,6 +25,7 @@ export const expenses = sqliteTable(
     tax: text("tax").notNull(),
     gross: text("gross").notNull(),
     taxLines: text("tax_lines"),
+    lineItems: text("line_items").notNull(),
     category: text("category"),
     notes: text("notes"),
     status: text("status").notNull().default("recorded"),

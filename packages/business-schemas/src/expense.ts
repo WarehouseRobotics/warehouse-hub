@@ -17,6 +17,16 @@ export const expenseTotalsSchema = z
   })
   .strict();
 
+export const expenseLineItemSchema = z
+  .object({
+    description: z.string().min(1),
+    quantity: z.union([z.string(), z.number()]),
+    unitPrice: z.string(),
+    taxRate: z.string().optional(),
+    total: z.string().optional(),
+  })
+  .strict();
+
 export const expenseInputSchema = z
   .object({
     supplierContactId: z.string().min(1),
@@ -27,6 +37,7 @@ export const expenseInputSchema = z
     currency: z.string().length(3),
     totals: expenseTotalsSchema,
     taxLines: z.array(taxLineSchema).optional(),
+    lineItems: z.array(expenseLineItemSchema).optional(),
     category: z.string().optional(),
     notes: z.string().optional(),
     status: z.enum(["recorded", "paid", "void"]).default("recorded"),
@@ -37,3 +48,4 @@ export const expensePatchSchema = expenseInputSchema.partial();
 
 export type ExpenseInput = z.infer<typeof expenseInputSchema>;
 export type ExpensePatch = z.infer<typeof expensePatchSchema>;
+export type ExpenseLineItem = z.infer<typeof expenseLineItemSchema>;

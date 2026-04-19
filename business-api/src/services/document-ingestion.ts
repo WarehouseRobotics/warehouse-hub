@@ -1,4 +1,8 @@
-import type { ContactInput, DocumentIngestInput, DocumentIngestOverrides } from "@warehouse-hub/business-schemas";
+import type {
+  ContactInput,
+  DocumentIngestInput,
+  DocumentIngestOverrides,
+} from "@warehouse-hub/business-schemas";
 import type { StructuredInvoice } from "../schemas/structured-ocr.js";
 import { createExpense, getExpense } from "./expenses.js";
 import { resolveContact } from "./contacts.js";
@@ -25,6 +29,14 @@ type ExtractedTotals = {
   gross?: string;
 };
 
+type ExtractedLineItem = {
+  description: string;
+  quantity: string | number;
+  unitPrice: string;
+  taxRate?: string;
+  total?: string;
+};
+
 type ExtractedDocumentData = {
   title?: string;
   invoiceNumber?: string;
@@ -40,7 +52,7 @@ type ExtractedDocumentData = {
   counterparty?: ExtractedParty;
   totals?: ExtractedTotals;
   taxLines?: Array<{ name?: string; rate: string; base: string; amount: string }>;
-  lineItems?: Array<Record<string, unknown>>;
+  lineItems?: ExtractedLineItem[];
   category?: string;
   paymentTermsDays?: number;
   status?: "draft" | "finalized" | "paid" | "cancelled";
@@ -133,7 +145,7 @@ function extractTaxLines(text: string) {
 function extractLineItems(text: string) {
   const matches = Array.from(
     text.matchAll(
-      /line item\s*:\s*description=(.*?);\s*quantity=([^;]+);\s*unitPrice=([^;]+)(?:;\s*taxRate=([^\n;]+))?/gim,
+      /line item\s*:\s*description=(.*?);\s*quantity=([^;]+);\s*unitPrice=([^;]+)(?:;\s*taxRate=([^;\n]+))?(?:;\s*total=([^\n;]+))?/gim,
     ),
   );
 
@@ -142,6 +154,7 @@ function extractLineItems(text: string) {
     quantity: match[2].trim(),
     unitPrice: normalizeAmount(match[3]) ?? match[3].trim(),
     taxRate: match[4] ? (normalizeAmount(match[4]) ?? match[4].trim()) : undefined,
+    total: match[5] ? (normalizeAmount(match[5]) ?? match[5].trim()) : undefined,
   }));
 }
 
@@ -229,7 +242,7 @@ function mapStructuredParty(
   };
 }
 
-function compactBillingAddress(address: ContactInput["billingAddress"] | undefined): ContactInput["billingAddress"] | undefined {
+function compactBillingAddress(address: ContactInput["billingAddress"] | undefined) {
   if (!address) {
     return undefined;
   }
@@ -316,7 +329,7 @@ function ensureCompanyCard(companyCardId: string | undefined) {
   return company;
 }
 
-function buildContactInput(party: ExtractedParty, role: "supplier" | "customer"): ContactInput {
+function buildContactInput(party: ExtractedParty, role: "supplier" | "customer") {
   const displayName = party.name?.trim();
   if (!displayName) {
     throw new AppError(`Could not resolve ${role} contact from OCR`, {
@@ -326,7 +339,7 @@ function buildContactInput(party: ExtractedParty, role: "supplier" | "customer")
   }
 
   return {
-    type: "company",
+    type: "company" as const,
     roles: [role],
     displayName,
     legalName: party.legalName?.trim() || displayName,
@@ -334,7 +347,7 @@ function buildContactInput(party: ExtractedParty, role: "supplier" | "customer")
     email: party.email,
     phone: party.phone,
     billingAddress: compactBillingAddress(party.billingAddress),
-    status: "active",
+    status: "active" as const,
   };
 }
 
@@ -448,6 +461,7 @@ export async function ingestDocument(
         currency: extracted.currency,
         totals: requireFinalTotals(extracted.totals),
         taxLines: extracted.taxLines,
+        lineItems: extracted.lineItems,
         category: extracted.category,
         notes: extracted.notes,
         status: "recorded",

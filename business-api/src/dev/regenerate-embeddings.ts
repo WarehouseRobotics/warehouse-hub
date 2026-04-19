@@ -156,6 +156,7 @@ async function regenerateExpenseEmbeddings(): Promise<number> {
         tax: row.tax,
         gross: row.gross,
         taxLines: row.taxLines ? (JSON.parse(row.taxLines) as unknown[]) : [],
+        lineItems: JSON.parse(row.lineItems) as unknown[],
         category: row.category,
         notes: row.notes,
         status: row.status,

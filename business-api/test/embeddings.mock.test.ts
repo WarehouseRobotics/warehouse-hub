@@ -138,4 +138,38 @@ describe("embedding service with mocked provider", () => {
     expect(text).toContain("Warehouse audit and automation proposal");
     expect(text).toContain("EUR");
   });
+
+  it("builds rich expense embedding text including supplier and line item details", async () => {
+    const { computeEmbeddingText } = await import("../src/lib/embeddings.js");
+
+    const text = computeEmbeddingText("expense_invoice", {
+      supplierDisplayName: "Papeleria Centro SL",
+      supplierLegalName: "Papeleria Centro SL",
+      supplierEmail: "facturas@papeleriacentro.example",
+      invoiceNumber: "FC-2026-0042",
+      invoiceDate: "2026-03-25",
+      dueDate: "2026-04-24",
+      currency: "EUR",
+      net: "120.00",
+      tax: "25.20",
+      gross: "145.20",
+      taxLines: [{ name: "IVA", rate: "21.00", base: "120.00", amount: "25.20" }],
+      lineItems: [
+        {
+          description: "Printer paper and toner",
+          quantity: "1",
+          unitPrice: "120.00",
+          taxRate: "21.00",
+        },
+      ],
+      category: "office_supplies",
+      notes: "Printer paper and toner.",
+      status: "recorded",
+    });
+
+    expect(text).toContain("Papeleria Centro SL");
+    expect(text).toContain("FC-2026-0042");
+    expect(text).toContain("Printer paper and toner");
+    expect(text).toContain("EUR");
+  });
 });

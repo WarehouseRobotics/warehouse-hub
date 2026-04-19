@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { expenseTotalsSchema, taxLineSchema } from "./expense.js";
+import { expenseLineItemSchema, expenseTotalsSchema, taxLineSchema } from "./expense.js";
 
 export const documentKindSchema = z.enum(["expense_invoice", "sales_invoice", "contract", "other", "expense", "sales-invoice", "expense-invoice"]);
 
@@ -32,7 +32,7 @@ export const documentIngestOverridesSchema = sharedDocumentOverrideSchema
     customerName: z.string().min(1).optional(),
     status: z.enum(["draft", "finalized", "paid", "cancelled"]).optional(),
     paymentTermsDays: z.number().int().positive().optional(),
-    lineItems: z.array(z.record(z.string(), z.unknown())).optional(),
+    lineItems: z.array(expenseLineItemSchema).optional(),
     issueDate: z.string().min(1).optional(),
     serviceDate: z.string().min(1).optional(),
     title: z.string().min(1).optional(),
