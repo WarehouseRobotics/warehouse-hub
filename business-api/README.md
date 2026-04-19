@@ -34,6 +34,8 @@ The container script allows executing arbitary shell code inside of the containe
 
 After the first build, `./container.sh start` starts the same live-mounted development container without rebuilding, and `./container.sh restart` recreates it using the current image.
 
+The helper script also ensures the shared Docker network `warehouse-hub` exists so the dashboard container can reach the API container by Docker DNS while both services remain publicly available on their host ports.
+
 
 ## Useful Commands
 

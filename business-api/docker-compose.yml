@@ -20,9 +20,16 @@ services:
       - business_schemas_dist:/workspace/packages/business-schemas/dist
       - ./data:/data
       - ./test-data:/workspace/business-api/test-data
+    networks:
+      - warehouse-hub
 
 volumes:
   business_api_node_modules:
   business_schemas_node_modules:
   business_api_dist:
   business_schemas_dist:
+
+networks:
+  warehouse-hub:
+    name: warehouse-hub
+    external: true
