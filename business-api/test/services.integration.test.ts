@@ -529,6 +529,178 @@ describe("business-api service flows", () => {
     expect(invoiceMatches.map((item) => item.invoiceNumber)).toEqual(["SVC-2026-001"]);
   });
 
+  it("reimports the same sales invoice number by updating the existing invoice record", async () => {
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { createContact } = await import("../src/services/contacts.js");
+    const { uploadDocument } = await import("../src/services/documents.js");
+    const { importSalesInvoice } = await import("../src/services/sales-invoices.js");
+
+    upsertCompanyCard({
+      legalName: "Northwind Robotics SL",
+      displayName: "Northwind Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    const customer = createContact({
+      type: "company",
+      status: "active",
+      roles: ["customer"],
+      displayName: "Acme Retail GmbH",
+      legalName: "Acme Retail GmbH",
+      taxId: "DE123456789",
+      email: "ap@acme-retail.example",
+    });
+
+    const originalPdf = uploadDocument(
+      {
+        fieldname: "file",
+        originalname: "svc-2026-001.pdf",
+        encoding: "7bit",
+        mimetype: "application/pdf",
+        size: 9,
+        buffer: Buffer.from("pdf-original"),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      { kind: "sales_invoice", source: "manual_upload" },
+    );
+
+    const firstImport = importSalesInvoice({
+      customerContactId: customer.contactId,
+      invoiceNumber: "SVC-2026-001",
+      issueDate: "2026-04-06",
+      currency: "EUR",
+      lineItems: [{ description: "Consulting sprint", quantity: "1", unitPrice: "1000.00" }],
+      totals: {
+        net: "1000.00",
+        tax: "210.00",
+        gross: "1210.00",
+      },
+      status: "finalized",
+      pdfDocumentId: originalPdf.documentId,
+    });
+
+    const reimportedPdf = uploadDocument(
+      {
+        fieldname: "file",
+        originalname: "svc-2026-001-copy.pdf",
+        encoding: "7bit",
+        mimetype: "application/pdf",
+        size: 10,
+        buffer: Buffer.from("pdf-reimport"),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      { kind: "sales_invoice", source: "manual_upload" },
+    );
+
+    const secondImport = importSalesInvoice({
+      customerContactId: customer.contactId,
+      invoiceNumber: "SVC-2026-001",
+      issueDate: "2026-04-06",
+      currency: "EUR",
+      lineItems: [{ description: "Consulting sprint", quantity: "1", unitPrice: "1000.00" }],
+      totals: {
+        net: "1000.00",
+        tax: "210.00",
+        gross: "1210.00",
+      },
+      status: "finalized",
+      pdfDocumentId: reimportedPdf.documentId,
+    });
+
+    expect(secondImport.salesInvoiceId).toBe(firstImport.salesInvoiceId);
+    expect(secondImport.pdfDocumentId).toBe(reimportedPdf.documentId);
+  });
+
+  it("surfaces a field-aware duplicate error when an import tries to reuse another sales invoice number", async () => {
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { createContact } = await import("../src/services/contacts.js");
+    const { importSalesInvoice } = await import("../src/services/sales-invoices.js");
+
+    upsertCompanyCard({
+      legalName: "Northwind Robotics SL",
+      displayName: "Northwind Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    const customer = createContact({
+      type: "company",
+      status: "active",
+      roles: ["customer"],
+      displayName: "Acme Retail GmbH",
+      legalName: "Acme Retail GmbH",
+      taxId: "DE123456789",
+      email: "ap@acme-retail.example",
+    });
+
+    const firstInvoice = importSalesInvoice({
+      customerContactId: customer.contactId,
+      invoiceNumber: "SVC-2026-001",
+      issueDate: "2026-04-06",
+      currency: "EUR",
+      totals: {
+        net: "1000.00",
+        tax: "210.00",
+        gross: "1210.00",
+      },
+    });
+
+    importSalesInvoice({
+      customerContactId: customer.contactId,
+      invoiceNumber: "SVC-2026-002",
+      issueDate: "2026-04-07",
+      currency: "EUR",
+      totals: {
+        net: "500.00",
+        tax: "105.00",
+        gross: "605.00",
+      },
+    });
+
+    expect(() =>
+      importSalesInvoice({
+        targetSalesInvoiceId: firstInvoice.salesInvoiceId,
+        customerContactId: customer.contactId,
+        invoiceNumber: "SVC-2026-002",
+        issueDate: "2026-04-06",
+        currency: "EUR",
+        totals: {
+          net: "1000.00",
+          tax: "210.00",
+          gross: "1210.00",
+        },
+        overrideFields: ["invoiceNumber"],
+      }),
+    ).toThrowError("Sales invoice with invoiceNumber = SVC-2026-002 already exists");
+  });
+
   it("ingests an expense invoice image with overrides and searchable OCR content", async () => {
     const { upsertCompanyCard } = await import("../src/services/company-card.js");
     const { createContact, listContacts } = await import("../src/services/contacts.js");

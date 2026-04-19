@@ -11,6 +11,8 @@ import { normalizeMoneyString } from "../lib/money.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { SalesInvoiceGenerateInput, SalesInvoicePatch } from "@warehouse-hub/business-schemas";
 import {
+  getContactRecordByIdOrSlug,
+  getDocumentRecordByIdOrSlug,
   requireCompanyCardRecord,
   requireContactRecord,
   requireDealRecord,
@@ -115,6 +117,76 @@ function assertInvoiceTransition(fromStatus: string, toStatus: string): void {
       code: "invalid_status_transition",
     });
   }
+}
+
+function isSqliteConstraintError(error: unknown, kind: "unique" | "foreign-key"): error is Error {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (kind === "unique") {
+    return error.message.includes("UNIQUE constraint failed");
+  }
+
+  return error.message.includes("FOREIGN KEY constraint failed");
+}
+
+function translateSalesInvoiceConstraintError(
+  error: unknown,
+  context: {
+    invoiceNumber: string;
+    customerContactId: string;
+    pdfDocumentId?: string | null;
+  },
+): never {
+  if (isSqliteConstraintError(error, "unique")) {
+    throw new AppError(`Sales invoice with invoiceNumber = ${context.invoiceNumber} already exists`, {
+      statusCode: 409,
+      code: "duplicate_sales_invoice",
+      details: {
+        field: "invoiceNumber",
+        value: context.invoiceNumber,
+      },
+    });
+  }
+
+  if (isSqliteConstraintError(error, "foreign-key")) {
+    if (!getContactRecordByIdOrSlug(context.customerContactId)) {
+      throw new AppError(`Sales invoice references missing customerContactId = ${context.customerContactId}`, {
+        statusCode: 409,
+        code: "missing_reference",
+        details: {
+          field: "customerContactId",
+          value: context.customerContactId,
+        },
+      });
+    }
+
+    if (context.pdfDocumentId && !getDocumentRecordByIdOrSlug(context.pdfDocumentId)) {
+      throw new AppError(`Sales invoice references missing pdfDocumentId = ${context.pdfDocumentId}`, {
+        statusCode: 409,
+        code: "missing_reference",
+        details: {
+          field: "pdfDocumentId",
+          value: context.pdfDocumentId,
+        },
+      });
+    }
+
+    throw new AppError(
+      `Sales invoice references a related record that no longer exists (customerContactId = ${context.customerContactId}${context.pdfDocumentId ? `, pdfDocumentId = ${context.pdfDocumentId}` : ""})`,
+      {
+        statusCode: 409,
+        code: "missing_reference",
+        details: {
+          customerContactId: context.customerContactId,
+          pdfDocumentId: context.pdfDocumentId ?? null,
+        },
+      },
+    );
+  }
+
+  throw error;
 }
 
 export function generateSalesInvoice(data: SalesInvoiceGenerateInput) {
@@ -222,6 +294,15 @@ export function importSalesInvoice(data: ImportSalesInvoiceInput) {
     ? requireSalesInvoiceRecord(data.targetSalesInvoiceId)
     : getSalesInvoiceRecordByInvoiceNumber(data.invoiceNumber);
   const now = new Date().toISOString();
+  const effectiveCustomerContactId = existing && !overrideFields.has("customerContactId")
+    ? existing.customerContactId
+    : data.customerContactId;
+  const effectivePdfDocumentId = data.pdfDocumentId ?? existing?.pdfDocumentId ?? null;
+
+  requireContactRecord(effectiveCustomerContactId);
+  if (effectivePdfDocumentId) {
+    requireDocumentRecord(effectivePdfDocumentId);
+  }
 
   if (existing) {
     const nextStatus = overrideFields.has("status") ? data.status ?? existing.status : existing.status;
@@ -229,38 +310,46 @@ export function importSalesInvoice(data: ImportSalesInvoiceInput) {
       assertInvoiceTransition(existing.status, nextStatus);
     }
 
-    getOrm()
-      .update(salesInvoices)
-      .set({
-        invoiceNumber: overrideFields.has("invoiceNumber") ? data.invoiceNumber : existing.invoiceNumber,
-        customerContactId: overrideFields.has("customerContactId")
-          ? data.customerContactId
-          : existing.customerContactId,
-        issueDate: overrideFields.has("issueDate") ? data.issueDate : existing.issueDate,
-        serviceDate:
-          overrideFields.has("serviceDate")
-            ? (data.serviceDate ?? null)
-            : (existing.serviceDate ?? data.serviceDate ?? null),
-        dueDate:
-          overrideFields.has("dueDate")
-            ? (data.dueDate ?? null)
-            : (existing.dueDate ?? data.dueDate ?? null),
-        currency: overrideFields.has("currency") ? data.currency : existing.currency,
-        paymentTermsDays: overrideFields.has("paymentTermsDays")
-          ? (data.paymentTermsDays ?? existing.paymentTermsDays)
-          : (existing.paymentTermsDays ?? data.paymentTermsDays ?? company.paymentTermsDays),
-        lineItems: overrideFields.has("lineItems")
-          ? JSON.stringify(data.lineItems ?? [])
-          : existing.lineItems,
-        net: overrideFields.has("totals") ? totals.net : existing.net,
-        tax: overrideFields.has("totals") ? totals.tax : existing.tax,
-        gross: overrideFields.has("totals") ? totals.gross : existing.gross,
-        status: nextStatus,
-        pdfDocumentId: data.pdfDocumentId ?? existing.pdfDocumentId,
-        updatedAt: now,
-      })
-      .where(eq(salesInvoices.id, existing.id))
-      .run();
+    try {
+      getOrm()
+        .update(salesInvoices)
+        .set({
+          invoiceNumber: overrideFields.has("invoiceNumber") ? data.invoiceNumber : existing.invoiceNumber,
+          customerContactId: overrideFields.has("customerContactId")
+            ? data.customerContactId
+            : existing.customerContactId,
+          issueDate: overrideFields.has("issueDate") ? data.issueDate : existing.issueDate,
+          serviceDate:
+            overrideFields.has("serviceDate")
+              ? (data.serviceDate ?? null)
+              : (existing.serviceDate ?? data.serviceDate ?? null),
+          dueDate:
+            overrideFields.has("dueDate")
+              ? (data.dueDate ?? null)
+              : (existing.dueDate ?? data.dueDate ?? null),
+          currency: overrideFields.has("currency") ? data.currency : existing.currency,
+          paymentTermsDays: overrideFields.has("paymentTermsDays")
+            ? (data.paymentTermsDays ?? existing.paymentTermsDays)
+            : (existing.paymentTermsDays ?? data.paymentTermsDays ?? company.paymentTermsDays),
+          lineItems: overrideFields.has("lineItems")
+            ? JSON.stringify(data.lineItems ?? [])
+            : existing.lineItems,
+          net: overrideFields.has("totals") ? totals.net : existing.net,
+          tax: overrideFields.has("totals") ? totals.tax : existing.tax,
+          gross: overrideFields.has("totals") ? totals.gross : existing.gross,
+          status: nextStatus,
+          pdfDocumentId: data.pdfDocumentId ?? existing.pdfDocumentId,
+          updatedAt: now,
+        })
+        .where(eq(salesInvoices.id, existing.id))
+        .run();
+    } catch (error) {
+      translateSalesInvoiceConstraintError(error, {
+        invoiceNumber: data.invoiceNumber,
+        customerContactId: effectiveCustomerContactId,
+        pdfDocumentId: effectivePdfDocumentId,
+      });
+    }
 
     const updated = getSalesInvoice(existing.id);
     scheduleEmbedding(existing.id, updated);
@@ -270,31 +359,39 @@ export function importSalesInvoice(data: ImportSalesInvoiceInput) {
   const id = createPrefixedId("sinv_");
   const paymentTermsDays = data.paymentTermsDays ?? company.paymentTermsDays;
 
-  getOrm()
-    .insert(salesInvoices)
-    .values({
-      id,
-      slug: createSlug(`${data.customerContactId}:${data.invoiceNumber}:${id}`),
+  try {
+    getOrm()
+      .insert(salesInvoices)
+      .values({
+        id,
+        slug: createSlug(`${data.customerContactId}:${data.invoiceNumber}:${id}`),
+        invoiceNumber: data.invoiceNumber,
+        companyCardId: company.id,
+        customerContactId: data.customerContactId,
+        dealId: null,
+        issueDate: data.issueDate,
+        serviceDate: data.serviceDate ?? null,
+        dueDate: data.dueDate ?? addDays(data.issueDate, paymentTermsDays),
+        currency: data.currency,
+        paymentTermsDays,
+        lineItems: JSON.stringify(data.lineItems ?? []),
+        net: totals.net,
+        tax: totals.tax,
+        gross: totals.gross,
+        status: data.status ?? "draft",
+        pdfDocumentId: data.pdfDocumentId ?? null,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      })
+      .run();
+  } catch (error) {
+    translateSalesInvoiceConstraintError(error, {
       invoiceNumber: data.invoiceNumber,
-      companyCardId: company.id,
       customerContactId: data.customerContactId,
-      dealId: null,
-      issueDate: data.issueDate,
-      serviceDate: data.serviceDate ?? null,
-      dueDate: data.dueDate ?? addDays(data.issueDate, paymentTermsDays),
-      currency: data.currency,
-      paymentTermsDays,
-      lineItems: JSON.stringify(data.lineItems ?? []),
-      net: totals.net,
-      tax: totals.tax,
-      gross: totals.gross,
-      status: data.status ?? "draft",
       pdfDocumentId: data.pdfDocumentId ?? null,
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-    })
-    .run();
+    });
+  }
 
   const created = getSalesInvoice(id);
   scheduleEmbedding(id, created);
