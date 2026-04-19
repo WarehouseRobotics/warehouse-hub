@@ -405,7 +405,7 @@ export async function ingestDocument(
     let ocrResult: { engine: string; text: string };
     let parsed: ExtractedDocumentData;
 
-    if (input.kind === "expense_invoice" || input.kind === "sales_invoice") {
+    if (input.kind === "expense_invoice" || input.kind === "sales_invoice" || input.kind === "expense-invoice" || input.kind === "sales-invoice" || input.kind === "expense") {
       const structuredResult = await extractStructuredInvoiceFromPages(renderDocumentPages(file));
       ocrResult = structuredResult;
       parsed = mapStructuredInvoiceToExtracted(structuredResult.data, input.kind);
@@ -470,7 +470,7 @@ export async function ingestDocument(
 
       const invoiceNumber = extracted.invoiceNumber;
       const issueDate = extracted.issueDate ?? extracted.invoiceDate;
-      
+
       if (!invoiceNumber) {
         throw new AppError("Missing sales invoice number after OCR and overrides", {
           statusCode: 422,
