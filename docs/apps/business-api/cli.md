@@ -44,6 +44,36 @@ When you run the raw CLI directly inside the repo container, examples keep the e
 ./container.sh exec npm run cli -- help documents
 ```
 
+When a command fails through `wrobo-biz`, the wrapper-facing stderr output is rendered as Markdown instead of a raw Winston JSON log record. This applies regardless of `--verbose` so LLM-driven tooling gets a stable, readable failure shape:
+
+~~~md
+# Business API CLI Error
+
+## Command
+
+`documents ingest 2026-01-A-Opinionated.pdf {"kind":"sales_invoice","source":"slack_upload"}`
+
+## Error Type
+
+`SqliteError`
+
+## Error Message
+
+FOREIGN KEY constraint failed
+
+## Stack Trace
+
+```text
+SqliteError: FOREIGN KEY constraint failed
+    at PreparedQuery.run (/workspace/business-api/node_modules/src/better-sqlite3/session.ts:132:20)
+    ...
+```
+
+## Error Message Summary
+
+FOREIGN KEY constraint failed
+~~~
+
 ## Database and Company Card
 
 Initialize or migrate the local database:

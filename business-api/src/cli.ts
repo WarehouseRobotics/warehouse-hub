@@ -29,6 +29,7 @@ import {
   taskPatchSchema,
 } from "@warehouse-hub/business-schemas";
 import { parseCliListFilters } from "./lib/list-filters.js";
+import { formatCliErrorAsMarkdown, isTruthyEnvValue } from "./lib/cli-error-format.js";
 import { logger } from "./lib/logger.js";
 
 type HelpScope = {
@@ -137,6 +138,10 @@ const HELP_SCOPES: Record<string, HelpScope> = {
     ],
   },
 };
+
+function isWrapperCliInvocation(): boolean {
+  return isTruthyEnvValue(process.env.WROBO_BUSINESS_API_CLI_MODE);
+}
 
 const TOP_LEVEL_COMMANDS = [
   "help [scope]",
@@ -507,14 +512,21 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
   const positionalArgs = process.argv
     .slice(2)
     .filter((arg) => arg !== "--in-docker" && arg !== "--verbose");
-  logger.error("Business API CLI command failed", {
-    command: positionalArgs.join(" "),
-    error,
-  });
-  process.stderr.write(`${message}\n`);
+  const command = positionalArgs.join(" ");
+
+  if (isWrapperCliInvocation()) {
+    process.stderr.write(`${formatCliErrorAsMarkdown(command, error)}\n`);
+  } else {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error("Business API CLI command failed", {
+      command,
+      error,
+    });
+    process.stderr.write(`${message}\n`);
+  }
+
   process.exitCode = 1;
 });
