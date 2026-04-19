@@ -305,7 +305,7 @@ export function resolveContact(input: ContactResolveInput) {
     });
 
     if (matcher === "canonicalName" && matchedCandidates.length > 1) {
-      throw new AppError("Contact resolution is ambiguous", {
+      throw new AppError(`Error: Contact resolution is ambiguous, there's more than one record matching query: ${normalizedTarget.canonicalName}. Candidates: ${matchedCandidates.map((candidate) => candidate.legalName || candidate.displayName || candidate.taxId || candidate.email).join(", ")}`, {
         statusCode: 422,
         code: "contact_resolution_ambiguous",
         details: {
