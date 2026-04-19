@@ -14,9 +14,15 @@ import * as schema from "./schema/index.js";
 let databaseInstance: Database.Database | undefined;
 let ormInstance: ReturnType<typeof drizzle> | undefined;
 let vectorBackend: "sqlite-vec" | "json" = "json";
+let openDatabaseIdentity: string | undefined;
 
 function ensureParentDirectory(filePath: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
+}
+
+function getDatabaseIdentity(filePath: string): string {
+  const stats = fs.statSync(filePath);
+  return `${stats.dev}:${stats.ino}`;
 }
 
 function resolveMigrationsDir(): string {
@@ -73,9 +79,23 @@ function initializeVectorBackend(database: Database.Database): void {
 }
 
 export function getDatabase(): Database.Database {
+  ensureParentDirectory(config.databasePath);
+
+  if (databaseInstance && openDatabaseIdentity) {
+    const currentIdentity = getDatabaseIdentity(config.databasePath);
+    if (currentIdentity !== openDatabaseIdentity) {
+      logger.info("Database file changed on disk, reopening SQLite connection", {
+        previousIdentity: openDatabaseIdentity,
+        currentIdentity,
+        databasePath: config.databasePath,
+      });
+      resetDatabase();
+    }
+  }
+
   if (!databaseInstance) {
-    ensureParentDirectory(config.databasePath);
     databaseInstance = new Database(config.databasePath);
+    openDatabaseIdentity = getDatabaseIdentity(config.databasePath);
     databaseInstance.pragma("journal_mode = WAL");
     databaseInstance.pragma("foreign_keys = ON");
     initializeVectorBackend(databaseInstance);
@@ -86,8 +106,10 @@ export function getDatabase(): Database.Database {
 }
 
 export function getOrm() {
+  const database = getDatabase();
+
   if (!ormInstance) {
-    ormInstance = drizzle(getDatabase(), { schema });
+    ormInstance = drizzle(database, { schema });
   }
 
   return ormInstance;
@@ -110,6 +132,7 @@ export function resetDatabase(): void {
   databaseInstance = undefined;
   ormInstance = undefined;
   vectorBackend = "json";
+  openDatabaseIdentity = undefined;
 }
 
 export function getVectorBackend(): "sqlite-vec" | "json" {

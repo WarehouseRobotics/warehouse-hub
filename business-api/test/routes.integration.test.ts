@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Server } from "node:http";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 
 const testDataDir = path.resolve(process.cwd(), "test-data");
 
@@ -204,6 +205,126 @@ describe("business-api routes", () => {
     expect((await salesInvoicesResponse.json()) as Array<{ invoiceNumber: string }>).toEqual([
       expect.objectContaining({ invoiceNumber: "2026-0041" }),
     ]);
+  });
+
+  it("reloads the SQLite connection after the database file is replaced on disk", async () => {
+    const { createContact } = await import("../src/services/contacts.js");
+    const { importSalesInvoice } = await import("../src/services/sales-invoices.js");
+
+    const customer = createContact({
+      type: "company",
+      status: "active",
+      roles: ["customer"],
+      displayName: "Acme Retail GmbH",
+      legalName: "Acme Retail GmbH",
+    });
+
+    const originalInvoice = importSalesInvoice({
+      customerContactId: customer.contactId,
+      invoiceNumber: "2026-0041",
+      issueDate: "2026-04-02",
+      currency: "EUR",
+      totals: {
+        net: "1000.00",
+        tax: "210.00",
+        gross: "1210.00",
+      },
+      status: "finalized",
+    });
+
+    const firstResponse = await fetch(`${baseUrl}/api/v1/sales-invoices`, {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+    expect(firstResponse.status).toBe(200);
+    expect((await firstResponse.json()) as Array<{ invoiceNumber: string }>).toHaveLength(1);
+
+    const databasePath = path.join(testDataDir, "business-api.sqlite");
+    const replacedPath = path.join(testDataDir, "business-api.replaced.sqlite");
+    fs.rmSync(replacedPath, { force: true });
+    const escapedReplacedPath = replacedPath.replace(/'/g, "''");
+    const sourceDatabase = new Database(databasePath);
+    sourceDatabase.exec(`VACUUM INTO '${escapedReplacedPath}'`);
+    sourceDatabase.close();
+
+    const replacedDatabase = new Database(replacedPath);
+    replacedDatabase
+      .prepare(
+        `
+          INSERT INTO sales_invoices (
+            id,
+            slug,
+            invoice_number,
+            company_card_id,
+            customer_contact_id,
+            deal_id,
+            issue_date,
+            service_date,
+            due_date,
+            currency,
+            payment_terms_days,
+            line_items,
+            net,
+            tax,
+            gross,
+            status,
+            pdf_document_id,
+            created_at,
+            updated_at,
+            deleted_at
+          )
+          SELECT
+            ?,
+            ?,
+            ?,
+            company_card_id,
+            customer_contact_id,
+            deal_id,
+            ?,
+            service_date,
+            due_date,
+            currency,
+            payment_terms_days,
+            line_items,
+            net,
+            tax,
+            gross,
+            ?,
+            pdf_document_id,
+            created_at,
+            updated_at,
+            deleted_at
+          FROM sales_invoices
+          WHERE id = ?
+        `,
+      )
+      .run(
+        "sinv_replaced_file",
+        "replaced-file-invoice",
+        "2026-0042",
+        "2026-04-03",
+        "draft",
+        originalInvoice.salesInvoiceId,
+      );
+    replacedDatabase.close();
+
+    fs.renameSync(replacedPath, databasePath);
+    fs.rmSync(`${databasePath}-wal`, { force: true });
+    fs.rmSync(`${databasePath}-shm`, { force: true });
+
+    const secondResponse = await fetch(`${baseUrl}/api/v1/sales-invoices`, {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+    expect(secondResponse.status).toBe(200);
+    expect((await secondResponse.json()) as Array<{ invoiceNumber: string }>).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ invoiceNumber: "2026-0041" }),
+        expect.objectContaining({ invoiceNumber: "2026-0042" }),
+      ]),
+    );
   });
 
   it("ingests a document through the HTTP API and creates an expense", async () => {
