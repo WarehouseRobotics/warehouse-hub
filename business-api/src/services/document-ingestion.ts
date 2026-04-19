@@ -422,7 +422,7 @@ export async function ingestDocument(
     let linkedEntityType: string | null = null;
     let linkedEntityId: string | null = null;
 
-    if (input.kind === "expense_invoice") {
+    if (input.kind === "expense_invoice" || input.kind === "expense-invoice" || input.kind === "expense") {
       const supplier = resolvePartyContactId(
         "supplier",
         extracted.supplier,
@@ -458,7 +458,7 @@ export async function ingestDocument(
       linkedEntityId = expense.expenseId;
     }
 
-    if (input.kind === "sales_invoice") {
+    if (input.kind === "sales_invoice" || input.kind === "sales-invoice") {
       const customer = resolvePartyContactId(
         "customer",
         extracted.customer,
