@@ -148,7 +148,8 @@ export const structuredInvoiceJsonSchema = {
         required: ["net", "tax", "gross"]
       },
       taxLines: {
-        type: ["array", "null"],
+        type: "array",
+        description: "Array of tax lines, empty list if no tax lines are found",
         items: {
           type: "object",
           additionalProperties: false,
