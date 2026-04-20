@@ -7,7 +7,7 @@ Multi-project repository of the Warehouse Robotics Hub Solution - an agentic CRM
 The platform is composed of: 
 
 * Business API: foundational Business API that provides model abstraction for objects like users, companies, etc and deterministic (non-LLM) business logic operations, typical for any small business management software (in the `business-api` folder)
-* Dashboard: and configuration GUI webapp (in the `dashboard` folder, has a separate submodule repo)
+* Dashboard: configuration and management GUI webapp (in the `dashboard` folder, has a separate submodule repo) acting as a UI client for the business API
 * an internal team of agents running on OpenClaw (in the `openclaw` folder)
     * Agent team
         * Hub-developer agent that can extend the frontend bot system and make changes to the internal OpenClaw setup
@@ -25,7 +25,7 @@ The `docs` folder contains Markdown documentation for each platform component â€
 
 ## Shared Business Schemas
 
-Shared Zod schemas for business object contracts are stored in the repo-level package at `packages/business-schemas`.
+Shared Zod schemas for business object contracts (like invoices, expenses, contacts, tasks, etc.) are stored in the repo-level package at `packages/business-schemas`.
 
 Use this package when a business type schema must be shared between subprojects such as `business-api` and `dashboard`. Keep ORM-specific or backend-specific types inside the owning subproject.
 
@@ -60,3 +60,10 @@ During development, this commands must be run inside of the Docker container, vi
 The `business-api` uses `winston` for structured JSON logging. Operational logs from the API server, background processing, database fallback paths, and development scripts are emitted as JSON records and controlled with `LOG_LEVEL`.
 
 CLI command results still print their business payloads as JSON on stdout so they remain easy to pipe into other tools. Diagnostic logs are emitted separately via Winston.
+
+
+### Some Rules for Tests
+
+When writing tests:
+
+* Do not make existing required fields of objects nullable just to pass tests
