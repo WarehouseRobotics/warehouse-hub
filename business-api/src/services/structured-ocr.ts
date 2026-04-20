@@ -14,6 +14,7 @@ import {
   type StructuredPayroll,
 } from "../schemas/structured-payroll.js";
 import { logger } from "../lib/logger.js";
+import { logMessagesToStreamLogger } from "../logging/thread-logger.js";
 
 type StructuredOcrPage = {
   mediaType: string;
@@ -345,6 +346,30 @@ async function runStructuredExtraction<T>({
     });
   }
 
+  const messages = [
+    {
+      role: "system",
+      content: "## Your Task\n\nExtract structured document data from the supplied page images. The document can be an invoice, payroll slip, expense document, or contract piece depending on the requested schema. Respond with a JSON object that matches the provided schema. Add concise summary notes when helpful and preserve original labels in raw fields when the schema allows it.",
+    },
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: prompt,
+        },
+        ...pages.map((page) => ({
+          type: "image_url",
+          image_url: {
+            url: `data:${page.mediaType};base64,${page.data.toString("base64")}`,
+          },
+        })),
+      ],
+    },
+  ];
+
+  logMessagesToStreamLogger({ name: "structured-ocr", messages }).then(_ => {});
+
   const response = await fetch(`${provider.endpoint}/chat/completions`, {
     method: "POST",
     headers: {
@@ -353,27 +378,7 @@ async function runStructuredExtraction<T>({
     },
     body: JSON.stringify({
       model: provider.model_name,
-      messages: [
-        {
-          role: "system",
-          content: "## Your Task\n\nExtract structured document data from the supplied page images. The document can be an invoice, payroll slip, expense document, or contract piece depending on the requested schema. Respond with a JSON object that matches the provided schema. Add concise summary notes when helpful and preserve original labels in raw fields when the schema allows it.",
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: prompt,
-            },
-            ...pages.map((page) => ({
-              type: "image_url",
-              image_url: {
-                url: `data:${page.mediaType};base64,${page.data.toString("base64")}`,
-              },
-            })),
-          ],
-        },
-      ],
+      messages: messages,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -386,10 +391,16 @@ async function runStructuredExtraction<T>({
   });
 
   if (!response.ok) {
+    const body = await safeReadText(response);
     logger.error(`Structured OCR provider request failed with status ${response.status}`, {
       status: response.status,
-      body: await safeReadText(response),
+      body,
     });
+
+    logMessagesToStreamLogger({ name: "structured-ocr", messages: [{
+      role: "error",
+      content: `Structured OCR provider request failed with status ${response.status}. Response body: ${body}`,
+    }]}).then(_ => {});
     throw new AppError(`Structured OCR provider request failed with status ${response.status}`, {
       statusCode: 502,
       code: "structured_ocr_failed",
@@ -399,6 +410,11 @@ async function runStructuredExtraction<T>({
 
   const payload = chatCompletionResponseSchema.parse(await response.json());
   const message = getMessageContent(payload);
+
+  logMessagesToStreamLogger({ name: "structured-ocr", messages: [{
+    role: "assistant",
+    content: message,
+  }]}).then(_ => {});
 
   let parsedJson: unknown;
 
