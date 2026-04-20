@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Warehouse Hub · Tasks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/components.css"/>
+<style>
+  .tasks-layout { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: flex-start; }
+  .proj { padding: 8px 10px; border-radius: 4px; font-size: 13px; color: var(--ink-2); cursor: pointer; display:flex; align-items:center; justify-content:space-between; }
+  .proj:hover { background: var(--paper-2); color: var(--ink-1); }
+  .proj.active { background: var(--paper-3); color: var(--ink-1); font-weight: 500; }
+  .proj .k { font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); letter-spacing: 0.04em; }
+
+  .group-head { display:flex; align-items:center; gap: 8px; padding: 10px 0 6px; margin-top: 8px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+  .group-head .n { background: var(--paper-2); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--rule-1); font-size: 10px; }
+
+  .task {
+    display: grid; grid-template-columns: 24px 1fr 140px 100px 80px 20px;
+    gap: 12px; align-items: center; padding: 8px 12px;
+    border-bottom: 1px solid var(--rule-1); cursor: pointer;
+  }
+  .task:hover { background: var(--paper-2); }
+  .task .check {
+    width: 16px; height: 16px; border: 1.5px solid var(--rule-2); border-radius: 3px;
+    display: grid; place-items: center; color: var(--paper-0);
+  }
+  .task.done .check { background: var(--ember); border-color: var(--ember); }
+  .task.done .title { color: var(--ink-3); text-decoration: line-through; }
+  .task .title { font-size: 13.5px; color: var(--ink-1); letter-spacing: -0.005em; }
+  .task .proj-name { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); margin-top: 2px; letter-spacing: 0.04em; }
+  .task .assignee { display: flex; align-items: center; gap: 6px; }
+  .task .due { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2); letter-spacing: 0.04em; }
+  .task .due.today { color: var(--ember-ink); font-weight: 500; }
+  .task .due.past  { color: var(--danger); font-weight: 500; }
+
+  .pri { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+</style>
+</head><body>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel" src="assets/boot.jsx"></script>
+<script type="text/babel">
+const { useState } = React;
+
+function priorityDot(p) {
+  const c = p === 'high' ? 'var(--danger)' : p === 'med' ? 'oklch(72% 0.140 85)' : 'var(--ink-4)';
+  return <span className="pri" style={{ background: c }} title={p}></span>;
+}
+
+function Tasks() {
+  const [showDone, setShowDone] = useState(true);
+  const groups = {
+    'Today':     TASKS.filter(t => t.due === 'today' && t.status !== 'done'),
+    'This week': TASKS.filter(t => ['Wed','Thu','Fri'].includes(t.due) && t.status !== 'done'),
+    'Later':     TASKS.filter(t => t.due.startsWith('Apr ') && t.status !== 'done'),
+    'Done':      TASKS.filter(t => t.status === 'done'),
+  };
+  const projects = [
+    { name: 'All', count: TASKS.length, active: true },
+    { name: 'Internal / Finance', count: TASKS.filter(t => t.project.includes('Finance')).length },
+    { name: 'Port of Algeciras',  count: TASKS.filter(t => t.project.includes('Algeciras')).length },
+    { name: 'Acme Retail',        count: TASKS.filter(t => t.project.includes('Acme')).length },
+    { name: 'Kröger Logistik',    count: TASKS.filter(t => t.project.includes('Kröger')).length },
+    { name: 'Marketing',          count: TASKS.filter(t => t.project === 'Marketing').length },
+    { name: 'Internal',           count: TASKS.filter(t => t.project === 'Internal').length },
+  ];
+
+  return (
+    <AppShell active="tasks" crumbs={["Workspace","Tasks"]} agentPreset="advisor">
+      <div className="wh-page-head">
+        <div>
+          <div className="micro">Workspace · {TASKS.length} tasks · 6 assigned to agents</div>
+          <h1>Tasks</h1>
+          <div className="sub">Collaboration channel between you and the agent team</div>
+        </div>
+        <div className="wh-page-actions">
+          <div className="wh-segmented"><button className="on">List</button><button>Board</button><button>Timeline</button></div>
+          <button className="wh-btn primary"><I.plus/> New task</button>
+        </div>
+      </div>
+
+      <div className="tasks-layout">
+        <aside>
+          <div className="micro" style={{ padding: '0 10px 8px' }}>Projects</div>
+          {projects.map((p, i) => (
+            <div key={p.name} className={`proj ${i===0?'active':''}`}>
+              <span>{p.name}</span>
+              <span className="k">{p.count}</span>
+            </div>
+          ))}
+          <hr className="hr"/>
+          <div className="micro" style={{ padding: '0 10px 8px' }}>Assignees</div>
+          {[
+            { name: 'Patricia Ruiz', mark: 'PR', agent: false, n: 4 },
+            { name: 'Laura Mendes',  mark: 'LM', agent: false, n: 2 },
+            { name: 'Accounting',    mark: '€',  agent: true,  n: 3 },
+            { name: 'Advisor',       mark: '◆',  agent: true,  n: 1 },
+            { name: 'Marketing',     mark: '✦',  agent: true,  n: 1 },
+          ].map(a => (
+            <div key={a.name} className="proj" style={{ gap: 8 }}>
+              <div style={{ display:'flex', alignItems:'center', gap: 8 }}>
+                <div className={`wh-avatar ${a.agent?'agent':''}`} style={{ width: 20, height: 20, fontSize: 10 }}>{a.mark}</div>
+                <span>{a.name}</span>
+              </div>
+              <span className="k">{a.n}</span>
+            </div>
+          ))}
+        </aside>
+
+        <div>
+          <div className="wh-filterbar" style={{ marginBottom: 12 }}>
+            <div className="wh-input" style={{ width: 240 }}><I.search/><input placeholder="Search tasks…"/></div>
+            <div className="wh-btn sm">Priority <span style={{color:'var(--ink-3)',marginLeft:4}}>any</span> <I.chevD size={12}/></div>
+            <div className="wh-btn sm">Status <span style={{color:'var(--ink-3)',marginLeft:4}}>open</span> <I.chevD size={12}/></div>
+            <div className="wh-btn sm"><I.sort size={13}/> Sort <span style={{color:'var(--ink-3)',marginLeft:4}}>due</span></div>
+            <div className="spacer"/>
+            <button className={`wh-btn sm ${showDone?'':'ghost'}`} onClick={() => setShowDone(s=>!s)}>{showDone?'Hide done':'Show done'}</button>
+          </div>
+
+          <div className="wh-card" style={{ overflow: 'hidden' }}>
+            {Object.entries(groups).map(([name, items]) => {
+              if (name==='Done' && !showDone) return null;
+              if (!items.length) return null;
+              return (
+                <div key={name}>
+                  <div className="group-head" style={{ padding: '10px 16px', borderBottom: '1px solid var(--rule-1)', background: 'var(--paper-0)' }}>
+                    <span>{name}</span>
+                    <span className="n">{items.length}</span>
+                  </div>
+                  {items.map(t => {
+                    const isAgent = t.agent;
+                    const dueClass = t.due === 'today' ? 'today' : ['Wed','Thu'].includes(t.due) ? '' : '';
+                    return (
+                      <div key={t.id} className={`task ${t.status==='done'?'done':''}`}>
+                        <div className="check">{t.status==='done' && <I.check size={11} stroke={2.5}/>}</div>
+                        <div>
+                          <div className="title" style={{ display:'flex', alignItems:'center', gap:8 }}>
+                            {priorityDot(t.priority)}
+                            <span>{t.title}</span>
+                            {t.status === 'blocked' && <span className="wh-badge danger">blocked</span>}
+                            {t.status === 'doing'   && <span className="wh-badge info">doing</span>}
+                          </div>
+                          <div className="proj-name">{t.id} · {t.project}</div>
+                        </div>
+                        <div className="assignee">
+                          <div className={`wh-avatar ${isAgent?'agent':''}`} style={{ width: 20, height: 20, fontSize: 10 }}>
+                            {isAgent ? (t.assignee[0] === 'A' ? '€' : t.assignee[0] === 'M' ? '✦' : '◆') : t.assignee.split(' ').map(x=>x[0]).join('').slice(0,2)}
+                          </div>
+                          <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{t.assignee}</span>
+                        </div>
+                        <div className={`due ${dueClass}`}>
+                          {t.due === 'today' ? 'Today' : t.due}
+                        </div>
+                        <div>
+                          <span className="wh-badge">{t.project.split('/')[0].trim().slice(0,10)}</span>
+                        </div>
+                        <div><I.more size={14} style={{color:'var(--ink-3)'}}/></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Inline agent suggestion */}
+          <div style={{ marginTop: 16, padding: 14, background: 'var(--paper-1)', border: '1px solid var(--rule-1)', borderRadius: 8, display:'flex', gap: 12, alignItems:'center' }}>
+            <div className="wh-avatar agent">✦</div>
+            <div style={{ flex: 1, fontSize: 13 }}>
+              <span style={{ fontWeight: 500 }}>Marketing Agent</span> <span style={{ color: 'var(--ink-3)' }}>suggests</span> &nbsp;a task: <em style={{ fontStyle: 'normal', color: 'var(--ink-1)' }}>"Prepare post-workshop case study with Acme Retail"</em>
+            </div>
+            <button className="wh-btn ghost sm">Dismiss</button>
+            <button className="wh-btn sm">Add task</button>
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+mountApp(<Tasks/>);
+</script>
+</body></html>

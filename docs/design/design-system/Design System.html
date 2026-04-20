@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Warehouse Hub · Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/tokens.css" />
+<link rel="stylesheet" href="assets/components.css" />
+<style>
+  .ds-wrap { max-width: 1200px; margin: 0 auto; padding: 48px 32px 96px; }
+  .ds-top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 32px; border-bottom: 1px solid var(--rule-1); margin-bottom: 48px;
+  }
+  .ds-top .t-left { display: flex; align-items: center; gap: 16px; }
+  .ds-h1 { font-size: 42px; font-weight: 500; letter-spacing: -0.028em; margin: 0; line-height: 1; }
+  .ds-sub { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); letter-spacing: 0.04em; margin-top: 12px; }
+  .ds-section { margin: 56px 0; }
+  .ds-section > h2 {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 4px; font-weight: 500;
+  }
+  .ds-section > .shead {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+    padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid var(--rule-1);
+  }
+  .ds-section > .shead .title {
+    font-size: 24px; font-weight: 500; letter-spacing: -0.02em; margin-top: 6px;
+  }
+  .ds-section > .shead .desc { font-size: 13px; color: var(--ink-2); max-width: 540px; text-align: right; }
+
+  .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .swatch {
+    border: 1px solid var(--rule-1); border-radius: var(--r-3);
+    overflow: hidden; background: var(--paper-1);
+  }
+  .swatch .chip { height: 96px; }
+  .swatch .meta { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+  .swatch .name { font-size: 12.5px; font-weight: 500; }
+  .swatch .tok  { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.04em; }
+
+  .type-row {
+    display: grid; grid-template-columns: 200px 1fr 120px; gap: 24px; align-items: baseline;
+    padding: 18px 0; border-bottom: 1px solid var(--rule-1);
+  }
+  .type-row:last-child { border-bottom: 0; }
+  .type-row .spec { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; }
+  .type-row .usage { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); text-align: right; letter-spacing: 0.04em; }
+  .sample-display { font-size: 48px; font-weight: 500; letter-spacing: -0.028em; }
+  .sample-h1 { font-size: 32px; font-weight: 500; letter-spacing: -0.024em; }
+  .sample-h2 { font-size: 22px; font-weight: 500; letter-spacing: -0.018em; }
+  .sample-h3 { font-size: 16px; font-weight: 500; letter-spacing: -0.008em; }
+  .sample-body { font-size: 14px; }
+  .sample-small { font-size: 12px; color: var(--ink-2); }
+  .sample-micro { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+  .sample-num { font-family: var(--font-mono); font-size: 32px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+  .scale-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+  .scale-bar { height: 12px; background: var(--ember-soft); border: 1px solid var(--ember); border-radius: 2px; }
+  .scale-tok { width: 56px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+  .scale-val { width: 64px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
+
+  .preview-box {
+    padding: 24px; background: var(--paper-0); border: 1px solid var(--rule-1);
+    border-radius: var(--r-3); display: flex; flex-direction: column; gap: 16px;
+  }
+  .preview-box.inset { background: var(--paper-2); }
+
+  .brand-lock {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .brand-tile {
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--rule-1); border-radius: var(--r-3);
+    display: grid; place-items: center;
+    position: relative;
+  }
+  .brand-tile.inv { background: var(--paper-inv); }
+  .brand-tile .meta {
+    position: absolute; top: 10px; left: 12px;
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .brand-tile.inv .meta { color: oklch(70% 0.008 80); }
+
+  .radii { display: flex; gap: 16px; align-items: flex-end; }
+  .rad-chip {
+    background: var(--ember-soft);
+    border: 1px solid var(--ember);
+    width: 80px; height: 80px;
+    display: grid; place-items: end center; padding: 8px;
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--ember-ink);
+  }
+
+  .footer {
+    margin-top: 96px; padding-top: 24px; border-top: 1px solid var(--rule-1);
+    display: flex; justify-content: space-between;
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em;
+  }
+  .topnav {
+    display: flex; gap: 24px; font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+  }
+  .topnav a { color: var(--ink-3); padding: 4px 0; border-bottom: 1px solid transparent; }
+  .topnav a.here { color: var(--ink-1); border-bottom-color: var(--ember); }
+  .topnav a:hover { color: var(--ink-1); }
+</style>
+</head>
+<body>
+<div class="ds-wrap">
+  <header class="ds-top">
+    <div class="t-left">
+      <div id="mark-slot"></div>
+      <div>
+        <div class="sample-micro">Warehouse Hub · Design system</div>
+        <h1 class="ds-h1">Foundations <span style="color: var(--ink-3); font-weight: 400">/ v0.1</span></h1>
+        <div class="ds-sub">Tokens · type · color · spacing · core components</div>
+      </div>
+    </div>
+    <nav class="topnav">
+      <a href="index.html">Index</a>
+      <a class="here" href="Design System.html">System</a>
+      <a href="Overview.html">Overview</a>
+      <a href="Expenses.html">Expenses</a>
+      <a href="Invoices.html">Invoices</a>
+      <a href="Contacts.html">Contacts</a>
+      <a href="Pipeline.html">Pipeline</a>
+      <a href="Tasks.html">Tasks</a>
+      <a href="Onboarding.html">Onboarding</a>
+      <button id="theme-btn" class="wh-btn ghost sm" style="margin-left: 12px"></button>
+    </nav>
+  </header>
+
+  <!-- PRINCIPLES -->
+  <section class="ds-section">
+    <div class="shead">
+      <div>
+        <h2>01 · Principles</h2>
+        <div class="title">Swiss operational, warm and cozy</div>
+      </div>
+      <div class="desc">Paper-on-paper neutrals, hairline rules, one warm ember accent. Engineering precision at the grid, conversational softness at the edges. Built for humans & agents working the same book.</div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+      <div class="preview-box">
+        <div class="sample-micro">Precision</div>
+        <div style="font-size: 14px; color: var(--ink-1)">4px grid. Tabular numbers everywhere a value matters. Monospace for IDs, amounts, times. No ambiguity.</div>
+      </div>
+      <div class="preview-box">
+        <div class="sample-micro">Calm</div>
+        <div style="font-size: 14px; color: var(--ink-1)">Warm neutrals instead of cold slate. Shadows reserved for overlays. Motion under 200ms and purposeful.</div>
+      </div>
+      <div class="preview-box">
+        <div class="sample-micro">Agentic</div>
+        <div style="font-size: 14px; color: var(--ink-1)">Agents are first-class. Their activity is visible. Their tool calls are readable. Handoff to humans is obvious.</div>
+      </div>
+      <div class="preview-box">
+        <div class="sample-micro">Deterministic</div>
+        <div style="font-size: 14px; color: var(--ink-1)">Surface the state model. Status fields, audit trails, idempotency keys — out in the UI, not hidden.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BRAND -->
+  <section class="ds-section">
+    <div class="shead">
+      <div>
+        <h2>02 · Brand</h2>
+        <div class="title">Mark & lock-ups</div>
+      </div>
+      <div class="desc">The mark is an 8-bit microchip glyph. WR reads as initials; the pixel grid echoes the robotics heritage. Clearspace = one chip-unit on every side.</div>
+    </div>
+    <div class="brand-lock">
+      <div class="brand-tile">
+        <span class="meta">Mark · 40px</span>
+        <div id="mark-lg"></div>
+      </div>
+      <div class="brand-tile inv">
+        <span class="meta">Mark · reversed</span>
+        <div id="mark-lg-inv"></div>
+      </div>
+      <div class="brand-tile">
+        <span class="meta">Lockup</span>
+        <div id="lock-1" style="transform: scale(2); transform-origin: center;"></div>
+      </div>
+      <div class="brand-tile inv">
+        <span class="meta">Lockup · inverted</span>
+        <div id="lock-inv" style="transform: scale(2); transform-origin: center; color: var(--paper-0);"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLOR -->
+  <section class="ds-section">
+    <div class="shead">
+      <div>
+        <h2>03 · Color</h2>
+        <div class="title">Paper-on-paper with one ember</div>
+      </div>
+      <div class="desc">All tokens authored in oklch. Neutrals share hue ~80° (warm). Accents share chroma ~0.13 so semantic hues sit together without shouting.</div>
+    </div>
+
+    <div class="sample-micro" style="margin-bottom: 12px">Paper (surfaces)</div>
+    <div class="swatches" style="margin-bottom: 32px">
+      <div class="swatch"><div class="chip" style="background: var(--paper-0)"></div><div class="meta"><span class="name">Paper 0</span><span class="tok">--paper-0 · canvas</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--paper-1)"></div><div class="meta"><span class="name">Paper 1</span><span class="tok">--paper-1 · panel</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--paper-2)"></div><div class="meta"><span class="name">Paper 2</span><span class="tok">--paper-2 · hover</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--paper-3)"></div><div class="meta"><span class="name">Paper 3</span><span class="tok">--paper-3 · pressed</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--paper-inv)"></div><div class="meta"><span class="name">Paper inv</span><span class="tok">--paper-inv</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--ink-1)"></div><div class="meta"><span class="name">Ink 1</span><span class="tok">--ink-1 · body</span></div></div>
+    </div>
+
+    <div class="sample-micro" style="margin-bottom: 12px">Ink (text)</div>
+    <div class="swatches" style="margin-bottom: 32px">
+      <div class="swatch"><div class="chip" style="background: var(--ink-1)"></div><div class="meta"><span class="name">Ink 1</span><span class="tok">--ink-1 · primary</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--ink-2)"></div><div class="meta"><span class="name">Ink 2</span><span class="tok">--ink-2 · secondary</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--ink-3)"></div><div class="meta"><span class="name">Ink 3</span><span class="tok">--ink-3 · tertiary</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--ink-4)"></div><div class="meta"><span class="name">Ink 4</span><span class="tok">--ink-4 · disabled</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--rule-1)"></div><div class="meta"><span class="name">Rule 1</span><span class="tok">--rule-1 · hairline</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--rule-2)"></div><div class="meta"><span class="name">Rule 2</span><span class="tok">--rule-2 · stronger</span></div></div>
+    </div>
+
+    <div class="sample-micro" style="margin-bottom: 12px">Signal & semantic</div>
+    <div class="swatches">
+      <div class="swatch"><div class="chip" style="background: var(--ember)"></div><div class="meta"><span class="name">Ember</span><span class="tok">--ember · primary</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--ember-soft)"></div><div class="meta"><span class="name">Ember soft</span><span class="tok">--ember-soft</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--ok)"></div><div class="meta"><span class="name">OK</span><span class="tok">--ok</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--warn)"></div><div class="meta"><span class="name">Warn</span><span class="tok">--warn</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--danger)"></div><div class="meta"><span class="name">Danger</span><span class="tok">--danger</span></div></div>
+      <div class="swatch"><div class="chip" style="background: var(--info)"></div><div class="meta"><span class="name">Info</span><span class="tok">--info</span></div></div>
+    </div>
+  </section>
+
+  <!-- TYPOGRAPHY -->
+  <section class="ds-section">
+    <div class="shead">
+      <div>
+        <h2>04 · Typography</h2>
+        <div class="title">Inter Tight + IBM Plex Mono</div>
+      </div>
+      <div class="desc">Inter Tight for the voice, Plex Mono for the facts. Numbers are always tabular. Micro-labels are uppercase, monospace, tightly tracked — the system's signature.</div>
+    </div>
+
+    <div class="type-row">
+      <div class="spec">Display · 48 / 500</div>
+      <div class="sample-display">Run the books.</div>
+      <div class="usage">Hero / empty states</div>
+    </div>
+    <div class="type-row">
+      <div class="spec">H1 · 32 / 500</div>
+      <div class="sample-h1">Sales invoices — Q1 2026</div>
+      <div class="usage">Page titles</div>
+    </div>
+    <div class="type-row">
+      <div class="spec">H2 · 22 / 500</div>
+      <div class="sample-h2">Pipeline by stage</div>
+      <div class="usage">Section headers</div>
+    </div>
+    <div class="type-row">
+      <div class="spec">H3 · 16 / 500</div>
+      <div class="sample-h3">Open balance</div>
+      <div class="usage">Card titles</div>
+    </div>
+    <div class="type-row">
+      <div class="spec">Body · 14 / 400</div>
+      <div class="sample-body">Agents use the foundational Business API to query and manage objects on your behalf, with every call written to the audit log.</div>
+      <div class="usage">Primary reading size</div>
+    </div>
+    <div class="type-row">
+      <div class="spec">Small · 12 / 400</div>
+      <div class="sample-small">Generated from deal_000072 on 2026‑04‑02</div>
+      <div class="usage">Meta, hints</div>
+    </div>
+    <div class="type-row">
+      <div class="spec">Micro · 10.5 / mono</div>
+      <div class="sample-micro">Supplier · VAT · Office supplies</div>
+      <div class="usage">Labels, kickers</div>
+    </div>
+    <div class="type-row">
+      <div class="spec">Numeric · mono tabular</div>
+      <div class="sample-num">€ 13,794.00</div>
+      <div class="usage">Amounts & IDs</div>
+    </div>
+  </section>
+
+  <!-- SPACING -->
+  <section class="ds-section">
+    <div class="shead">
+      <div>
+        <h2>05 · Spacing & radii</h2>
+        <div class="title">4px grid, sparing curvature</div>
+      </div>
+      <div class="desc">Everything snaps to 4. Radii stay tight (2–6px) — a soft chamfer, not a rounded pill, except avatars and toggles.</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 48px;">
+      <div>
+        <div class="sample-micro" style="margin-bottom: 12px">Scale</div>
+        <div class="scale-row"><span class="scale-tok">s-0</span> <div class="scale-bar" style="width: 2px"></div> <span class="scale-val">2px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-1</span> <div class="scale-bar" style="width: 4px"></div> <span class="scale-val">4px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-2</span> <div class="scale-bar" style="width: 6px"></div> <span class="scale-val">6px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-3</span> <div class="scale-bar" style="width: 8px"></div> <span class="scale-val">8px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-4</span> <div class="scale-bar" style="width: 12px"></div> <span class="scale-val">12px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-5</span> <div class="scale-bar" style="width: 16px"></div> <span class="scale-val">16px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-6</span> <div class="scale-bar" style="width: 20px"></div> <span class="scale-val">20px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-7</span> <div class="scale-bar" style="width: 24px"></div> <span class="scale-val">24px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-8</span> <div class="scale-bar" style="width: 32px"></div> <span class="scale-val">32px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-9</span> <div class="scale-bar" style="width: 48px"></div> <span class="scale-val">48px</span></div>
+        <div class="scale-row"><span class="scale-tok">s-10</span> <div class="scale-bar" style="width: 64px"></div> <span class="scale-val">64px</span></div>
+      </div>
+      <div>
+        <div class="sample-micro" style="margin-bottom: 12px">Radii</div>
+        <div class="radii">
+          <div class="rad-chip" style="border-radius: 0">0</div>
+          <div class="rad-chip" style="border-radius: 2px">2</div>
+          <div class="rad-chip" style="border-radius: 4px">4</div>
+          <div class="rad-chip" style="border-radius: 6px">6</div>
+          <div class="rad-chip" style="border-radius: 10px">10</div>
+          <div class="rad-chip" style="border-radius: 999px">full</div>
+        </div>
+        <div class="sample-micro" style="margin: 40px 0 12px">Elevation</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+          <div class="preview-box" style="box-shadow: var(--shadow-flat)"><div class="sample-small">Flat · hairline</div><div style="font-size: 12px; color: var(--ink-3); font-family: var(--font-mono)">--shadow-flat</div></div>
+          <div class="preview-box" style="box-shadow: var(--shadow-pop)"><div class="sample-small">Pop · overlay / menu</div><div style="font-size: 12px; color: var(--ink-3); font-family: var(--font-mono)">--shadow-pop</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPONENTS -->
+  <section class="ds-section">
+    <div class="shead">
+      <div>
+        <h2>06 · Core components</h2>
+        <div class="title">The pieces every page is built from</div>
+      </div>
+      <div class="desc">Buttons, inputs, badges, tabs, tables, KPIs, the agent dock. A small, well-fitted set — templates compose, they don't redesign.</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+      <!-- Buttons -->
+      <div>
+        <div class="sample-micro" style="margin-bottom: 12px">Buttons</div>
+        <div class="preview-box">
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+            <button class="wh-btn primary"><span>✚</span> New invoice</button>
+            <button class="wh-btn">Save draft</button>
+            <button class="wh-btn ghost">Cancel</button>
+            <button class="wh-btn danger">Delete</button>
+            <button class="wh-btn" disabled>Disabled</button>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center">
+            <div class="wh-btn-group">
+              <button class="wh-btn sm on">Table</button>
+              <button class="wh-btn sm">Board</button>
+              <button class="wh-btn sm">List</button>
+            </div>
+            <div class="wh-segmented">
+              <button class="on">All</button>
+              <button>Open</button>
+              <button>Closed</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inputs -->
+      <div>
+        <div class="sample-micro" style="margin-bottom: 12px">Inputs & fields</div>
+        <div class="preview-box">
+          <div class="wh-field">
+            <label>Legal name</label>
+            <div class="wh-input"><input placeholder="Northwind Robotics SL" value="Northwind Robotics SL"/></div>
+          </div>
+          <div class="wh-field">
+            <label>Tax ID</label>
+            <div class="wh-input"><span class="mono" style="color: var(--ink-3); font-size: 12px">ES</span><input placeholder="B12345678" value="B12345678"/></div>
+            <div class="hint">Spanish NIF/CIF, validated by the API.</div>
+          </div>
+          <div class="wh-field">
+            <label>Currency</label>
+            <div class="wh-input"><select><option>EUR · €</option><option>USD · $</option><option>GBP · £</option></select></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Badges -->
+      <div>
+        <div class="sample-micro" style="margin-bottom: 12px">Badges & statuses</div>
+        <div class="preview-box">
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <span class="wh-badge"><span class="dot"></span>draft</span>
+            <span class="wh-badge info"><span class="dot"></span>sent</span>
+            <span class="wh-badge ok"><span class="dot"></span>paid</span>
+            <span class="wh-badge warn"><span class="dot"></span>review</span>
+            <span class="wh-badge danger"><span class="dot"></span>overdue</span>
+            <span class="wh-badge ember"><span class="dot"></span>agent</span>
+            <span class="wh-badge solid"><span class="dot"></span>owned</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <span class="wh-badge">customer</span>
+            <span class="wh-badge">supplier</span>
+            <span class="wh-badge">both</span>
+            <span class="wh-badge">priority</span>
+            <span class="wh-badge">q2-target</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Avatars -->
+      <div>
+        <div class="sample-micro" style="margin-bottom: 12px">Avatars & marks</div>
+        <div class="preview-box">
+          <div style="display: flex; gap: 8px; align-items: center">
+            <div class="wh-avatar">PR</div>
+            <div class="wh-avatar">LM</div>
+            <div class="wh-avatar lg">PR</div>
+            <div class="wh-avatar xl">PR</div>
+            <div class="wh-avatar agent xl">€</div>
+            <div class="wh-avatar agent xl">◆</div>
+            <div class="wh-avatar agent xl">✦</div>
+          </div>
+          <div class="sample-small" style="color: var(--ink-3)">Humans take initials. Agents take a single glyph — € accounting, ◆ advisor, ✦ marketing, ▲ hub-developer.</div>
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div style="grid-column: span 2">
+        <div class="sample-micro" style="margin-bottom: 12px">KPI cards</div>
+        <div class="grid-4">
+          <div class="wh-kpi">
+            <div class="k-label">MRR</div>
+            <div class="k-value">€ 28.4k</div>
+            <div class="k-delta">▲ 6.2% · 30d</div>
+            <div id="spark1"></div>
+          </div>
+          <div class="wh-kpi">
+            <div class="k-label">Outstanding</div>
+            <div class="k-value">€ 16.5k</div>
+            <div class="k-delta down">▼ 3 invoices</div>
+            <div id="spark2"></div>
+          </div>
+          <div class="wh-kpi">
+            <div class="k-label">Runway</div>
+            <div class="k-value">18.4<span style="font-size: 14px; color: var(--ink-3); margin-left: 6px">mo</span></div>
+            <div class="k-delta">▲ 0.3 · vs last</div>
+            <div id="spark3"></div>
+          </div>
+          <div class="wh-kpi">
+            <div class="k-label">Agent actions</div>
+            <div class="k-value">214</div>
+            <div class="k-delta">this week</div>
+            <div id="spark4"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div style="grid-column: span 2">
+        <div class="sample-micro" style="margin-bottom: 12px">Data table</div>
+        <div class="wh-card" style="overflow: hidden">
+          <table class="wh-table">
+            <thead>
+              <tr>
+                <th style="width: 40px"></th>
+                <th>ID</th>
+                <th>Customer</th>
+                <th>Project</th>
+                <th class="num">Gross</th>
+                <th>Status</th>
+                <th>Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="selected"><td><div class="wh-avatar">A</div></td><td class="id">sinv_000041</td><td>Acme Retail GmbH</td><td>Warehouse audit &amp; automation</td><td class="num">€ 1,815.00</td><td><span class="wh-badge info"><span class="dot"></span>sent</span></td><td class="mono">2026-05-02</td></tr>
+              <tr><td><div class="wh-avatar">L</div></td><td class="id">sinv_000040</td><td>Lumafield SL</td><td>Q2 retainer · March</td><td class="num">€ 4,840.00</td><td><span class="wh-badge ok"><span class="dot"></span>paid</span></td><td class="mono">2026-04-29</td></tr>
+              <tr><td><div class="wh-avatar">P</div></td><td class="id">sinv_000038</td><td>Port of Algeciras</td><td>AGV fleet readiness</td><td class="num">€ 13,794.00</td><td><span class="wh-badge danger"><span class="dot"></span>overdue</span></td><td class="mono">2026-04-17</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tabs + Filter -->
+      <div>
+        <div class="sample-micro" style="margin-bottom: 12px">Tabs</div>
+        <div class="preview-box">
+          <div class="wh-tabs">
+            <div class="wh-tab active">Detail<span class="count">·</span></div>
+            <div class="wh-tab">Related<span class="count">4</span></div>
+            <div class="wh-tab">Documents<span class="count">2</span></div>
+            <div class="wh-tab">Timeline<span class="count">11</span></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="sample-micro" style="margin-bottom: 12px">Filter bar</div>
+        <div class="wh-filterbar">
+          <div class="wh-input" style="width: 200px"><input placeholder="Search supplier, ID…" /></div>
+          <div class="wh-btn sm">Status <span style="color: var(--ink-3); margin-left: 4px">all</span></div>
+          <div class="wh-btn sm">Category <span style="color: var(--ink-3); margin-left: 4px">any</span></div>
+          <div class="spacer"></div>
+          <div class="wh-btn sm ghost">Reset</div>
+        </div>
+      </div>
+
+      <!-- Agent preview -->
+      <div style="grid-column: span 2">
+        <div class="sample-micro" style="margin-bottom: 12px">Agent dock · activity + tool calls</div>
+        <div style="display: grid; grid-template-columns: 1fr 320px; border: 1px solid var(--rule-1); border-radius: var(--r-3); overflow: hidden; min-height: 360px">
+          <div style="padding: 24px; background: var(--paper-0); display: flex; flex-direction: column; gap: 12px">
+            <div class="sample-small" style="color: var(--ink-3)">Page content</div>
+            <div class="sample-h3">Expense exp_000118</div>
+            <div class="sample-body">Supplier Papelería Centro SL · €145.20 · recorded by Accounting Agent · OCR pending.</div>
+            <div style="display: flex; gap: 8px; margin-top: auto">
+              <button class="wh-btn primary sm">Approve</button>
+              <button class="wh-btn sm">Review document</button>
+            </div>
+          </div>
+          <div id="agent-preview" style="border-left: 1px solid var(--rule-1)"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MOTION -->
+  <section class="ds-section">
+    <div class="shead">
+      <div>
+        <h2>07 · Motion</h2>
+        <div class="title">Short, confident, purposeful</div>
+      </div>
+      <div class="desc">Three durations, two easings. Use motion to confirm state changes (toggle, selection, optimistic updates) — never decoratively.</div>
+    </div>
+    <div class="grid-3">
+      <div class="preview-box">
+        <div class="sample-micro">Dur-1 · 120ms</div>
+        <div class="sample-h3">Hover, focus, pressed</div>
+        <div class="sample-small" style="color: var(--ink-3)">Tactile. Confirms the cursor.</div>
+      </div>
+      <div class="preview-box">
+        <div class="sample-micro">Dur-2 · 200ms</div>
+        <div class="sample-h3">Tab switch, toast enter</div>
+        <div class="sample-small" style="color: var(--ink-3)">Structural. Confirms the view.</div>
+      </div>
+      <div class="preview-box">
+        <div class="sample-micro">Dur-3 · 320ms</div>
+        <div class="sample-h3">Drawer, agent dock</div>
+        <div class="sample-small" style="color: var(--ink-3)">Spatial. Confirms the layout.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span>Warehouse Hub · foundations · v0.1 · 2026-04-20</span>
+    <span>Inter Tight · IBM Plex Mono · oklch tokens</span>
+  </footer>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel">
+const { createRoot } = ReactDOM;
+
+function mount(id, node) {
+  const el = document.getElementById(id);
+  if (el) createRoot(el).render(node);
+}
+
+function DS() {
+  const [dark, toggle] = useTheme();
+  React.useEffect(() => {
+    const btn = document.getElementById("theme-btn");
+    if (!btn) return;
+    const render = () => {
+      btn.innerHTML = "";
+      btn.append(Object.assign(document.createElement("span"), { textContent: document.documentElement.classList.contains("dark") ? "☼ Light" : "☾ Dark" }));
+    };
+    render();
+    btn.onclick = () => { toggle(); setTimeout(render, 10); };
+  }, []);
+  return null;
+}
+
+mount("mark-slot", <WRMark size={44} />);
+mount("mark-lg",    <WRMark size={96} />);
+mount("mark-lg-inv", <div style={{ filter: "invert(1) hue-rotate(180deg)" }}><WRMark size={96} /></div>);
+mount("lock-1",     <WRWordmark size={20} />);
+mount("lock-inv",   <div style={{ color: 'var(--paper-0)', filter: "invert(1) hue-rotate(180deg)" }}><WRWordmark size={20} /></div>);
+
+const d1 = [3,4,4,5,6,5,7,8,7,9,10,11];
+const d2 = [11,10,9,10,8,8,7,6,6,5,5,4];
+const d3 = [6,6,7,7,7,8,8,8,9,9,9,10];
+const d4 = [2,3,3,5,6,8,7,9,10,12,13,14];
+mount("spark1", <Spark data={d1} />);
+mount("spark2", <Spark data={d2} />);
+mount("spark3", <Spark data={d3} />);
+mount("spark4", <Spark data={d4} />);
+mount("agent-preview", <AgentDock preset="accounting" />);
+
+mount("ds-theme", <DS />);
+
+// theme toggle wired manually for this page
+const tb = document.getElementById("theme-btn");
+const render = () => tb.textContent = document.documentElement.classList.contains("dark") ? "☼ Light" : "☾ Dark";
+render();
+tb.onclick = () => {
+  const dark = !document.documentElement.classList.contains("dark");
+  document.documentElement.classList.toggle("dark", dark);
+  try { localStorage.setItem("wh-theme", dark ? "dark" : "light"); } catch {}
+  render();
+};
+try { if (localStorage.getItem("wh-theme") === "dark") { document.documentElement.classList.add("dark"); render(); } } catch {}
+</script>
+</body>
+</html>

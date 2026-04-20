@@ -1,0 +1,146 @@
+/* Warehouse Hub — design tokens */
+/* Paper-on-paper warm neutrals + single amber signal. All colors via oklch. */
+
+:root {
+  /* --- SURFACES (light) --- */
+  --paper-0: oklch(98.8% 0.008 85);     /* canvas: warm bone */
+  --paper-1: oklch(96.8% 0.010 85);     /* card / panel */
+  --paper-2: oklch(94.6% 0.012 85);     /* sunken / hover */
+  --paper-3: oklch(91.5% 0.014 85);     /* pressed / active row */
+  --paper-inv: oklch(22% 0.010 70);
+
+  /* --- INK (light) --- */
+  --ink-1: oklch(22% 0.012 70);         /* primary text */
+  --ink-2: oklch(42% 0.010 75);         /* secondary */
+  --ink-3: oklch(58% 0.008 80);         /* tertiary / labels */
+  --ink-4: oklch(72% 0.006 80);         /* disabled / placeholder */
+
+  /* --- BORDER (light) --- */
+  --rule-1: oklch(88% 0.010 80);        /* hairline */
+  --rule-2: oklch(82% 0.012 80);        /* stronger */
+  --rule-strong: oklch(35% 0.010 75);
+
+  /* --- SIGNAL (shared across modes) --- */
+  --ember: oklch(66% 0.155 55);          /* amber/ember — primary accent */
+  --ember-soft: oklch(92% 0.050 70);
+  --ember-ink: oklch(38% 0.130 50);
+  --ember-contrast: oklch(18% 0.060 50);
+
+  /* --- SEMANTIC (shared chroma) --- */
+  --ok:    oklch(62% 0.120 145);
+  --ok-soft: oklch(93% 0.045 145);
+  --warn:  oklch(72% 0.140 85);
+  --warn-soft: oklch(94% 0.050 85);
+  --danger: oklch(58% 0.155 25);
+  --danger-soft: oklch(93% 0.050 25);
+  --info:  oklch(60% 0.110 230);
+  --info-soft: oklch(94% 0.035 230);
+
+  /* --- TYPE --- */
+  --font-sans: "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-display: "Inter Tight", var(--font-sans);
+
+  /* --- SCALE (4px base, density 7) --- */
+  --s-0: 2px;
+  --s-1: 4px;
+  --s-2: 6px;
+  --s-3: 8px;
+  --s-4: 12px;
+  --s-5: 16px;
+  --s-6: 20px;
+  --s-7: 24px;
+  --s-8: 32px;
+  --s-9: 48px;
+  --s-10: 64px;
+
+  /* --- RADIUS --- */
+  --r-0: 0;
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-3: 6px;
+  --r-4: 10px;
+  --r-full: 999px;
+
+  /* --- ELEVATION --- */
+  --shadow-pop: 0 0.5px 0 oklch(20% 0.010 70 / 0.04), 0 2px 6px oklch(20% 0.010 70 / 0.04), 0 10px 28px oklch(20% 0.010 70 / 0.08);
+  --shadow-flat: 0 0.5px 0 oklch(20% 0.010 70 / 0.05);
+
+  /* --- MOTION --- */
+  --ease-out: cubic-bezier(.22,.61,.36,1);
+  --ease-inout: cubic-bezier(.65,.05,.36,1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+}
+
+/* --- DARK MODE: warm charcoal, not slate --- */
+html.dark {
+  --paper-0: oklch(17% 0.008 70);
+  --paper-1: oklch(20% 0.008 70);
+  --paper-2: oklch(23.5% 0.009 70);
+  --paper-3: oklch(27% 0.010 70);
+  --paper-inv: oklch(95% 0.012 85);
+
+  --ink-1: oklch(94% 0.010 80);
+  --ink-2: oklch(76% 0.010 80);
+  --ink-3: oklch(60% 0.010 80);
+  --ink-4: oklch(45% 0.008 80);
+
+  --rule-1: oklch(30% 0.010 70);
+  --rule-2: oklch(36% 0.012 70);
+  --rule-strong: oklch(70% 0.010 70);
+
+  --ember: oklch(74% 0.160 55);
+  --ember-soft: oklch(30% 0.060 55);
+  --ember-ink: oklch(85% 0.140 60);
+  --ember-contrast: oklch(18% 0.060 50);
+
+  --ok-soft:    oklch(28% 0.060 145);
+  --warn-soft:  oklch(30% 0.075 85);
+  --danger-soft: oklch(30% 0.075 25);
+  --info-soft:  oklch(28% 0.055 230);
+
+  --shadow-pop: 0 0.5px 0 oklch(0% 0 0 / 0.5), 0 4px 10px oklch(0% 0 0 / 0.35), 0 16px 40px oklch(0% 0 0 / 0.45);
+  --shadow-flat: 0 0.5px 0 oklch(0% 0 0 / 0.4);
+}
+
+/* --- RESETS --- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  color: var(--ink-1);
+  background: var(--paper-0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11", "calt";
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+img, svg { display: block; max-width: 100%; }
+::selection { background: var(--ember-soft); color: var(--ember-contrast); }
+
+/* --- UTILITIES --- */
+.mono { font-family: var(--font-mono); font-feature-settings: "zero", "ss01"; letter-spacing: -0.01em; }
+.num  { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.tight { letter-spacing: -0.018em; }
+.micro {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.label-kicker {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.hairline { border: 1px solid var(--rule-1); }
+.hairline-strong { border: 1px solid var(--rule-2); }

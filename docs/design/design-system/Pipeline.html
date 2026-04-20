@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Warehouse Hub · Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/components.css"/>
+<style>
+  .kanban { display: grid; grid-template-columns: repeat(5, minmax(240px, 1fr)); gap: 12px; }
+  .col { background: var(--paper-1); border: 1px solid var(--rule-1); border-radius: 8px; display: flex; flex-direction: column; min-height: 560px; overflow: hidden; }
+  .col-h { display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; border-bottom: 1px solid var(--rule-1); }
+  .col-h .t { display:flex; align-items:center; gap: 8px; font-size: 13px; font-weight: 500; }
+  .col-h .count { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.08em; }
+  .col-h .stripe { width: 3px; height: 14px; border-radius: 1px; }
+  .col-h .sum { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow: auto; flex: 1; }
+  .deal {
+    background: var(--paper-0); border: 1px solid var(--rule-1); border-radius: 6px;
+    padding: 12px; display: flex; flex-direction: column; gap: 8px;
+    cursor: grab;
+  }
+  .deal:hover { border-color: var(--rule-2); }
+  .deal.ghost { border-style: dashed; opacity: 0.6; }
+  .deal .title { font-size: 13px; font-weight: 500; line-height: 1.3; letter-spacing: -0.005em; }
+  .deal .cust { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.04em; }
+  .deal .row { display:flex; align-items:center; justify-content: space-between; }
+  .deal .val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 500; }
+  .deal .meta { display:flex; align-items:center; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.04em; }
+
+  .bar { height: 2px; background: var(--paper-3); border-radius: 2px; overflow: hidden; }
+  .bar .f { height: 100%; background: var(--ember); }
+
+  .add-deal { padding: 8px 10px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); background: transparent; border: 1px dashed var(--rule-2); border-radius: 4px; cursor: pointer; letter-spacing: 0.04em; }
+  .add-deal:hover { color: var(--ember-ink); border-color: var(--ember); }
+</style>
+</head><body>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel" src="assets/boot.jsx"></script>
+<script type="text/babel">
+const STAGES = [
+  { id: 'lead',        label: 'Lead',         stripe: 'var(--ink-4)',   prob: 10 },
+  { id: 'qualified',   label: 'Qualified',    stripe: 'var(--info)',    prob: 30 },
+  { id: 'proposal',    label: 'Proposal',     stripe: 'var(--ember)',   prob: 55 },
+  { id: 'negotiation', label: 'Negotiation',  stripe: 'oklch(72% 0.140 85)', prob: 75 },
+  { id: 'won',         label: 'Won',          stripe: 'var(--ok)',      prob: 100 },
+];
+
+function Pipeline() {
+  const byStage = Object.fromEntries(STAGES.map(s => [s.id, DEALS.filter(d => d.stage === s.id)]));
+  const totalValue = DEALS.reduce((s, d) => s + Number(d.value), 0);
+
+  return (
+    <AppShell active="deals" crumbs={["CRM","Pipeline"]} agentPreset="advisor">
+      <div className="wh-page-head">
+        <div>
+          <div className="micro">CRM · Deals · Q2 forecast</div>
+          <h1>Pipeline</h1>
+          <div className="sub">{DEALS.length} open deals · {fmtShort(totalValue)} weighted · 2 closing this week</div>
+        </div>
+        <div className="wh-page-actions">
+          <div className="wh-segmented">
+            <button className="on">Board</button><button>Table</button><button>Forecast</button>
+          </div>
+          <button className="wh-btn"><I.filter size={13}/> Filter</button>
+          <button className="wh-btn primary"><I.plus/> New deal</button>
+        </div>
+      </div>
+
+      {/* Forecast strip */}
+      <div className="wh-card" style={{ marginBottom: 16 }}>
+        <div className="wh-card-body" style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:0, padding:0 }}>
+          {STAGES.map((s, i) => {
+            const deals = byStage[s.id];
+            const v = deals.reduce((a,d)=>a+Number(d.value),0);
+            const weighted = v * s.prob / 100;
+            return (
+              <div key={s.id} style={{ padding:'14px 16px', borderRight: i<4?'1px solid var(--rule-1)':'0', display:'flex', flexDirection:'column', gap:6 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ width: 8, height: 8, background: s.stripe, borderRadius: 1 }}></span>
+                  <span className="micro">{s.label} · p{s.prob}</span>
+                </div>
+                <div className="num" style={{ fontSize: 20, fontWeight: 500 }}>{fmtShort(v)}</div>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>weighted {fmtShort(weighted)} · {deals.length} deal{deals.length!==1?'s':''}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="kanban">
+        {STAGES.map(s => {
+          const deals = byStage[s.id];
+          const total = deals.reduce((a,d)=>a+Number(d.value), 0);
+          return (
+            <div key={s.id} className="col">
+              <div className="col-h">
+                <div className="t">
+                  <span className="stripe" style={{ background: s.stripe }}></span>
+                  <span>{s.label}</span>
+                  <span className="count">{deals.length}</span>
+                </div>
+                <div className="sum">{fmtShort(total)}</div>
+              </div>
+              <div className="cards">
+                {deals.map(d => {
+                  const stagePct = (STAGES.findIndex(x=>x.id===s.id) + 1) / STAGES.length * 100;
+                  return (
+                    <div key={d.id} className="deal">
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap: 8 }}>
+                        <div className="title">{d.title}</div>
+                        {d.age <= 3 && <span className="wh-badge ember">new</span>}
+                      </div>
+                      <div className="cust">{d.customer}</div>
+                      <div className="bar"><div className="f" style={{ width: stagePct + '%' }}></div></div>
+                      <div className="row">
+                        <span className="val">{fmtEUR(d.value)}</span>
+                        <div className="meta">
+                          <div className="wh-avatar" style={{ width: 18, height: 18, fontSize: 9 }}>{d.owner}</div>
+                          <span>{d.close.slice(5)}</span>
+                        </div>
+                      </div>
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.06em' }}>{d.id}</div>
+                    </div>
+                  );
+                })}
+                <button className="add-deal">+ Add deal</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Agent suggestion */}
+      <div style={{ marginTop: 20, padding: 16, background: 'var(--paper-1)', border: '1px dashed var(--ember)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div className="wh-avatar agent xl">◆</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Advisor Agent · forecast note</div>
+          <div style={{ fontSize: 13, color: 'var(--ink-2)' }}>Two proposal-stage deals ({fmtShort(27400)}) are older than 14 days. Want me to draft nudge emails and schedule reviews?</div>
+        </div>
+        <button className="wh-btn">Later</button>
+        <button className="wh-btn primary">Draft nudges</button>
+      </div>
+    </AppShell>
+  );
+}
+mountApp(<Pipeline/>);
+</script>
+</body></html>

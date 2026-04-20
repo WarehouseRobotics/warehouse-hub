@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Warehouse Hub · Contacts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/components.css"/>
+<style>
+  .contacts-layout { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: flex-start; }
+  .c-card { padding: 16px; background: var(--paper-1); border: 1px solid var(--rule-1); border-radius: 8px; display:flex; flex-direction:column; gap: 12px; position: relative; cursor: pointer; }
+  .c-card:hover { border-color: var(--rule-2); }
+  .c-card.sel { border-color: var(--ember); box-shadow: 0 0 0 3px var(--ember-soft); }
+  .c-card .hdr { display:flex; gap:10px; align-items:flex-start; }
+  .c-card .mk { width: 36px; height: 36px; background: var(--paper-3); color: var(--ink-1); border-radius: 6px; display:grid; place-items:center; font-weight:500; border: 1px solid var(--rule-1); }
+  .c-card h4 { margin:0; font-size: 14px; font-weight: 500; letter-spacing: -0.005em; }
+  .c-card .sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.04em; }
+  .c-card .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 12px; color: var(--ink-2); }
+  .c-card .kv .k { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+  .c-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .c-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+
+  .panel { position: sticky; top: 64px; }
+  .map-placeholder {
+    height: 160px; border-radius: 6px; overflow: hidden; position: relative;
+    background:
+      radial-gradient(circle at 40% 40%, var(--ember-soft) 0 2px, transparent 3px),
+      radial-gradient(circle at 70% 30%, var(--ember-soft) 0 2px, transparent 3px),
+      radial-gradient(circle at 55% 65%, var(--ember-soft) 0 2px, transparent 3px),
+      repeating-linear-gradient(0deg, var(--rule-1) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(90deg, var(--rule-1) 0 1px, transparent 1px 28px),
+      var(--paper-0);
+    border: 1px solid var(--rule-1);
+  }
+  .map-pin { position: absolute; width: 10px; height: 10px; border-radius: 999px; background: var(--ember); border: 2px solid var(--paper-1); box-shadow: 0 0 0 3px var(--ember-soft); }
+</style>
+</head><body>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel" src="assets/boot.jsx"></script>
+<script type="text/babel">
+const { useState } = React;
+function roleBadge(role) {
+  if (role === 'customer') return <span className="wh-badge info"><span className="dot"/>customer</span>;
+  if (role === 'supplier') return <span className="wh-badge ember"><span className="dot"/>supplier</span>;
+  return <span className="wh-badge"><span className="dot"/>both</span>;
+}
+
+function Contacts() {
+  const [tab, setTab] = useState('all');
+  const [selId, setSelId] = useState('ct_000245');
+  const filtered = CONTACTS.filter(c => tab==='all' || c.role === tab || (tab==='customer' && c.role==='both') || (tab==='supplier' && c.role==='both'));
+  const sel = CONTACTS.find(c => c.id === selId) || CONTACTS[0];
+
+  return (
+    <AppShell active="contacts" crumbs={["CRM","Contacts"]} agentPreset="advisor">
+      <div className="wh-page-head">
+        <div>
+          <div className="micro">CRM · Registry</div>
+          <h1>Contacts</h1>
+          <div className="sub">{CONTACTS.length} companies · shared registry across sales &amp; accounting</div>
+        </div>
+        <div className="wh-page-actions">
+          <button className="wh-btn"><I.upload/> Import CSV</button>
+          <button className="wh-btn primary"><I.plus/> New contact</button>
+        </div>
+      </div>
+
+      <div className="wh-tabs" style={{ marginBottom: 16 }}>
+        <div className={`wh-tab ${tab==='all'?'active':''}`} onClick={() => setTab('all')}>All<span className="count">{CONTACTS.length}</span></div>
+        <div className={`wh-tab ${tab==='customer'?'active':''}`} onClick={() => setTab('customer')}>Customers<span className="count">{CONTACTS.filter(c=>c.role==='customer'||c.role==='both').length}</span></div>
+        <div className={`wh-tab ${tab==='supplier'?'active':''}`} onClick={() => setTab('supplier')}>Suppliers<span className="count">{CONTACTS.filter(c=>c.role==='supplier'||c.role==='both').length}</span></div>
+        <div className={`wh-tab ${tab==='leads'?'active':''}`} onClick={() => setTab('leads')}>Leads<span className="count">4</span></div>
+      </div>
+
+      <div className="wh-filterbar" style={{ marginBottom: 16 }}>
+        <div className="wh-input" style={{ width: 260 }}><I.search/><input placeholder="Search contacts by name, tax ID, tag…"/></div>
+        <div className="wh-btn sm">Country <span style={{color:'var(--ink-3)',marginLeft:4}}>all</span> <I.chevD size={12}/></div>
+        <div className="wh-btn sm">Tags <span style={{color:'var(--ink-3)',marginLeft:4}}>any</span> <I.chevD size={12}/></div>
+        <div className="wh-btn sm">Open balance <span style={{color:'var(--ink-3)',marginLeft:4}}>&gt; 0</span> <I.chevD size={12}/></div>
+        <div className="spacer"/>
+        <div className="wh-segmented"><button className="on">Cards</button><button>Table</button></div>
+      </div>
+
+      <div className="contacts-layout">
+        <div className="c-grid">
+          {filtered.map(c => (
+            <div key={c.id} className={`c-card ${c.id===selId?'sel':''}`} onClick={() => setSelId(c.id)}>
+              <div className="hdr">
+                <div className="mk">{c.name[0]}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h4>{c.name}</h4>
+                  <div className="sub">{c.id} · {c.country} · {c.city}</div>
+                </div>
+                {roleBadge(c.role)}
+              </div>
+              <div className="kv">
+                <div><div className="k">Tax ID</div><div className="mono" style={{ fontSize: 11.5 }}>{c.tax}</div></div>
+                <div><div className="k">Email</div><div className="mono" style={{ fontSize: 11, color: 'var(--ember-ink)' }}>{c.email}</div></div>
+                <div><div className="k">Deals</div><div className="num">{c.deals}</div></div>
+                <div><div className="k">Open balance</div><div className="num" style={{ color: Number(c.openBalance)>0?'var(--danger)':'var(--ink-3)' }}>{fmtEUR(c.openBalance)}</div></div>
+              </div>
+              <div className="c-tags">
+                {c.tags.map(t => <span key={t} className="wh-badge">{t}</span>)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="panel">
+          <div className="wh-card" style={{ marginBottom: 16 }}>
+            <div className="wh-card-head">
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div className="wh-avatar lg">{sel.name[0]}</div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>{sel.name}</div>
+                  <div className="micro" style={{ marginTop: 2 }}>{sel.id} · {sel.country}</div>
+                </div>
+              </div>
+              <button className="wh-btn ghost icon sm"><I.more/></button>
+            </div>
+            <div className="wh-card-body">
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                {roleBadge(sel.role)}
+                {sel.tags.slice(0,2).map(t => <span key={t} className="wh-badge">{t}</span>)}
+              </div>
+              <div className="map-placeholder" style={{ marginBottom: 12 }}>
+                <div className="map-pin" style={{ left: '62%', top: '42%' }}></div>
+              </div>
+              <dl className="wh-dl" style={{ gridTemplateColumns: '110px 1fr' }}>
+                <dt>Legal name</dt><dd>{sel.name}</dd>
+                <dt>Tax ID</dt>    <dd className="mono">{sel.tax}</dd>
+                <dt>Address</dt>   <dd>{sel.city} · {sel.country}</dd>
+                <dt>Email</dt>     <dd className="mono" style={{color:'var(--ember-ink)'}}>{sel.email}</dd>
+                <dt>Phone</dt>     <dd className="mono">+49 30 555 010</dd>
+                <dt>Website</dt>   <dd className="mono" style={{color:'var(--ember-ink)'}}>acme-retail.example</dd>
+              </dl>
+              <hr className="hr"/>
+              <div style={{ display:'flex', gap:8 }}>
+                <button className="wh-btn sm"><I.send size={12}/> Email</button>
+                <button className="wh-btn sm"><I.plus size={12}/> New deal</button>
+                <button className="wh-btn sm"><I.invoice size={12}/> Invoice</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="wh-card" style={{ marginBottom: 16 }}>
+            <div className="wh-card-head"><h3>People</h3><button className="wh-btn ghost sm"><I.plus size={12}/> Add</button></div>
+            <div style={{ padding: 0 }}>
+              {[
+                { name: 'Nadia Holmberg', role: 'Procurement', email: 'n.holmberg@acme', primary: true },
+                { name: 'Björn Richter',  role: 'CFO', email: 'b.richter@acme', primary: false },
+              ].map((p,i) => (
+                <div key={i} style={{ display:'flex', gap:10, alignItems:'center', padding:'10px 20px', borderBottom: i===0?'1px solid var(--rule-1)':'0' }}>
+                  <div className="wh-avatar">{p.name.split(' ').map(x=>x[0]).join('')}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{fontSize:13,fontWeight:500}}>{p.name} {p.primary && <span className="wh-badge ember" style={{marginLeft:6}}>primary</span>}</div>
+                    <div className="mono" style={{fontSize:11, color:'var(--ink-3)'}}>{p.role} · {p.email}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="wh-card">
+            <div className="wh-card-head"><h3>Recent interactions</h3></div>
+            <div className="wh-card-body">
+              <div className="wh-timeline">
+                <div className="item agent"><div className="dot"></div><div className="body"><span className="actor">Marketing Agent</span> drafted Q2 follow-up email</div><div className="meta">today · 08:40</div></div>
+                <div className="item"><div className="dot"></div><div className="body"><span className="actor">Patricia</span> sent invoice 2026-0041 · €1,815.00</div><div className="meta">today · 09:12</div></div>
+                <div className="item"><div className="dot"></div><div className="body"><span className="actor">Nadia Holmberg</span> approved scope on email thread</div><div className="meta">Mar 29</div></div>
+                <div className="item"><div className="dot"></div><div className="body">Workshop delivered · Madrid HQ</div><div className="meta">Mar 28</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+mountApp(<Contacts/>);
+</script>
+</body></html>

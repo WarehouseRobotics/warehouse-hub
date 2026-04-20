@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Warehouse Hub · Company setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/components.css"/>
+<style>
+  .ob { display: grid; grid-template-columns: 240px 1fr 320px; gap: 24px; align-items: flex-start; }
+  .steps { display: flex; flex-direction: column; gap: 4px; }
+  .step { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 6px; cursor: pointer; }
+  .step.active { background: var(--paper-2); }
+  .step .num { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--rule-2); display: grid; place-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--ink-3); }
+  .step.done .num { background: var(--ember); border-color: var(--ember); color: var(--ember-contrast); }
+  .step.active .num { background: var(--paper-0); border-color: var(--ember); color: var(--ember-ink); }
+  .step .lbl { display: flex; flex-direction: column; gap: 2px; }
+  .step .lbl .t { font-size: 13px; color: var(--ink-1); font-weight: 500; }
+  .step .lbl .s { font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .form-card { background: var(--paper-1); border: 1px solid var(--rule-1); border-radius: 10px; overflow: hidden; }
+  .form-section { padding: 24px 28px; border-bottom: 1px solid var(--rule-1); }
+  .form-section:last-child { border-bottom: 0; }
+  .form-section h2 { margin: 0 0 4px; font-size: 18px; font-weight: 500; letter-spacing: -0.014em; }
+  .form-section p.desc { margin: 0 0 20px; font-size: 13px; color: var(--ink-2); }
+  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+  .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px 20px; }
+  .form-grid-2 .span-2, .form-grid-3 .span-3 { grid-column: 1 / -1; }
+
+  .side-card { background: var(--paper-1); border: 1px solid var(--rule-1); border-radius: 10px; padding: 20px; }
+  .prev-card {
+    background: var(--paper-0); border: 1px solid var(--rule-1); border-radius: 6px;
+    padding: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2);
+    line-height: 1.7;
+  }
+  .prev-card .k { color: var(--ink-3); }
+  .prev-card .v { color: var(--ink-1); }
+
+  .agent-prompt { padding: 12px; background: var(--ember-soft); border-radius: 6px; display: flex; gap: 10px; font-size: 12.5px; color: var(--ember-contrast); }
+  html.dark .agent-prompt { color: var(--ember-ink); }
+  .agent-prompt .mk { width: 22px; height: 22px; border-radius: 4px; background: var(--ember); color: var(--ember-contrast); display: grid; place-items: center; font-weight: 600; flex: 0 0 22px; }
+</style>
+</head><body>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel" src="assets/boot.jsx"></script>
+<script type="text/babel">
+const { useState } = React;
+
+function Onboarding() {
+  const [legal, setLegal] = useState("Northwind Robotics SL");
+  const [display, setDisplay] = useState("Northwind Robotics");
+  const [taxId, setTaxId] = useState("B12345678");
+  const [currency, setCurrency] = useState("EUR");
+
+  const steps = [
+    { num: 1, t: 'Company identity', s: 'Legal + display', done: false, active: true },
+    { num: 2, t: 'Tax & billing',    s: 'VAT, invoice defaults', done: false },
+    { num: 3, t: 'Bank details',     s: 'IBAN · BIC', done: false },
+    { num: 4, t: 'Team & agents',    s: 'Invites + permissions', done: false },
+    { num: 5, t: 'Review & launch',  s: 'Final check', done: false },
+  ];
+
+  return (
+    <AppShell active="company" crumbs={["Configure","Company card","Setup"]} agentPreset="advisor">
+      <div className="wh-page-head">
+        <div>
+          <div className="micro">Onboarding · step 1 of 5</div>
+          <h1>Set up your company card</h1>
+          <div className="sub">This is the seller identity on every invoice. You can edit later under Configure · Company card.</div>
+        </div>
+        <div className="wh-page-actions">
+          <button className="wh-btn ghost">Save &amp; exit</button>
+          <button className="wh-btn">Skip for now</button>
+          <button className="wh-btn primary">Continue <I.arrowR size={13}/></button>
+        </div>
+      </div>
+
+      <div className="ob">
+        <aside>
+          <div className="micro" style={{ padding: '0 0 10px' }}>Progress</div>
+          <div className="steps">
+            {steps.map(s => (
+              <div key={s.num} className={`step ${s.active?'active':''} ${s.done?'done':''}`}>
+                <div className="num">{s.done ? '✓' : s.num}</div>
+                <div className="lbl"><span className="t">{s.t}</span><span className="s">{s.s}</span></div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 24, padding: 14, background: 'var(--paper-1)', border: '1px solid var(--rule-1)', borderRadius: 8 }}>
+            <div className="micro" style={{ marginBottom: 8 }}>Why we ask</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+              The company card is the single source of truth for outgoing invoices. Agents reference it on every generation call — so a clean setup now saves dozens of corrections later.
+            </div>
+          </div>
+        </aside>
+
+        <div className="form-card">
+          <div className="form-section">
+            <h2>Identity</h2>
+            <p className="desc">The name and tax identifier as they appear on public records.</p>
+            <div className="form-grid-2">
+              <div className="wh-field">
+                <label>Legal name</label>
+                <div className="wh-input"><input value={legal} onChange={e => setLegal(e.target.value)}/></div>
+                <div className="hint">Exact registered name including legal suffix (SL, GmbH…).</div>
+              </div>
+              <div className="wh-field">
+                <label>Display name</label>
+                <div className="wh-input"><input value={display} onChange={e => setDisplay(e.target.value)}/></div>
+                <div className="hint">Shown on invoices &amp; email headers. Keep it short.</div>
+              </div>
+              <div className="wh-field">
+                <label>Tax ID · VAT</label>
+                <div className="wh-input">
+                  <select value={taxId.slice(0,2)} style={{ maxWidth: 60, color: 'var(--ink-2)' }}>
+                    <option>ES</option><option>DE</option><option>FR</option><option>UK</option>
+                  </select>
+                  <input value={taxId} onChange={e => setTaxId(e.target.value)}/>
+                </div>
+                <div className="hint" style={{ color: 'var(--ok)' }}>✓ Validated against VIES · Spain</div>
+              </div>
+              <div className="wh-field">
+                <label>Country of establishment</label>
+                <div className="wh-input"><select defaultValue="ES"><option value="ES">Spain</option><option>Germany</option><option>France</option></select></div>
+              </div>
+              <div className="wh-field span-2">
+                <label>Registered address</label>
+                <div className="wh-input"><input placeholder="Street, number, floor" defaultValue="Calle de Alcalá 42"/></div>
+              </div>
+              <div className="wh-field">
+                <label>Postal code</label>
+                <div className="wh-input"><input defaultValue="28014"/></div>
+              </div>
+              <div className="wh-field">
+                <label>City</label>
+                <div className="wh-input"><input defaultValue="Madrid"/></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h2>Contact</h2>
+            <p className="desc">Where customers reply, where agents send on your behalf.</p>
+            <div className="form-grid-2">
+              <div className="wh-field">
+                <label>Billing email</label>
+                <div className="wh-input"><I.at/><input defaultValue="billing@northwind.example"/></div>
+              </div>
+              <div className="wh-field">
+                <label>Phone</label>
+                <div className="wh-input"><I.phone/><input defaultValue="+34 910 000 111"/></div>
+              </div>
+              <div className="wh-field span-2">
+                <label>Website</label>
+                <div className="wh-input"><I.globe/><input defaultValue="https://northwind.example"/></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h2>Invoice defaults</h2>
+            <p className="desc">Used every time an invoice is generated — you can override per-invoice.</p>
+            <div className="form-grid-3">
+              <div className="wh-field">
+                <label>Currency</label>
+                <div className="wh-input"><select value={currency} onChange={e => setCurrency(e.target.value)}><option>EUR</option><option>USD</option><option>GBP</option></select></div>
+              </div>
+              <div className="wh-field">
+                <label>Payment terms</label>
+                <div className="wh-input"><input defaultValue="30 days"/></div>
+              </div>
+              <div className="wh-field">
+                <label>VAT mode</label>
+                <div className="wh-input"><select defaultValue="standard"><option>standard</option><option>reverse-charge</option><option>exempt</option></select></div>
+              </div>
+              <div className="wh-field span-3">
+                <div className="agent-prompt">
+                  <div className="mk">◆</div>
+                  <div>
+                    <b>Advisor Agent</b> · Your tax regime is Spain standard · IVA 21% general, 10% reduced, 4% super-reduced. I'll apply these rates unless you override. Want me to draft an exemption template for EU B2B customers?
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="side-card" style={{ marginBottom: 16 }}>
+            <div className="micro" style={{ marginBottom: 10 }}>Live preview · invoice header</div>
+            <div className="prev-card">
+              <div style={{ fontFamily:'var(--font-sans)', fontSize: 16, fontWeight: 500, color: 'var(--ink-1)', marginBottom: 6 }}>{display || '—'}</div>
+              <div className="v">{legal || '—'}</div>
+              <div className="k">Calle de Alcalá 42 · 28014 Madrid · ES</div>
+              <div className="k">VAT {taxId}</div>
+              <div className="k">billing@northwind.example</div>
+              <hr style={{ border: 0, borderTop: '1px dashed var(--rule-2)', margin: '12px 0' }}/>
+              <div className="k">Currency · <span className="v">{currency}</span></div>
+              <div className="k">Terms · <span className="v">Net 30</span></div>
+              <div className="k">VAT · <span className="v">standard · 21%</span></div>
+            </div>
+          </div>
+
+          <div className="side-card" style={{ marginBottom: 16 }}>
+            <div className="micro" style={{ marginBottom: 10 }}>Checklist</div>
+            {[
+              { ok: true, t: 'Legal name filled' },
+              { ok: true, t: 'Tax ID validated via VIES' },
+              { ok: true, t: 'Address complete' },
+              { ok: false, t: 'Add bank details (step 3)' },
+              { ok: false, t: 'Invite at least one teammate' },
+            ].map((c, i) => (
+              <div key={i} style={{ display:'flex', gap:10, alignItems:'center', fontSize: 12.5, padding: '6px 0' }}>
+                <span style={{ width: 14, height: 14, borderRadius: 3, background: c.ok ? 'var(--ember)' : 'var(--paper-3)', color: c.ok ? 'var(--ember-contrast)' : 'var(--ink-3)', display:'grid', placeItems:'center', fontSize: 10 }}>{c.ok ? '✓' : ''}</span>
+                <span style={{ color: c.ok ? 'var(--ink-1)' : 'var(--ink-3)' }}>{c.t}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="side-card">
+            <div className="micro" style={{ marginBottom: 10 }}>API equivalent</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-2)', background: 'var(--paper-0)', border: '1px solid var(--rule-1)', borderRadius: 4, padding: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+              <span style={{ color: 'var(--ember-ink)' }}>PUT</span> /api/v1/company-card{'\n'}
+              {'{'}{'\n'}
+              {'  '}"legalName": "{legal}",{'\n'}
+              {'  '}"taxId": "{taxId}",{'\n'}
+              {'  '}"invoiceDefaults": {'{'}{'\n'}
+              {'    '}"currency": "{currency}",{'\n'}
+              {'    '}"paymentTermsDays": 30{'\n'}
+              {'  '}{'}'}{'\n'}
+              {'}'}
+            </div>
+            <div className="hint" style={{ marginTop: 8, fontSize: 11 }}>Everything configured here is just the same API your agents call.</div>
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+mountApp(<Onboarding/>);
+</script>
+</body></html>

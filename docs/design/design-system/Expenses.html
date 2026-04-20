@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Warehouse Hub · Expenses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/components.css"/>
+<style>
+  .split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; align-items: flex-start; }
+  .summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 16px; }
+  .summary .c { padding: 14px; background: var(--paper-1); border: 1px solid var(--rule-1); border-radius: 8px; }
+  .summary .l { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+  .summary .v { font-family: var(--font-mono); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; margin-top: 6px; }
+  .summary .s { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); margin-top: 4px; }
+
+  .doc-preview { aspect-ratio: 8.5 / 11; background: var(--paper-0); border: 1px solid var(--rule-1); border-radius: 4px; padding: 20px; display: flex; flex-direction: column; gap: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-2); letter-spacing: 0.02em; position: relative; overflow: hidden; }
+  .doc-preview::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, transparent 0 28px, oklch(95% 0.008 80 / 0.35) 28px 29px); pointer-events: none; }
+  html.dark .doc-preview::after { background: repeating-linear-gradient(135deg, transparent 0 28px, oklch(25% 0.008 80 / 0.35) 28px 29px); }
+  .doc-preview .stamp { position: absolute; top: 18px; right: 18px; transform: rotate(-8deg); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; border: 1px solid var(--ember); color: var(--ember-ink); padding: 6px 10px; border-radius: 4px; background: var(--ember-soft); }
+  .doc-preview h4 { font-family: var(--font-sans); font-size: 14px; font-weight: 500; color: var(--ink-1); margin: 0; letter-spacing: -0.005em; }
+  .doc-preview hr { border: 0; border-top: 1px dashed var(--rule-2); margin: 2px 0; }
+  .doc-line { display: flex; justify-content: space-between; }
+  .doc-table { display: grid; grid-template-columns: 1fr 60px 80px; gap: 8px; font-size: 10px; }
+</style>
+</head><body>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel" src="assets/boot.jsx"></script>
+<script type="text/babel">
+const { useState } = React;
+
+function ExpensesList({ onOpen, selectedId }) {
+  return (
+    <>
+      <div className="wh-page-head">
+        <div>
+          <div className="micro">Accounting · last 30 days</div>
+          <h1>Expenses</h1>
+          <div className="sub">118 records · €12,480.04 booked · 2 need review</div>
+        </div>
+        <div className="wh-page-actions">
+          <button className="wh-btn"><I.upload/> Upload document</button>
+          <button className="wh-btn primary"><I.plus/> New expense</button>
+        </div>
+      </div>
+
+      <div className="summary">
+        <div className="c"><div className="l">Booked · this month</div><div className="v">€ 7,881.78</div><div className="s">▲ 4.1% vs Feb</div></div>
+        <div className="c"><div className="l">Awaiting review</div><div className="v">€ 852.54</div><div className="s">2 expenses</div></div>
+        <div className="c"><div className="l">VAT recoverable · Q1</div><div className="v">€ 2,140.12</div><div className="s">ES · IVA 21/10/4</div></div>
+        <div className="c"><div className="l">Top category</div><div className="v" style={{ fontSize: 16 }}>IT &amp; equipment</div><div className="s">38% of spend</div></div>
+      </div>
+
+      <div className="wh-filterbar" style={{ marginBottom: 12 }}>
+        <div className="wh-input" style={{ width: 240 }}><I.search/><input placeholder="Search supplier, number, ID…"/></div>
+        <div className="wh-btn sm">Period <span style={{color:'var(--ink-3)',marginLeft:4}}>Mar 2026</span> <I.chevD size={12}/></div>
+        <div className="wh-btn sm">Category <span style={{color:'var(--ink-3)',marginLeft:4}}>all</span> <I.chevD size={12}/></div>
+        <div className="wh-btn sm">Status <span style={{color:'var(--ink-3)',marginLeft:4}}>all</span> <I.chevD size={12}/></div>
+        <div className="wh-btn sm">VAT <span style={{color:'var(--ink-3)',marginLeft:4}}>any</span> <I.chevD size={12}/></div>
+        <div className="spacer"/>
+        <div className="wh-segmented">
+          <button className="on">Table</button><button>Cards</button>
+        </div>
+      </div>
+
+      <div className="wh-card" style={{ overflow: 'hidden' }}>
+        <table className="wh-table">
+          <thead><tr>
+            <th style={{ width: 36 }}><input type="checkbox"/></th>
+            <th>ID</th>
+            <th>Date</th>
+            <th>Supplier</th>
+            <th>Invoice #</th>
+            <th>Category</th>
+            <th className="num">Net</th>
+            <th className="num">VAT</th>
+            <th className="num">Gross</th>
+            <th>Status</th>
+            <th>Due</th>
+            <th style={{ width: 28 }}></th>
+          </tr></thead>
+          <tbody>
+            {EXPENSES.map(r => (
+              <tr key={r.id} className={selectedId === r.id ? 'selected' : ''} onClick={() => onOpen(r.id)}>
+                <td><input type="checkbox" onClick={e => e.stopPropagation()}/></td>
+                <td className="id">{r.id}</td>
+                <td className="mono">{r.date}</td>
+                <td>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <div className="wh-avatar">{r.supplier[0]}</div>
+                    <span>{r.supplier}</span>
+                  </div>
+                </td>
+                <td className="mono">{r.number}</td>
+                <td><span className="wh-badge">{r.category}</span></td>
+                <td className="num">{fmtEUR(r.net)}</td>
+                <td className="num" style={{ color: 'var(--ink-3)' }}>{fmtEUR(r.tax)}</td>
+                <td className="num" style={{ fontWeight: 500 }}>{fmtEUR(r.gross)}</td>
+                <td><StatusBadge status={r.status}/></td>
+                <td className="mono">{r.due}</td>
+                <td><I.more size={14} style={{ color: 'var(--ink-3)' }}/></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function ExpenseDetail({ id, onBack }) {
+  const r = EXPENSES.find(x => x.id === id) || EXPENSES[0];
+  const [tab, setTab] = useState('detail');
+
+  return (
+    <>
+      <div className="wh-page-head">
+        <div>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+            <a onClick={onBack} style={{ cursor:'pointer', color:'var(--ink-3)', fontFamily:'var(--font-mono)', fontSize:11, letterSpacing:'0.04em' }}>Expenses</a>
+            <span style={{ color:'var(--ink-3)' }}>/</span>
+            <span className="mono" style={{ fontSize:11, color:'var(--ink-3)', letterSpacing:'0.04em' }}>{r.id}</span>
+          </div>
+          <h1 style={{ display:'flex', alignItems:'center', gap:12 }}>
+            {r.supplier}
+            <StatusBadge status={r.status}/>
+          </h1>
+          <div className="sub">Invoice <span className="mono" style={{color:'var(--ink-1)'}}>{r.number}</span> · {r.date} · booked by Accounting Agent</div>
+        </div>
+        <div className="wh-page-actions">
+          <button className="wh-btn ghost icon"><I.download/></button>
+          <button className="wh-btn">Edit</button>
+          <button className="wh-btn primary">Approve &amp; post</button>
+        </div>
+      </div>
+
+      <div className="split">
+        <div>
+          <div className="wh-tabs" style={{ marginBottom: 16 }}>
+            {['detail','related','journal','timeline'].map(t => (
+              <div key={t} className={`wh-tab ${tab===t?'active':''}`} onClick={() => setTab(t)}>
+                {t[0].toUpperCase()+t.slice(1)}
+                <span className="count">{t==='related'?'3':t==='journal'?'2':t==='timeline'?'6':'·'}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="wh-card" style={{ marginBottom: 16 }}>
+            <div className="wh-card-head"><h3>Booking</h3></div>
+            <div className="wh-card-body">
+              <dl className="wh-dl">
+                <dt>Expense ID</dt>       <dd className="mono">{r.id}</dd>
+                <dt>Document</dt>         <dd className="mono" style={{ color: 'var(--ember-ink)' }}>doc_000881 · invoice-2026-0042.pdf</dd>
+                <dt>Supplier</dt>         <dd>{r.supplier} <span className="mono" style={{color:'var(--ink-3)',marginLeft:8}}>ct_000301</span></dd>
+                <dt>Tax ID</dt>           <dd className="mono">ES · B87654321</dd>
+                <dt>Invoice number</dt>   <dd className="mono">{r.number}</dd>
+                <dt>Invoice date</dt>     <dd className="mono">{r.date}</dd>
+                <dt>Due date</dt>         <dd className="mono">{r.due}</dd>
+                <dt>Category</dt>         <dd><span className="wh-badge">{r.category}</span></dd>
+                <dt>Account</dt>          <dd className="mono">629 — Other external services</dd>
+                <dt>Cost center</dt>      <dd>Operations / Madrid HQ</dd>
+                <dt>Notes</dt>            <dd>Printer paper and toner.</dd>
+              </dl>
+            </div>
+          </div>
+
+          <div className="wh-card">
+            <div className="wh-card-head"><h3>Totals &amp; tax</h3><span className="micro">EUR</span></div>
+            <div style={{ padding: 0 }}>
+              <table className="wh-table">
+                <thead><tr><th>Line</th><th>Description</th><th className="num">Base</th><th className="num">Rate</th><th className="num">Amount</th></tr></thead>
+                <tbody>
+                  <tr><td className="mono">1</td><td>Office supplies — paper A4 · 10 reams</td><td className="num">{fmtEUR('80.00')}</td><td className="num">21.00%</td><td className="num">{fmtEUR('16.80')}</td></tr>
+                  <tr><td className="mono">2</td><td>Toner cartridge HP 414X</td><td className="num">{fmtEUR('40.00')}</td><td className="num">21.00%</td><td className="num">{fmtEUR('8.40')}</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr><td colSpan="2" style={{textAlign:'right', color:'var(--ink-3)', fontFamily:'var(--font-mono)', fontSize:10.5, letterSpacing:'0.1em', textTransform:'uppercase'}}>Net</td><td colSpan="2"></td><td className="num" style={{ fontWeight:500 }}>{fmtEUR(r.net)}</td></tr>
+                  <tr><td colSpan="2" style={{textAlign:'right', color:'var(--ink-3)', fontFamily:'var(--font-mono)', fontSize:10.5, letterSpacing:'0.1em', textTransform:'uppercase'}}>IVA 21%</td><td colSpan="2"></td><td className="num">{fmtEUR(r.tax)}</td></tr>
+                  <tr><td colSpan="2" style={{textAlign:'right', fontFamily:'var(--font-mono)', fontSize:10.5, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--ink-1)'}}>Gross</td><td colSpan="2"></td><td className="num" style={{ fontWeight: 600, fontSize: 15 }}>{fmtEUR(r.gross)}</td></tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div className="wh-card" style={{ marginTop: 16 }}>
+            <div className="wh-card-head"><h3>Timeline</h3><button className="wh-btn ghost sm">Full log →</button></div>
+            <div className="wh-card-body">
+              <div className="wh-timeline">
+                <div className="item ok"><div className="dot"></div><div className="body"><span className="actor">Accounting Agent</span> posted to ledger · journal <span className="mono">jrn_001184</span></div><div className="meta">09:42:11 · today</div></div>
+                <div className="item agent"><div className="dot"></div><div className="body"><span className="actor">Accounting Agent</span> created expense record · 2 lines, IVA 21%</div><div className="meta">09:42:04</div></div>
+                <div className="item agent"><div className="dot"></div><div className="body"><span className="actor">Accounting Agent</span> resolved supplier via <span className="mono">business.resolve_contact</span> · matched by tax ID</div><div className="meta">09:42:01</div></div>
+                <div className="item"><div className="dot"></div><div className="body"><span className="actor">System</span> OCR completed · confidence 0.94</div><div className="meta">09:41:58</div></div>
+                <div className="item"><div className="dot"></div><div className="body"><span className="actor">Patricia Ruiz</span> forwarded invoice PDF via email</div><div className="meta">09:38:22</div></div>
+                <div className="item"><div className="dot"></div><div className="body"><span className="actor">System</span> inbox received message from <span className="mono">billing@papeleriacentro.example</span></div><div className="meta">09:38:19</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="wh-card" style={{ marginBottom: 16 }}>
+            <div className="wh-card-head">
+              <h3>Source document</h3>
+              <div style={{display:'flex',gap:6}}>
+                <button className="wh-btn ghost icon sm"><I.download size={13}/></button>
+                <button className="wh-btn ghost icon sm"><I.arrowUR size={13}/></button>
+              </div>
+            </div>
+            <div className="wh-card-body">
+              <div className="doc-preview">
+                <div className="stamp">OCR ✓ 0.94</div>
+                <h4>Papelería Centro SL</h4>
+                <div className="mono" style={{ color: 'var(--ink-3)' }}>Calle Mayor 12 · 28013 Madrid · ES · B87654321</div>
+                <hr/>
+                <div className="doc-line"><span>Factura</span><span>FC-2026-0042</span></div>
+                <div className="doc-line"><span>Fecha</span><span>2026-03-25</span></div>
+                <div className="doc-line"><span>Vencimiento</span><span>2026-04-24</span></div>
+                <hr/>
+                <div className="doc-table"><span>Papel A4 · 10 resmas</span><span style={{textAlign:'right'}}>10</span><span style={{textAlign:'right'}}>80,00 €</span></div>
+                <div className="doc-table"><span>Tóner HP 414X</span><span style={{textAlign:'right'}}>1</span><span style={{textAlign:'right'}}>40,00 €</span></div>
+                <hr/>
+                <div className="doc-line"><span>Base imponible</span><span>120,00 €</span></div>
+                <div className="doc-line"><span>IVA 21 %</span><span>25,20 €</span></div>
+                <div className="doc-line" style={{ fontSize: 12, color: 'var(--ink-1)', fontWeight: 500 }}><span>Total</span><span>145,20 €</span></div>
+                <div style={{ marginTop: 'auto', color: 'var(--ink-3)', fontSize: 9 }}>Emitida electrónicamente · IBAN: ES76 **** **** **** 1234</div>
+              </div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 10, letterSpacing: '0.04em' }}>
+                doc_000881 · application/pdf · 182 KB · sha256 3fba…c91
+              </div>
+            </div>
+          </div>
+
+          <div className="wh-card" style={{ marginBottom: 16 }}>
+            <div className="wh-card-head"><h3>Agent checks</h3></div>
+            <div className="wh-card-body">
+              {[
+                { ok: true, label: 'Duplicate check — no match against last 90 days' },
+                { ok: true, label: 'Supplier tax ID valid (NIF ES · B87654321)' },
+                { ok: true, label: 'IVA math reconciles · 120.00 × 21% = 25.20' },
+                { ok: false, label: 'Payment method not specified · suggest SEPA' },
+              ].map((c,i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 0', fontSize:12.5 }}>
+                  <span style={{ width:14, height:14, borderRadius:999, background: c.ok?'var(--ok-soft)':'var(--warn-soft)', color: c.ok?'var(--ok)':'oklch(55% 0.14 85)', display:'grid', placeItems:'center', fontSize:10, fontFamily:'var(--font-mono)'}}>{c.ok?'✓':'!'}</span>
+                  <span>{c.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="wh-card">
+            <div className="wh-card-head"><h3>Linked</h3></div>
+            <div className="wh-card-body">
+              <dl className="wh-dl">
+                <dt>Journal</dt>    <dd className="mono" style={{color:'var(--ember-ink)'}}>jrn_001184</dd>
+                <dt>Tax period</dt> <dd>Q1 2026 · ES VAT</dd>
+                <dt>Project</dt>    <dd>Internal · Office</dd>
+                <dt>Attachment</dt> <dd className="mono" style={{color:'var(--ember-ink)'}}>doc_000881</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ExpensesPage() {
+  const [selectedId, setSelectedId] = useState(null);
+  return (
+    <AppShell active="expenses" crumbs={["Accounting","Expenses", selectedId ?? ""]} agentPreset="accounting">
+      {selectedId
+        ? <ExpenseDetail id={selectedId} onBack={() => setSelectedId(null)}/>
+        : <ExpensesList selectedId={selectedId} onOpen={id => setSelectedId(id)}/>}
+    </AppShell>
+  );
+}
+
+mountApp(<ExpensesPage/>);
+</script>
+</body></html>

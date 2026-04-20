@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Warehouse Hub · Design system & templates</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/components.css"/>
+<style>
+  body { background: var(--paper-0); color: var(--ink-1); font-family: var(--font-sans); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 72px 40px 120px; }
+  .kicker { display:flex; align-items:center; gap:10px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 28px; }
+  .kicker .mk { display:flex; align-items:center; gap:8px; }
+  h1.title { font-size: 42px; letter-spacing: -0.028em; font-weight: 500; margin: 0 0 14px; max-width: 760px; }
+  h1.title em { font-style: normal; color: var(--ember-ink); }
+  p.lede { font-size: 16px; color: var(--ink-2); max-width: 640px; margin: 0 0 40px; line-height: 1.5; }
+
+  .meta-row { display:grid; grid-template-columns: repeat(4,1fr); gap: 20px; padding: 20px 0; border-top: 1px solid var(--rule-1); border-bottom: 1px solid var(--rule-1); margin-bottom: 48px; }
+  .meta-row .l { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+  .meta-row .v { font-family: var(--font-mono); font-size: 13px; color: var(--ink-1); margin-top: 4px; }
+
+  .section-head { display:flex; align-items:baseline; justify-content:space-between; margin: 48px 0 16px; }
+  .section-head h2 { font-size: 22px; letter-spacing: -0.014em; font-weight: 500; margin: 0; }
+  .section-head .n { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.08em; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .cards.two { grid-template-columns: repeat(2, 1fr); }
+  a.card {
+    display: block; text-decoration: none; color: inherit;
+    padding: 20px; background: var(--paper-1); border: 1px solid var(--rule-1); border-radius: 10px;
+    position: relative; transition: border-color .15s, transform .15s;
+  }
+  a.card:hover { border-color: var(--ember); transform: translateY(-1px); }
+  a.card .id { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; color: var(--ink-3); text-transform: uppercase; }
+  a.card h3 { font-size: 16px; font-weight: 500; letter-spacing: -0.006em; margin: 6px 0 6px; }
+  a.card p { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; margin: 0 0 14px; }
+  a.card .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  a.card .arr { position: absolute; top: 18px; right: 18px; color: var(--ink-3); transition: color .15s, transform .15s; }
+  a.card:hover .arr { color: var(--ember-ink); transform: translate(2px, -2px); }
+
+  /* Tiny visual preview */
+  .tile {
+    height: 112px; border-radius: 6px; margin-bottom: 14px;
+    background: var(--paper-0); border: 1px solid var(--rule-1);
+    position: relative; overflow: hidden;
+    background-image: linear-gradient(var(--rule-1) 1px, transparent 1px);
+    background-size: 100% 12px;
+  }
+  .tile .hit { position: absolute; background: var(--ember-soft); border: 1px solid var(--ember); border-radius: 2px; }
+  .tile .stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 48px; background: var(--paper-2); border-right: 1px solid var(--rule-1); }
+  .tile .stripe::before { content:''; position:absolute; left:12px; top:12px; width:8px; height:8px; background: var(--ember); border-radius: 2px; }
+  .tile .stripe::after { content:''; position:absolute; left:12px; top:26px; right:12px; height:2px; background: var(--rule-1); box-shadow: 0 6px 0 var(--rule-1), 0 12px 0 var(--rule-1); }
+
+  .diagram {
+    background: var(--paper-1); border: 1px solid var(--rule-1); border-radius: 10px;
+    padding: 28px; display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 20px; align-items: center;
+  }
+  .dcol { display: flex; flex-direction: column; gap: 8px; }
+  .dcol .lbl { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+  .dchip { padding: 10px 12px; background: var(--paper-0); border: 1px solid var(--rule-1); border-radius: 6px; font-size: 13px; display: flex; align-items:center; gap: 10px; }
+  .dchip.agent { border-color: var(--ember); background: var(--ember-soft); color: var(--ember-ink); }
+  .dchip .mono { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
+
+  footer.foot {
+    margin-top: 72px; padding-top: 28px; border-top: 1px solid var(--rule-1);
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.04em;
+  }
+</style>
+</head><body>
+<div class="wrap">
+  <div class="kicker">
+    <span class="mk" id="mark-slot"></span>
+    <span>Warehouse Hub · design system v0.1 · paper build</span>
+  </div>
+
+  <h1 class="title">A cozy, engineering-precise foundation for <em>Northwind Robotics</em> and its agent team.</h1>
+  <p class="lede">Foundations, components, and page templates for an agentic CRM + accounting platform. Built on a warm paper palette, neo-grotesk sans, and IBM Plex Mono for data — dense enough for daily operations, quiet enough to live with.</p>
+
+  <div class="meta-row">
+    <div><div class="l">Aesthetic</div><div class="v">Swiss operational · paper-on-paper</div></div>
+    <div><div class="l">Typography</div><div class="v">Inter Tight · IBM Plex Mono</div></div>
+    <div><div class="l">Density</div><div class="v">7 / 10 · table row 32px</div></div>
+    <div><div class="l">Agent surface</div><div class="v">Sidebar companion · collapsible</div></div>
+  </div>
+
+  <div class="section-head"><h2>Foundations</h2><span class="n">01 · system</span></div>
+  <div class="cards two">
+    <a class="card" href="Design System.html">
+      <span class="arr">↗</span>
+      <div class="tile"><div class="stripe"></div><div class="hit" style="left:64px;top:12px;width:60px;height:12px;background:var(--ink-1);border:0;border-radius:2px"></div><div class="hit" style="left:64px;top:32px;width:40%;height:8px"></div><div class="hit" style="left:64px;top:50px;width:30%;height:8px"></div><div class="hit" style="left:64px;top:70px;width:55%;height:8px;background:var(--paper-3)"></div></div>
+      <div class="id">01 · design system</div>
+      <h3>Tokens, type, color, components</h3>
+      <p>Warm paper neutrals, ember signal, type scale, spacing, shadows, and a dozen primitive components. Dark toggle in the chrome.</p>
+      <div class="tags">
+        <span class="wh-badge">tokens</span>
+        <span class="wh-badge">type</span>
+        <span class="wh-badge">color</span>
+        <span class="wh-badge">components</span>
+      </div>
+    </a>
+    <a class="card" href="Onboarding.html">
+      <span class="arr">↗</span>
+      <div class="tile">
+        <div class="hit" style="left:12px;top:12px;width:80px;height:8px"></div>
+        <div class="hit" style="left:12px;top:28px;width:56px;height:8px;background:var(--paper-3)"></div>
+        <div class="hit" style="left:12px;top:48px;width:56px;height:8px;background:var(--paper-3)"></div>
+        <div class="hit" style="left:100px;top:12px;right:12px;height:80px"></div>
+      </div>
+      <div class="id">02 · onboarding</div>
+      <h3>Company card setup</h3>
+      <p>Stepped form with live invoice-header preview and the raw API mirror — so users see that the UI and the agents speak the same language.</p>
+      <div class="tags"><span class="wh-badge">form</span><span class="wh-badge">stepper</span><span class="wh-badge">preview</span></div>
+    </a>
+  </div>
+
+  <div class="section-head"><h2>Operations</h2><span class="n">02 · daily surfaces</span></div>
+  <div class="cards">
+    <a class="card" href="Overview.html">
+      <span class="arr">↗</span>
+      <div class="tile">
+        <div class="stripe"></div>
+        <div class="hit" style="left:64px;top:10px;width:45px;height:24px"></div>
+        <div class="hit" style="left:118px;top:10px;width:45px;height:24px"></div>
+        <div class="hit" style="left:172px;top:10px;width:45px;height:24px"></div>
+        <div class="hit" style="left:226px;top:10px;width:45px;height:24px"></div>
+        <div class="hit" style="left:64px;top:42px;right:10px;height:60px;background:var(--paper-2);border-color:var(--rule-1)"></div>
+      </div>
+      <div class="id">03 · overview</div>
+      <h3>Home dashboard</h3>
+      <p>KPIs, cash waterfall, pipeline strip, agent activity feed, and ambient business signals for the owner-operator.</p>
+      <div class="tags"><span class="wh-badge">kpis</span><span class="wh-badge">activity</span><span class="wh-badge">charts</span></div>
+    </a>
+    <a class="card" href="Expenses.html">
+      <span class="arr">↗</span>
+      <div class="tile">
+        <div class="stripe"></div>
+        <div class="hit" style="left:64px;top:10px;right:10px;height:14px;background:var(--paper-3)"></div>
+        <div class="hit" style="left:64px;top:32px;right:10px;height:8px"></div>
+        <div class="hit" style="left:64px;top:46px;right:10px;height:8px"></div>
+        <div class="hit" style="left:64px;top:60px;right:10px;height:8px;background:var(--ember-soft);border-color:var(--ember)"></div>
+        <div class="hit" style="left:64px;top:74px;right:10px;height:8px"></div>
+        <div class="hit" style="left:64px;top:88px;right:10px;height:8px"></div>
+      </div>
+      <div class="id">04 · accounting</div>
+      <h3>Expenses — list &amp; detail</h3>
+      <p>Dense table of supplier invoices with VAT math, status, and due. Detail opens the source PDF alongside agent audit checks.</p>
+      <div class="tags"><span class="wh-badge">table</span><span class="wh-badge">detail</span><span class="wh-badge">OCR</span></div>
+    </a>
+    <a class="card" href="Invoices.html">
+      <span class="arr">↗</span>
+      <div class="tile">
+        <div class="hit" style="left:14px;top:14px;width:40%;bottom:14px;background:var(--paper-1)"></div>
+        <div class="hit" style="left:16px;top:18px;width:24%;height:8px;background:var(--ink-1);border:0"></div>
+        <div class="hit" style="left:16px;top:30px;width:30%;height:6px;background:var(--rule-2);border:0"></div>
+        <div class="hit" style="left:16px;top:58px;width:36%;height:5px;background:var(--rule-1);border:0"></div>
+        <div class="hit" style="left:16px;top:68px;width:36%;height:5px;background:var(--rule-1);border:0"></div>
+        <div class="hit" style="left:16px;top:78px;width:24%;height:8px;background:var(--ember);border:0;border-radius:2px"></div>
+        <div class="hit" style="right:14px;top:14px;width:45%;bottom:14px;background:var(--paper-0);border-color:var(--rule-1)"></div>
+      </div>
+      <div class="id">05 · accounting</div>
+      <h3>Sales invoices — list &amp; detail</h3>
+      <p>Full PDF-like invoice rendering alongside status tracker, totals, and source-of-truth links back to the originating deal.</p>
+      <div class="tags"><span class="wh-badge">pdf-preview</span><span class="wh-badge">status</span><span class="wh-badge">tracking</span></div>
+    </a>
+  </div>
+
+  <div class="section-head"><h2>CRM &amp; work</h2><span class="n">03 · people · deals · work</span></div>
+  <div class="cards">
+    <a class="card" href="Contacts.html">
+      <span class="arr">↗</span>
+      <div class="tile">
+        <div class="hit" style="left:10px;top:10px;width:42%;height:38px"></div>
+        <div class="hit" style="right:10px;top:10px;width:42%;height:38px"></div>
+        <div class="hit" style="left:10px;top:56px;width:42%;height:38px"></div>
+        <div class="hit" style="right:10px;top:56px;width:42%;height:38px;background:var(--ember-soft);border-color:var(--ember)"></div>
+      </div>
+      <div class="id">06 · CRM</div>
+      <h3>Contacts registry</h3>
+      <p>Shared customer + supplier cards with tax IDs, tags, and roll-up balances. Side panel reveals people, map, and interactions.</p>
+      <div class="tags"><span class="wh-badge">cards</span><span class="wh-badge">detail</span><span class="wh-badge">registry</span></div>
+    </a>
+    <a class="card" href="Pipeline.html">
+      <span class="arr">↗</span>
+      <div class="tile">
+        <div class="hit" style="left:6px;top:6px;width:18%;bottom:6px"></div>
+        <div class="hit" style="left:23%;top:6px;width:18%;bottom:6px"></div>
+        <div class="hit" style="left:42%;top:6px;width:18%;bottom:6px;background:var(--ember-soft);border-color:var(--ember)"></div>
+        <div class="hit" style="left:61%;top:6px;width:18%;bottom:6px"></div>
+        <div class="hit" style="right:6px;top:6px;width:18%;bottom:6px"></div>
+      </div>
+      <div class="id">07 · deals</div>
+      <h3>Pipeline · kanban</h3>
+      <p>Five-stage board with weighted forecast strip, agent nudge suggestions, and density-tuned deal cards.</p>
+      <div class="tags"><span class="wh-badge">kanban</span><span class="wh-badge">forecast</span><span class="wh-badge">drag</span></div>
+    </a>
+    <a class="card" href="Tasks.html">
+      <span class="arr">↗</span>
+      <div class="tile">
+        <div class="stripe"></div>
+        <div class="hit" style="left:64px;top:12px;right:10px;height:10px"></div>
+        <div class="hit" style="left:64px;top:28px;right:10px;height:10px"></div>
+        <div class="hit" style="left:64px;top:44px;right:10px;height:10px;background:var(--ember);border:0"></div>
+        <div class="hit" style="left:64px;top:60px;right:10px;height:10px"></div>
+        <div class="hit" style="left:64px;top:76px;right:10px;height:10px"></div>
+      </div>
+      <div class="id">08 · work</div>
+      <h3>Tasks &amp; projects</h3>
+      <p>Collaboration surface where agents are first-class assignees. Grouped by due date, filtered by project or owner.</p>
+      <div class="tags"><span class="wh-badge">list</span><span class="wh-badge">agents</span><span class="wh-badge">projects</span></div>
+    </a>
+  </div>
+
+  <div class="section-head"><h2>How the system thinks</h2><span class="n">04 · architecture note</span></div>
+  <div class="diagram">
+    <div class="dcol">
+      <div class="lbl">Human surface</div>
+      <div class="dchip">Overview</div>
+      <div class="dchip">List + detail</div>
+      <div class="dchip">Forms + kanban</div>
+    </div>
+    <div class="dcol" style="align-items:center">
+      <div class="lbl">Shared domain API</div>
+      <div class="dchip" style="width:100%"><span style="font-family:var(--font-mono)">business.*</span><span class="mono">contacts · deals · expenses · invoices · tasks</span></div>
+      <div style="font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3);letter-spacing:0.06em">↑↓ every UI action is a tool call · every tool call shows in the timeline</div>
+      <div class="dchip" style="width:100%"><span style="font-family:var(--font-mono)">platform.*</span><span class="mono">inbox · documents · journal · audit</span></div>
+    </div>
+    <div class="dcol">
+      <div class="lbl">Agent team</div>
+      <div class="dchip agent">◆ Advisor</div>
+      <div class="dchip agent">€ Accounting</div>
+      <div class="dchip agent">✦ Marketing</div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <div>Warehouse Hub · design system v0.1</div>
+    <div>Press 0–7 to jump between pages — or just click. Toggle dark mode via sun icon in the header.</div>
+  </footer>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel">
+  // Dark mode reads same localStorage key as app shell
+  const saved = localStorage.getItem('wh-theme');
+  if (saved === 'dark') document.documentElement.classList.add('dark');
+  // Mount WR mark
+  ReactDOM.createRoot(document.getElementById('mark-slot')).render(<WRMark size={22}/>);
+
+  // Keyboard shortcuts
+  const routes = ["Design System.html","Onboarding.html","Overview.html","Expenses.html","Invoices.html","Contacts.html","Pipeline.html","Tasks.html"];
+  window.addEventListener('keydown', e => {
+    const n = parseInt(e.key, 10);
+    if (!isNaN(n) && n >= 0 && n < routes.length) window.location.href = routes[n];
+  });
+</script>
+</body></html>
