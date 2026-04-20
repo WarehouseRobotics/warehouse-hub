@@ -8,7 +8,7 @@ export const payrollRawLineSchema = z
   .object({
     label: z.string().min(1),
     category: z.enum(["earning", "deduction", "withholding", "employee_contribution", "employer_contribution", "other"]),
-    amount: payrollAmountSchema,
+    amount: payrollAmountSchema.nullable(),
     rate: z.string().optional(),
     base: z.string().optional(),
     notes: z.string().optional(),

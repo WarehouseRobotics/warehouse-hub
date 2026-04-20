@@ -199,12 +199,12 @@ function parseStubInvoice(text: string): StructuredInvoice {
 function parseStubPayroll(text: string): StructuredPayroll {
   const rawLines = Array.from(
     text.matchAll(
-      /payroll line\s*:\s*label=([^;]+);\s*category=([^;]+);\s*amount=([^;\n]+)(?:;\s*rate=([^;\n]+))?(?:;\s*base=([^;\n]+))?(?:;\s*notes=([^\n]+))?/gim,
+      /payroll line\s*:\s*label=([^;]+);\s*category=([^;\n]+)(?:;\s*amount=([^;\n]+))?(?:;\s*rate=([^;\n]+))?(?:;\s*base=([^;\n]+))?(?:;\s*notes=([^\n]+))?/gim,
     ),
   ).map((match) => ({
     label: match[1].trim(),
     category: match[2].trim() as StructuredPayroll["rawLines"][number]["category"],
-    amount: normalizeAmount(match[3]) ?? match[3].trim(),
+    amount: match[3] ? (normalizeAmount(match[3]) ?? match[3].trim()) : null,
     rate: match[4] ? (normalizeAmount(match[4]) ?? match[4].trim()) : null,
     base: match[5] ? (normalizeAmount(match[5]) ?? match[5].trim()) : null,
     notes: match[6]?.trim() || null,

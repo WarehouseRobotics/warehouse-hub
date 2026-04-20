@@ -13,7 +13,7 @@ export const structuredPayrollRawLineSchema = z
   .object({
     label: z.string().min(1),
     category: z.enum(["earning", "deduction", "withholding", "employee_contribution", "employer_contribution", "other"]),
-    amount: z.string().min(1).describe("Numeric string with the amount of the line, no currency symbols, must always be present"),
+    amount: z.string().min(1).nullable().describe("Numeric string with the amount of the line, no currency symbols, or null for informational lines"),
     rate: z.string().min(1).nullable(),
     base: z.string().min(1).nullable(),
     notes: z.string().min(1).nullable(),
@@ -99,7 +99,7 @@ export const structuredPayrollJsonSchema = {
           properties: {
             label: { type: "string" },
             category: { type: "string", enum: ["earning", "deduction", "withholding", "employee_contribution", "employer_contribution", "other"] },
-            amount: { type: "string" },
+            amount: { type: ["string", "null"] },
             rate: { type: ["string", "null"] },
             base: { type: ["string", "null"] },
             notes: { type: ["string", "null"] }
