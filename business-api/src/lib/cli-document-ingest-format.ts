@@ -52,6 +52,30 @@ type IngestLinkedEntity =
       type: "contact";
       data: Record<string, unknown>;
     }
+  | {
+      type: "payroll";
+      data: {
+        payrollId: string;
+        slug?: string;
+        employeeContactId: string;
+        payrollNumber: string | null;
+        countryCode: string | null;
+        periodStart: string;
+        periodEnd: string;
+        paymentDate: string | null;
+        currency: string;
+        grossSalary: string;
+        netSalary: string;
+        employeeTaxWithheld: string;
+        employeeSocialContributions: string;
+        employerSocialContributions: string;
+        otherDeductions: string;
+        otherEarnings: string;
+        rawLines: unknown[];
+        notes: string | null;
+        status: string;
+      };
+    }
   | null;
 
 type IngestResponseLike = {
@@ -75,6 +99,21 @@ type IngestResponseLike = {
     category?: string;
     paymentTermsDays?: number;
     status?: "draft" | "sent" | "overdue" | "finalized" | "paid" | "cancelled";
+    employee?: ExtractedParty;
+    payrollNumber?: string;
+    countryCode?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    paymentDate?: string;
+    grossSalary?: string;
+    netSalary?: string;
+    employeeTaxWithheld?: string;
+    employeeSocialContributions?: string;
+    employerSocialContributions?: string;
+    otherDeductions?: string;
+    otherEarnings?: string;
+    rawLines?: Array<Record<string, unknown>>;
+    payrollStatus?: "recorded" | "paid" | "void";
   };
   linkedEntity: IngestLinkedEntity;
 };
@@ -86,6 +125,10 @@ function getPartyName(response: IngestResponseLike): string | undefined {
 
   if (response.linkedEntity?.type === "sales_invoice") {
     return response.extracted.customer?.name ?? response.extracted.customer?.legalName;
+  }
+
+  if (response.linkedEntity?.type === "payroll") {
+    return response.extracted.employee?.name ?? response.extracted.employee?.legalName;
   }
 
   return undefined;
@@ -145,6 +188,45 @@ function buildInvoicePayload(response: IngestResponseLike) {
         lineItems,
         notes: response.extracted.notes ?? undefined,
         status: response.extracted.status ?? response.linkedEntity.data.status,
+      },
+    };
+  }
+
+  if (response.linkedEntity?.type === "payroll") {
+    const periodStart = response.extracted.periodStart ?? response.linkedEntity.data.periodStart;
+    const periodEnd = response.extracted.periodEnd ?? response.linkedEntity.data.periodEnd;
+    if (!periodStart || !periodEnd || !partyName) {
+      return null;
+    }
+
+    return {
+      label: `payroll for ${partyName} was ingested`,
+      invoice: {
+        kind: "payroll",
+        id: response.linkedEntity.data.payrollId,
+        slug: response.linkedEntity.data.slug,
+        employee: {
+          name: partyName,
+        },
+        payrollNumber: response.extracted.payrollNumber ?? response.linkedEntity.data.payrollNumber ?? undefined,
+        countryCode: response.extracted.countryCode ?? response.linkedEntity.data.countryCode ?? undefined,
+        periodStart,
+        periodEnd,
+        paymentDate: response.extracted.paymentDate ?? response.linkedEntity.data.paymentDate ?? undefined,
+        currency: response.extracted.currency ?? response.linkedEntity.data.currency,
+        grossSalary: response.extracted.grossSalary ?? response.linkedEntity.data.grossSalary,
+        netSalary: response.extracted.netSalary ?? response.linkedEntity.data.netSalary,
+        employeeTaxWithheld:
+          response.extracted.employeeTaxWithheld ?? response.linkedEntity.data.employeeTaxWithheld,
+        employeeSocialContributions:
+          response.extracted.employeeSocialContributions ?? response.linkedEntity.data.employeeSocialContributions,
+        employerSocialContributions:
+          response.extracted.employerSocialContributions ?? response.linkedEntity.data.employerSocialContributions,
+        otherDeductions: response.extracted.otherDeductions ?? response.linkedEntity.data.otherDeductions,
+        otherEarnings: response.extracted.otherEarnings ?? response.linkedEntity.data.otherEarnings,
+        rawLines: response.extracted.rawLines ?? response.linkedEntity.data.rawLines,
+        notes: response.extracted.notes ?? response.linkedEntity.data.notes ?? undefined,
+        status: response.extracted.payrollStatus ?? response.linkedEntity.data.status,
       },
     };
   }

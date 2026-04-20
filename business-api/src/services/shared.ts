@@ -1,7 +1,7 @@
 import { and, eq, isNull, or } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
-import { companyCard, contacts, deals, documents, expenses, projects, salesInvoices, tasks } from "../db/schema/index.js";
+import { companyCard, contacts, deals, documents, expenses, payrolls, projects, salesInvoices, tasks } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 
 function notFound(message: string): never {
@@ -63,6 +63,23 @@ export function requireExpenseRecord(idOrSlug: string) {
   const record = getExpenseRecordByIdOrSlug(idOrSlug);
   if (!record) {
     notFound(`Expense not found: ${idOrSlug}`);
+  }
+
+  return record;
+}
+
+export function getPayrollRecordByIdOrSlug(idOrSlug: string) {
+  return getOrm()
+    .select()
+    .from(payrolls)
+    .where(and(isNull(payrolls.deletedAt), or(eq(payrolls.id, idOrSlug), eq(payrolls.slug, idOrSlug))))
+    .get();
+}
+
+export function requirePayrollRecord(idOrSlug: string) {
+  const record = getPayrollRecordByIdOrSlug(idOrSlug);
+  if (!record) {
+    notFound(`Payroll not found: ${idOrSlug}`);
   }
 
   return record;

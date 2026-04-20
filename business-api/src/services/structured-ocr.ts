@@ -8,6 +8,11 @@ import {
   structuredInvoiceSchema,
   type StructuredInvoice,
 } from "../schemas/structured-ocr.js";
+import {
+  structuredPayrollJsonSchema,
+  structuredPayrollSchema,
+  type StructuredPayroll,
+} from "../schemas/structured-payroll.js";
 import { logger } from "../lib/logger.js";
 
 type StructuredOcrPage = {
@@ -190,6 +195,57 @@ function parseStubInvoice(text: string): StructuredInvoice {
   return parsedResult;
 }
 
+function parseStubPayroll(text: string): StructuredPayroll {
+  const rawLines = Array.from(
+    text.matchAll(
+      /payroll line\s*:\s*label=([^;]+);\s*category=([^;]+);\s*amount=([^;\n]+)(?:;\s*rate=([^;\n]+))?(?:;\s*base=([^;\n]+))?(?:;\s*notes=([^\n]+))?/gim,
+    ),
+  ).map((match) => ({
+    label: match[1].trim(),
+    category: match[2].trim() as StructuredPayroll["rawLines"][number]["category"],
+    amount: normalizeAmount(match[3]) ?? match[3].trim(),
+    rate: match[4] ? (normalizeAmount(match[4]) ?? match[4].trim()) : null,
+    base: match[5] ? (normalizeAmount(match[5]) ?? match[5].trim()) : null,
+    notes: match[6]?.trim() || null,
+  }));
+
+  return structuredPayrollSchema.parse({
+    schemaVersion: "payroll.v1",
+    documentType: "payroll",
+    payrollNumber: firstMatch(text, [/payroll(?: number| no\.?| #)?\s*:\s*(.+)/im]) ?? null,
+    countryCode: firstMatch(text, [/country(?: code)?\s*:\s*([A-Z]{2})/im]) ?? "ES",
+    periodStart: parseDateValue(firstMatch(text, [/period start\s*:\s*(.+)/im])) ?? parseDateValue(firstMatch(text, [/from\s*:\s*(.+)/im]))!,
+    periodEnd: parseDateValue(firstMatch(text, [/period end\s*:\s*(.+)/im])) ?? parseDateValue(firstMatch(text, [/to\s*:\s*(.+)/im]))!,
+    paymentDate: parseDateValue(firstMatch(text, [/payment date\s*:\s*(.+)/im, /pay date\s*:\s*(.+)/im])) ?? null,
+    currency:
+      firstMatch(text, [/currency\s*:\s*([A-Z]{3})/im]) ??
+      (text.includes("EUR") || text.includes("€") ? "EUR" : undefined),
+    employer: {
+      displayName: firstMatch(text, [/employer\s*:\s*(.+)/im]) ?? "Unknown employer",
+      legalName: firstMatch(text, [/employer legal name\s*:\s*(.+)/im]) ?? firstMatch(text, [/employer\s*:\s*(.+)/im]) ?? "Unknown employer",
+      taxId: firstMatch(text, [/employer tax id\s*:\s*(.+)/im]) ?? null,
+      email: firstMatch(text, [/employer email\s*:\s*(.+)/im]) ?? null,
+    },
+    employee: {
+      displayName: firstMatch(text, [/employee\s*:\s*(.+)/im]) ?? "Unknown employee",
+      legalName: firstMatch(text, [/employee legal name\s*:\s*(.+)/im]) ?? firstMatch(text, [/employee\s*:\s*(.+)/im]) ?? "Unknown employee",
+      taxId: firstMatch(text, [/employee tax id\s*:\s*(.+)/im]) ?? null,
+      email: firstMatch(text, [/employee email\s*:\s*(.+)/im]) ?? null,
+    },
+    grossSalary: normalizeAmount(firstMatch(text, [/gross(?: salary)?\s*:\s*([^\n]+)/im])),
+    netSalary: normalizeAmount(firstMatch(text, [/net(?: salary)?\s*:\s*([^\n]+)/im])),
+    employeeTaxWithheld: normalizeAmount(firstMatch(text, [/employee tax withheld\s*:\s*([^\n]+)/im, /withheld tax\s*:\s*([^\n]+)/im])) ?? "0.00",
+    employeeSocialContributions: normalizeAmount(firstMatch(text, [/employee social contributions?\s*:\s*([^\n]+)/im])) ?? "0.00",
+    employerSocialContributions: normalizeAmount(firstMatch(text, [/employer social contributions?\s*:\s*([^\n]+)/im])) ?? "0.00",
+    otherDeductions: normalizeAmount(firstMatch(text, [/other deductions?\s*:\s*([^\n]+)/im])) ?? "0.00",
+    otherEarnings: normalizeAmount(firstMatch(text, [/other earnings?\s*:\s*([^\n]+)/im])) ?? "0.00",
+    rawLines,
+    notes: firstMatch(text, [/notes?\s*:\s*(.+)/im]) ?? null,
+    rawText: text.trim() || undefined,
+    pageNotes: text.trim() ? text.split(/\n\s*\n/).map((chunk) => chunk.trim()).filter(Boolean) : null,
+  });
+}
+
 function getMessageContent(payload: z.infer<typeof chatCompletionResponseSchema>): string {
   const content = payload.choices[0]?.message.content;
   if (typeof content === "string") {
@@ -227,6 +283,25 @@ function renderStructuredText(invoice: StructuredInvoice): string {
   return parts.filter(Boolean).join("\n").trim();
 }
 
+function renderStructuredPayrollText(payroll: StructuredPayroll): string {
+  const parts = [
+    payroll.rawText,
+    payroll.payrollNumber ? `payroll number: ${payroll.payrollNumber}` : undefined,
+    payroll.periodStart ? `period start: ${payroll.periodStart}` : undefined,
+    payroll.periodEnd ? `period end: ${payroll.periodEnd}` : undefined,
+    payroll.paymentDate ? `payment date: ${payroll.paymentDate}` : undefined,
+    payroll.currency ? `currency: ${payroll.currency}` : undefined,
+    payroll.employer?.displayName ? `employer: ${payroll.employer.displayName}` : undefined,
+    payroll.employee?.displayName ? `employee: ${payroll.employee.displayName}` : undefined,
+    payroll.grossSalary ? `gross salary: ${payroll.grossSalary}` : undefined,
+    payroll.netSalary ? `net salary: ${payroll.netSalary}` : undefined,
+    payroll.notes,
+    ...(payroll.pageNotes ?? []),
+  ];
+
+  return parts.filter(Boolean).join("\n").trim();
+}
+
 async function runStructuredExtraction<T>({
   pages,
   schemaName,
@@ -249,11 +324,16 @@ async function runStructuredExtraction<T>({
       });
     }
 
-    const parsed = validator.parse(parseStubInvoice(rawText));
+    const parsed = validator.parse(
+      schemaName === structuredPayrollJsonSchema.name ? parseStubPayroll(rawText) : parseStubInvoice(rawText),
+    );
     return {
       data: parsed,
       engine: "structured-stub-ocr",
-      text: renderStructuredText(parsed as StructuredInvoice),
+      text:
+        schemaName === structuredPayrollJsonSchema.name
+          ? renderStructuredPayrollText(parsed as StructuredPayroll)
+          : renderStructuredText(parsed as StructuredInvoice),
     };
   }
 
@@ -276,7 +356,7 @@ async function runStructuredExtraction<T>({
       messages: [
         {
           role: "system",
-          content: "## Your Task\n\nExtract structured document data from the supplied page images. The document can be an sales or expense invoice or similar expense document or a contract piece. Respond with a JSON object that matches the provided schema. To the 'notes' add a summary of the invoice items, if any and original invoice notes, if present.",
+          content: "## Your Task\n\nExtract structured document data from the supplied page images. The document can be an invoice, payroll slip, expense document, or contract piece depending on the requested schema. Respond with a JSON object that matches the provided schema. Add concise summary notes when helpful and preserve original labels in raw fields when the schema allows it.",
         },
         {
           role: "user",
@@ -336,7 +416,10 @@ async function runStructuredExtraction<T>({
   return {
     data: validated,
     engine: `structured_ocr:${provider.model_name}`,
-    text: renderStructuredText(validated as StructuredInvoice),
+    text:
+      schemaName === structuredPayrollJsonSchema.name
+        ? renderStructuredPayrollText(validated as StructuredPayroll)
+        : renderStructuredText(validated as StructuredInvoice),
   };
 }
 
@@ -350,6 +433,19 @@ export async function extractStructuredInvoiceFromPages(
     validator: structuredInvoiceSchema,
     prompt:
       "Parse these invoice scans into structured JSON. Ensure that data expected by the JSON schema is included in the result. Things like but not limited to: invoice identity (like date, number, currency, status), seller/buyer parties, totals, taxes, line items, payment terms, and any available raw OCR notes.",
+  });
+}
+
+export async function extractStructuredPayrollFromPages(
+  pages: StructuredOcrPage[],
+): Promise<StructuredOcrResult<StructuredPayroll>> {
+  return runStructuredExtraction({
+    pages,
+    schemaName: structuredPayrollJsonSchema.name,
+    schema: structuredPayrollJsonSchema.schema,
+    validator: structuredPayrollSchema,
+    prompt:
+      "Parse these payroll slip scans into structured JSON. Extract employee and employer identity, payroll reference, payroll period, payment date, currency, gross and net salary, withheld taxes, employee and employer social contributions, other earnings and deductions, plus raw payroll lines with their original labels. The schema is meant to work across EU payroll slips, so keep ambiguous country-specific labels in rawLines instead of guessing.",
   });
 }
 

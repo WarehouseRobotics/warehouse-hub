@@ -17,6 +17,7 @@ export type EmbeddingEntityType =
   | "document"
   | "deal"
   | "expense_invoice"
+  | "payroll"
   | "sales_invoice"
   | "task";
 
@@ -168,6 +169,28 @@ function createEmbeddingDocument(entityType: EmbeddingEntityType, entity: Record
         stage: entity.stage,
         notes: entity.notes,
         lineItems: entity.lineItems,
+      };
+    case "payroll":
+      return {
+        entityType,
+        employeeDisplayName: entity.employeeDisplayName,
+        employeeLegalName: entity.employeeLegalName,
+        payrollNumber: entity.payrollNumber,
+        countryCode: entity.countryCode,
+        periodStart: entity.periodStart,
+        periodEnd: entity.periodEnd,
+        paymentDate: entity.paymentDate,
+        currency: entity.currency,
+        grossSalary: entity.grossSalary,
+        netSalary: entity.netSalary,
+        employeeTaxWithheld: entity.employeeTaxWithheld,
+        employeeSocialContributions: entity.employeeSocialContributions,
+        employerSocialContributions: entity.employerSocialContributions,
+        otherDeductions: entity.otherDeductions,
+        otherEarnings: entity.otherEarnings,
+        rawLines: entity.rawLines,
+        notes: entity.notes,
+        status: entity.status,
       };
     case "sales_invoice":
       return {

@@ -95,6 +95,36 @@ CREATE TABLE IF NOT EXISTS expenses (
 
 CREATE INDEX IF NOT EXISTS expenses_supplier_contact_id_idx ON expenses(supplier_contact_id);
 
+CREATE TABLE IF NOT EXISTS payrolls (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  company_card_id TEXT NOT NULL REFERENCES company_card(id),
+  employee_contact_id TEXT NOT NULL REFERENCES contacts(id),
+  document_id TEXT REFERENCES documents(id),
+  payroll_number TEXT,
+  country_code TEXT,
+  period_start TEXT NOT NULL,
+  period_end TEXT NOT NULL,
+  payment_date TEXT,
+  currency TEXT NOT NULL,
+  gross_salary TEXT NOT NULL,
+  net_salary TEXT NOT NULL,
+  employee_tax_withheld TEXT NOT NULL,
+  employee_social_contributions TEXT NOT NULL,
+  employer_social_contributions TEXT NOT NULL,
+  other_deductions TEXT NOT NULL,
+  other_earnings TEXT NOT NULL,
+  raw_lines TEXT NOT NULL,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'recorded',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS payrolls_employee_contact_id_idx ON payrolls(employee_contact_id);
+CREATE INDEX IF NOT EXISTS payrolls_period_idx ON payrolls(period_start, period_end);
+
 CREATE TABLE IF NOT EXISTS deals (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,

@@ -7,6 +7,7 @@ import {
   deals,
   documents,
   expenses,
+  payrolls,
   salesInvoices,
   tasks,
 } from "../db/schema/index.js";
@@ -24,6 +25,7 @@ const SUPPORTED_ENTITY_TYPES: readonly EmbeddingEntityType[] = [
   "document",
   "deal",
   "expense_invoice",
+  "payroll",
   "sales_invoice",
   "task",
 ];
@@ -192,6 +194,42 @@ async function regenerateSalesInvoiceEmbeddings(): Promise<number> {
   return rows.length;
 }
 
+async function regeneratePayrollEmbeddings(): Promise<number> {
+  const rows = getOrm().select().from(payrolls).where(isNull(payrolls.deletedAt)).all();
+
+  for (const row of rows) {
+    const employee = getOrm().select().from(contacts).where(eq(contacts.id, row.employeeContactId)).get();
+
+    await upsertEmbedding(
+      "payroll",
+      row.id,
+      computeEmbeddingText("payroll", {
+        employeeDisplayName: employee?.displayName ?? null,
+        employeeLegalName: employee?.legalName ?? null,
+        employeeEmail: employee?.email ?? null,
+        payrollNumber: row.payrollNumber,
+        countryCode: row.countryCode,
+        periodStart: row.periodStart,
+        periodEnd: row.periodEnd,
+        paymentDate: row.paymentDate,
+        currency: row.currency,
+        grossSalary: row.grossSalary,
+        netSalary: row.netSalary,
+        employeeTaxWithheld: row.employeeTaxWithheld,
+        employeeSocialContributions: row.employeeSocialContributions,
+        employerSocialContributions: row.employerSocialContributions,
+        otherDeductions: row.otherDeductions,
+        otherEarnings: row.otherEarnings,
+        rawLines: JSON.parse(row.rawLines) as unknown[],
+        notes: row.notes,
+        status: row.status,
+      }),
+    );
+  }
+
+  return rows.length;
+}
+
 async function regenerateTaskEmbeddings(): Promise<number> {
   const rows = getOrm().select().from(tasks).where(isNull(tasks.deletedAt)).all();
 
@@ -217,6 +255,7 @@ const regenerationHandlers: Record<EmbeddingEntityType, () => Promise<number>> =
   document: regenerateDocumentEmbeddings,
   deal: regenerateDealEmbeddings,
   expense_invoice: regenerateExpenseEmbeddings,
+  payroll: regeneratePayrollEmbeddings,
   sales_invoice: regenerateSalesInvoiceEmbeddings,
   task: regenerateTaskEmbeddings,
 };

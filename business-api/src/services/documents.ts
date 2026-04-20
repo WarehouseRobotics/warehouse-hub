@@ -62,6 +62,11 @@ type DocumentProcessingPatch = {
   linkedEntityId?: string | null;
 };
 
+type ReplaceStoredDocumentInput = {
+  kind?: DocumentUploadInput["kind"];
+  source?: string | null;
+};
+
 export function createStoredDocument(file: Express.Multer.File, meta: CreateStoredDocumentInput) {
   const company = requireCompanyCardRecord();
   const documentId = createPrefixedId("doc_");
@@ -118,6 +123,43 @@ export function updateDocumentProcessing(idOrSlug: string, patch: DocumentProces
             : JSON.stringify(patch.extractedData),
       linkedEntityType: patch.linkedEntityType === undefined ? existing.linkedEntityType : patch.linkedEntityType,
       linkedEntityId: patch.linkedEntityId === undefined ? existing.linkedEntityId : patch.linkedEntityId,
+    })
+    .where(eq(documents.id, existing.id))
+    .run();
+
+  const updated = getDocumentMeta(existing.id);
+  scheduleEmbedding(existing.id, updated);
+  return updated;
+}
+
+export function replaceStoredDocument(idOrSlug: string, file: Express.Multer.File, meta: ReplaceStoredDocumentInput = {}) {
+  const existing = requireDocumentRecord(idOrSlug);
+  const checksum = createHash("sha256").update(file.buffer).digest("hex");
+  const extension = path.extname(file.originalname);
+  const nextPath = existing.filePath.replace(/\.[^.]*$/, "") + extension;
+
+  fs.mkdirSync(path.dirname(nextPath), { recursive: true });
+  fs.writeFileSync(nextPath, file.buffer);
+  if (nextPath !== existing.filePath) {
+    fs.rmSync(existing.filePath, { force: true });
+  }
+
+  getOrm()
+    .update(documents)
+    .set({
+      kind: meta.kind ?? existing.kind,
+      source: meta.source === undefined ? existing.source : meta.source,
+      originalFilename: file.originalname,
+      mimeType: file.mimetype || "application/octet-stream",
+      filePath: nextPath,
+      checksum,
+      storageStatus: "stored",
+      ocrStatus: "pending",
+      ocrText: null,
+      ocrError: null,
+      ocrEngine: null,
+      ocrCompletedAt: null,
+      extractedDataJson: null,
     })
     .where(eq(documents.id, existing.id))
     .run();

@@ -10,6 +10,7 @@ import { createDeal, getDeal, listDeals } from "./services/deals.js";
 import { getDocumentDownload, getDocumentMeta, listDocuments, uploadDocument } from "./services/documents.js";
 import { ingestDocument } from "./services/document-ingestion.js";
 import { createExpense, getExpense, listExpenses, updateExpense } from "./services/expenses.js";
+import { createPayroll, getPayroll, listPayrolls, updatePayroll } from "./services/payrolls.js";
 import { createProject, getProject, listProjects } from "./services/projects.js";
 import { generateSalesInvoice, getSalesInvoice, listSalesInvoices, updateSalesInvoice } from "./services/sales-invoices.js";
 import { createTask, getTask, listTasks, updateTask } from "./services/tasks.js";
@@ -22,6 +23,8 @@ import {
   documentUploadSchema,
   expenseInputSchema,
   expensePatchSchema,
+  payrollInputSchema,
+  payrollPatchSchema,
   projectInputSchema,
   salesInvoiceGenerateSchema,
   salesInvoicePatchSchema,
@@ -98,6 +101,21 @@ const HELP_SCOPES: Record<string, HelpScope> = {
     ],
     aliases: ["purchase-invoices", "expense-invoices", "bills"],
   },
+  payrolls: {
+    description: "Manage imported payroll slips and employee payroll events.",
+    commands: [
+      "create <json>",
+      "get <id-or-slug>",
+      "list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
+      "update <id-or-slug> <json>",
+    ],
+    examples: [
+      'payrolls create \'{"employeeContactId":"ct_000245","periodStart":"2026-03-01","periodEnd":"2026-03-31","currency":"EUR","grossSalary":"3000","netSalary":"2310"}\'',
+      "payrolls list --status recorded",
+      'documents ingest test_nomina.pdf \'{"kind":"payroll","source":"accountant_upload"}\'',
+    ],
+    aliases: ["payroll", "nominas", "nomina"],
+  },
   deals: {
     description: "Create, inspect, and list sales deals.",
     commands: ["create <json>", "get <id-or-slug>", "list"],
@@ -152,6 +170,7 @@ const TOP_LEVEL_COMMANDS = [
   "contacts <subcommand>",
   "documents <subcommand>",
   "expenses <subcommand>",
+  "payrolls <subcommand>",
   "deals <subcommand>",
   "sales-invoices <subcommand>",
   "projects <subcommand>",
@@ -435,6 +454,28 @@ async function main(): Promise<void> {
   if (command === "expenses" && subcommand === "update") {
     const input = expensePatchSchema.parse(parseJsonArg(rest[1], "expense patch"));
     printJson(updateExpense(rest[0], input));
+    return;
+  }
+
+  if (command === "payrolls" && subcommand === "create") {
+    const input = payrollInputSchema.parse(parseJsonArg(rest[0], "payroll"));
+    printJson(createPayroll(input));
+    return;
+  }
+
+  if (command === "payrolls" && subcommand === "get") {
+    printJson(getPayroll(rest[0]));
+    return;
+  }
+
+  if (command === "payrolls" && subcommand === "list") {
+    printJson(await listPayrolls(parseCliListFilters(rest)));
+    return;
+  }
+
+  if (command === "payrolls" && subcommand === "update") {
+    const input = payrollPatchSchema.parse(parseJsonArg(rest[1], "payroll patch"));
+    printJson(updatePayroll(rest[0], input));
     return;
   }
 

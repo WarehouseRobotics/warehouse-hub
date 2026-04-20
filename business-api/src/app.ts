@@ -7,6 +7,7 @@ import { contactsRouter } from "./routes/contacts.js";
 import { dealsRouter } from "./routes/deals.js";
 import { documentsRouter } from "./routes/documents.js";
 import { expensesRouter } from "./routes/expenses.js";
+import { payrollsRouter } from "./routes/payrolls.js";
 import { projectsRouter } from "./routes/projects.js";
 import { salesInvoicesRouter } from "./routes/sales-invoices.js";
 import { tasksRouter } from "./routes/tasks.js";
@@ -38,6 +39,7 @@ export function createApp() {
   app.use("/api/v1/contacts", contactsRouter);
   app.use("/api/v1/documents", documentsRouter);
   app.use("/api/v1/expenses", expensesRouter);
+  app.use("/api/v1/payrolls", payrollsRouter);
   app.use("/api/v1/deals", dealsRouter);
   app.use("/api/v1/sales-invoices", salesInvoicesRouter);
   app.use("/api/v1/projects", projectsRouter);

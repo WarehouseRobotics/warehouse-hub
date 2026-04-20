@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { addressSchema } from "./company-card.js";
 
-export const contactRolesSchema = z.array(z.enum(["customer", "supplier", "both", "owned", "contact"])).min(1);
+export const contactRolesSchema = z.array(z.enum(["customer", "supplier", "employee", "both", "owned", "contact"])).min(1);
 
 export const contactInputSchema = z
   .object({

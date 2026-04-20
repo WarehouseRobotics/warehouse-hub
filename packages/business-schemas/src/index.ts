@@ -3,6 +3,7 @@ export * from "./contact.js";
 export * from "./deal.js";
 export * from "./document.js";
 export * from "./expense.js";
+export * from "./payroll.js";
 export * from "./project.js";
 export * from "./sales-invoice.js";
 export * from "./task.js";

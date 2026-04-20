@@ -916,6 +916,195 @@ describe("business-api service flows", () => {
     expect(second.linkedEntity.data.pdfDocumentId).toBe(second.document.documentId);
   });
 
+  it("ingests payroll slips, creates employee contacts, and stores normalized payroll amounts", async () => {
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { ingestDocument } = await import("../src/services/document-ingestion.js");
+    const { listContacts } = await import("../src/services/contacts.js");
+
+    upsertCompanyCard({
+      legalName: "Warehouse Robotics SL",
+      displayName: "Warehouse Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    const result = await ingestDocument(
+      {
+        fieldname: "file",
+        originalname: "test_nomina.pdf",
+        encoding: "7bit",
+        mimetype: "application/pdf",
+        size: 500,
+        buffer: Buffer.from(
+          [
+            "employer: Warehouse Robotics SL",
+            "employee: Denis K",
+            "employee email: denis@example.com",
+            "country: ES",
+            "payroll number: NOM-2026-03-01",
+            "period start: 2026-03-01",
+            "period end: 2026-03-31",
+            "payment date: 2026-03-31",
+            "currency: EUR",
+            "gross salary: 3000.00",
+            "net salary: 2310.00",
+            "employee tax withheld: 345.00",
+            "employee social contributions: 210.00",
+            "employer social contributions: 690.00",
+            "other deductions: 135.00",
+            "other earnings: 0.00",
+            "payroll line: label=Salario base; category=earning; amount=3000.00",
+            "payroll line: label=IRPF; category=withholding; amount=345.00",
+            "payroll line: label=Seguridad Social Trabajador; category=employee_contribution; amount=210.00",
+          ].join("\n"),
+        ),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      {
+        kind: "payroll",
+      },
+    );
+
+    expect(result.document.ocrStatus).toBe("completed");
+    expect(result.document.ocrEngine).toBe("structured-stub-ocr");
+    expect(result.linkedEntity?.type).toBe("payroll");
+    expect(result.extracted.structuredPayrollData?.schemaVersion).toBe("payroll.v1");
+    expect(result.linkedEntity?.data).toEqual(
+      expect.objectContaining({
+        payrollNumber: "NOM-2026-03-01",
+        grossSalary: "3000.00",
+        netSalary: "2310.00",
+        employeeTaxWithheld: "345.00",
+        employeeSocialContributions: "210.00",
+        employerSocialContributions: "690.00",
+        status: "recorded",
+      }),
+    );
+    expect(listContacts({ role: "employee" })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "person",
+          displayName: "Denis K",
+        }),
+      ]),
+    );
+  });
+
+  it("reimports duplicate payroll slips by updating the same payroll and replacing the document", async () => {
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { ingestDocument } = await import("../src/services/document-ingestion.js");
+    const { getDocumentMeta } = await import("../src/services/documents.js");
+
+    upsertCompanyCard({
+      legalName: "Warehouse Robotics SL",
+      displayName: "Warehouse Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    const first = await ingestDocument(
+      {
+        fieldname: "file",
+        originalname: "test_nomina.pdf",
+        encoding: "7bit",
+        mimetype: "application/pdf",
+        size: 500,
+        buffer: Buffer.from(
+          [
+            "employee: Denis K",
+            "payroll number: NOM-2026-03-01",
+            "period start: 2026-03-01",
+            "period end: 2026-03-31",
+            "payment date: 2026-03-31",
+            "currency: EUR",
+            "gross salary: 3000.00",
+            "net salary: 2310.00",
+            "employee tax withheld: 345.00",
+            "employee social contributions: 210.00",
+            "employer social contributions: 690.00",
+            "other deductions: 135.00",
+            "other earnings: 0.00",
+            "payroll line: label=Salario base; category=earning; amount=3000.00",
+          ].join("\n"),
+        ),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      { kind: "payroll" },
+    );
+
+    const second = await ingestDocument(
+      {
+        fieldname: "file",
+        originalname: "test_nomina_corrected.pdf",
+        encoding: "7bit",
+        mimetype: "application/pdf",
+        size: 520,
+        buffer: Buffer.from(
+          [
+            "employee: Denis K",
+            "payroll number: NOM-2026-03-01",
+            "period start: 2026-03-01",
+            "period end: 2026-03-31",
+            "payment date: 2026-03-31",
+            "currency: EUR",
+            "gross salary: 3000.00",
+            "net salary: 2345.00",
+            "employee tax withheld: 345.00",
+            "employee social contributions: 210.00",
+            "employer social contributions: 690.00",
+            "other deductions: 100.00",
+            "other earnings: 0.00",
+            "notes: Corrected payroll slip",
+            "payroll line: label=Salario base; category=earning; amount=3000.00",
+          ].join("\n"),
+        ),
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      { kind: "payroll" },
+    );
+
+    expect(first.linkedEntity?.type).toBe("payroll");
+    expect(second.linkedEntity?.type).toBe("payroll");
+    if (first.linkedEntity?.type !== "payroll" || second.linkedEntity?.type !== "payroll") {
+      throw new Error("Expected linked payroll records");
+    }
+
+    expect(second.linkedEntity.data.payrollId).toBe(first.linkedEntity.data.payrollId);
+    expect(second.document.documentId).toBe(first.document.documentId);
+    expect(second.linkedEntity.data.netSalary).toBe("2345.00");
+    expect(second.linkedEntity.data.otherDeductions).toBe("100.00");
+    expect(getDocumentMeta(first.document.documentId).filename).toBe("test_nomina_corrected.pdf");
+  });
+
   it("fails ambiguous invoice contact matching instead of auto-creating a duplicate", async () => {
     const { upsertCompanyCard } = await import("../src/services/company-card.js");
     const { createContact, listContacts } = await import("../src/services/contacts.js");

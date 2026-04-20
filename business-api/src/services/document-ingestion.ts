@@ -2,17 +2,25 @@ import type {
   ContactInput,
   DocumentIngestInput,
   DocumentIngestOverrides,
+  PayrollRawLine,
 } from "@warehouse-hub/business-schemas";
 import type { StructuredInvoice } from "../schemas/structured-ocr.js";
+import type { StructuredPayroll } from "../schemas/structured-payroll.js";
 import { createExpense, getExpense } from "./expenses.js";
+import { createPayroll, findPayrollForImport, getPayroll, updatePayroll } from "./payrolls.js";
 import { resolveContact } from "./contacts.js";
-import { createStoredDocument, getDocumentMeta, updateDocumentProcessing } from "./documents.js";
+import {
+  createStoredDocument,
+  getDocumentMeta,
+  replaceStoredDocument,
+  softDeleteDocument,
+  updateDocumentProcessing,
+} from "./documents.js";
 import { extractDocumentText, renderDocumentPages } from "./document-ocr.js";
 import { importSalesInvoice } from "./sales-invoices.js";
-import { extractStructuredInvoiceFromPages } from "./structured-ocr.js";
+import { extractStructuredInvoiceFromPages, extractStructuredPayrollFromPages } from "./structured-ocr.js";
 import { requireCompanyCardRecord, requireContactRecord } from "./shared.js";
 import { AppError } from "../lib/errors.js";
-import { logger } from "../lib/logger.js";
 
 type ExtractedParty = {
   name?: string;
@@ -57,6 +65,22 @@ type ExtractedDocumentData = {
   paymentTermsDays?: number;
   status?: "draft" | "finalized" | "paid" | "cancelled";
   structuredData?: StructuredInvoice;
+  employee?: ExtractedParty;
+  payrollNumber?: string;
+  countryCode?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  paymentDate?: string;
+  grossSalary?: string;
+  netSalary?: string;
+  employeeTaxWithheld?: string;
+  employeeSocialContributions?: string;
+  employerSocialContributions?: string;
+  otherDeductions?: string;
+  otherEarnings?: string;
+  rawLines?: PayrollRawLine[];
+  payrollStatus?: "recorded" | "paid" | "void";
+  structuredPayrollData?: StructuredPayroll;
 };
 
 type IngestionResponse = {
@@ -72,6 +96,7 @@ type IngestionResponse = {
   linkedEntity:
     | { type: "expense"; data: ReturnType<typeof getExpense> }
     | { type: "sales_invoice"; data: ReturnType<typeof importSalesInvoice> }
+    | { type: "payroll"; data: ReturnType<typeof getPayroll> }
     | { type: "contact"; data: ReturnType<typeof requireContactRecord> }
     | null;
   warnings: string[];
@@ -281,6 +306,43 @@ function mapStructuredInvoiceToExtracted(
   };
 }
 
+function mapStructuredPayrollToExtracted(structured: StructuredPayroll): ExtractedDocumentData {
+  return {
+    notes: structured.notes ? structured.notes : undefined,
+    employee: structured.employee
+      ? {
+          name: structured.employee.displayName ?? structured.employee.legalName ?? undefined,
+          legalName: structured.employee.legalName ?? structured.employee.displayName ?? undefined,
+          taxId: structured.employee.taxId ?? undefined,
+          email: structured.employee.email ?? undefined,
+        }
+      : undefined,
+    payrollNumber: structured.payrollNumber ?? undefined,
+    countryCode: structured.countryCode ?? undefined,
+    periodStart: toParsedDate(structured.periodStart),
+    periodEnd: toParsedDate(structured.periodEnd),
+    paymentDate: structured.paymentDate ? toParsedDate(structured.paymentDate) : undefined,
+    currency: structured.currency,
+    grossSalary: structured.grossSalary,
+    netSalary: structured.netSalary,
+    employeeTaxWithheld: structured.employeeTaxWithheld,
+    employeeSocialContributions: structured.employeeSocialContributions,
+    employerSocialContributions: structured.employerSocialContributions,
+    otherDeductions: structured.otherDeductions,
+    otherEarnings: structured.otherEarnings,
+    rawLines: structured.rawLines.map((line) => ({
+      label: line.label,
+      category: line.category,
+      amount: line.amount,
+      rate: line.rate ?? undefined,
+      base: line.base ?? undefined,
+      notes: line.notes ?? undefined,
+    })),
+    payrollStatus: "recorded",
+    structuredPayrollData: structured,
+  };
+}
+
 function normalizeOverrideLineItems(lineItems: unknown): ExtractedLineItem[] | undefined {
   if (!Array.isArray(lineItems)) {
     return undefined;
@@ -348,6 +410,24 @@ function mergeExtractedWithOverrides(
     category: overrides.category ?? extracted.category,
     paymentTermsDays: overrides.paymentTermsDays ?? extracted.paymentTermsDays,
     status: overrides.status ?? extracted.status,
+    employee: {
+      ...extracted.employee,
+      name: overrides.employeeName ?? extracted.employee?.name,
+    },
+    payrollNumber: overrides.payrollNumber ?? extracted.payrollNumber,
+    countryCode: overrides.countryCode ?? extracted.countryCode,
+    periodStart: overrides.periodStart ?? extracted.periodStart,
+    periodEnd: overrides.periodEnd ?? extracted.periodEnd,
+    paymentDate: overrides.paymentDate ?? extracted.paymentDate,
+    grossSalary: overrides.grossSalary ?? extracted.grossSalary,
+    netSalary: overrides.netSalary ?? extracted.netSalary,
+    employeeTaxWithheld: overrides.employeeTaxWithheld ?? extracted.employeeTaxWithheld,
+    employeeSocialContributions: overrides.employeeSocialContributions ?? extracted.employeeSocialContributions,
+    employerSocialContributions: overrides.employerSocialContributions ?? extracted.employerSocialContributions,
+    otherDeductions: overrides.otherDeductions ?? extracted.otherDeductions,
+    otherEarnings: overrides.otherEarnings ?? extracted.otherEarnings,
+    rawLines: overrides.rawLines ?? extracted.rawLines,
+    payrollStatus: overrides.payrollStatus ?? extracted.payrollStatus,
   };
 }
 
@@ -375,6 +455,28 @@ function buildContactInput(party: ExtractedParty, role: "supplier" | "customer")
   return {
     type: "company" as const,
     roles: [role],
+    displayName,
+    legalName: party.legalName?.trim() || displayName,
+    taxId: party.taxId,
+    email: party.email,
+    phone: party.phone,
+    billingAddress: compactBillingAddress(party.billingAddress),
+    status: "active" as const,
+  };
+}
+
+function buildEmployeeContactInput(party: ExtractedParty): ContactInput {
+  const displayName = party.name?.trim();
+  if (!displayName) {
+    throw new AppError("Could not resolve employee contact from OCR", {
+      statusCode: 422,
+      code: "document_extraction_incomplete",
+    });
+  }
+
+  return {
+    type: "person" as const,
+    roles: ["employee"],
     displayName,
     legalName: party.legalName?.trim() || displayName,
     taxId: party.taxId,
@@ -414,6 +516,57 @@ function resolvePartyContactId(
   };
 }
 
+function resolveEmployeeContactId(
+  party: ExtractedParty | undefined,
+  explicitContactId: string | undefined,
+): { contactId: string; warning?: string } {
+  if (explicitContactId) {
+    requireContactRecord(explicitContactId);
+    return { contactId: explicitContactId };
+  }
+
+  if (!party?.name) {
+    throw new AppError("Missing employee identity after OCR and overrides", {
+      statusCode: 422,
+      code: "document_extraction_incomplete",
+    });
+  }
+
+  const resolved = resolveContact({
+    autoCreate: true,
+    matchBy: ["taxId", "email", "canonicalName", "legalName"],
+    contact: buildEmployeeContactInput(party),
+  });
+
+  return {
+    contactId: resolved.contactId,
+    warning: resolved.resolution === "created" ? `Created employee contact ${party.name}` : undefined,
+  };
+}
+
+function requirePayrollAmounts(extracted: ExtractedDocumentData) {
+  if (!extracted.currency || !extracted.periodStart || !extracted.periodEnd || !extracted.grossSalary || !extracted.netSalary) {
+    throw new AppError("Missing payroll fields after OCR and overrides", {
+      statusCode: 422,
+      code: "document_extraction_incomplete",
+    });
+  }
+
+  return {
+    currency: extracted.currency,
+    periodStart: extracted.periodStart,
+    periodEnd: extracted.periodEnd,
+    grossSalary: extracted.grossSalary,
+    netSalary: extracted.netSalary,
+    employeeTaxWithheld: extracted.employeeTaxWithheld ?? "0.00",
+    employeeSocialContributions: extracted.employeeSocialContributions ?? "0.00",
+    employerSocialContributions: extracted.employerSocialContributions ?? "0.00",
+    otherDeductions: extracted.otherDeductions ?? "0.00",
+    otherEarnings: extracted.otherEarnings ?? "0.00",
+    rawLines: extracted.rawLines ?? [],
+  };
+}
+
 function requireFinalTotals(totals: ExtractedTotals | undefined) {
   if (!totals?.net || !totals.tax || !totals.gross) {
     throw new AppError("Missing totals after OCR and overrides", {
@@ -434,7 +587,7 @@ export async function ingestDocument(
   input: DocumentIngestInput,
 ): Promise<IngestionResponse> {
   const company = ensureCompanyCard(input.companyCardId);
-  const document = createStoredDocument(file, {
+  let document = createStoredDocument(file, {
     kind: input.kind,
     source: input.source,
   });
@@ -456,6 +609,10 @@ export async function ingestDocument(
       const structuredResult = await extractStructuredInvoiceFromPages(renderDocumentPages(file));
       ocrResult = structuredResult;
       parsed = mapStructuredInvoiceToExtracted(structuredResult.data, input.kind);
+    } else if (input.kind === "payroll") {
+      const structuredResult = await extractStructuredPayrollFromPages(renderDocumentPages(file));
+      ocrResult = structuredResult;
+      parsed = mapStructuredPayrollToExtracted(structuredResult.data);
     } else {
       const textResult = await extractDocumentText(file);
       ocrResult = textResult;
@@ -559,6 +716,89 @@ export async function ingestDocument(
       linkedEntity = { type: "sales_invoice", data: salesInvoice };
       linkedEntityType = "sales_invoice";
       linkedEntityId = salesInvoice.salesInvoiceId;
+    }
+
+    if (input.kind === "payroll") {
+      const employee = resolveEmployeeContactId(extracted.employee, input.overrides?.employeeContactId);
+      if (employee.warning) {
+        warnings.push(employee.warning);
+      }
+
+      const required = requirePayrollAmounts(extracted);
+      const matched = findPayrollForImport({
+        employeeContactId: employee.contactId,
+        periodStart: required.periodStart,
+        periodEnd: required.periodEnd,
+        payrollNumber: extracted.payrollNumber,
+        paymentDate: extracted.paymentDate,
+      });
+
+      if (matched.length > 1) {
+        throw new AppError("Payroll import is ambiguous; multiple matching payroll records exist", {
+          statusCode: 409,
+          code: "duplicate_payroll_ambiguous",
+        });
+      }
+
+      if (matched.length === 1) {
+        if (matched[0].documentId) {
+          softDeleteDocument(document.documentId);
+        }
+        document = replaceStoredDocument(matched[0].documentId ?? document.documentId, file, {
+          kind: input.kind,
+          source: input.source,
+        });
+        if (matched[0].documentId && matched[0].documentId !== document.documentId) {
+          warnings.push(`Replaced existing payroll document ${matched[0].documentId}`);
+        }
+        const payroll = updatePayroll(matched[0].id, {
+          employeeContactId: employee.contactId,
+          documentId: document.documentId,
+          payrollNumber: extracted.payrollNumber,
+          countryCode: extracted.countryCode,
+          periodStart: required.periodStart,
+          periodEnd: required.periodEnd,
+          paymentDate: extracted.paymentDate,
+          currency: required.currency,
+          grossSalary: required.grossSalary,
+          netSalary: required.netSalary,
+          employeeTaxWithheld: required.employeeTaxWithheld,
+          employeeSocialContributions: required.employeeSocialContributions,
+          employerSocialContributions: required.employerSocialContributions,
+          otherDeductions: required.otherDeductions,
+          otherEarnings: required.otherEarnings,
+          rawLines: required.rawLines,
+          notes: extracted.notes,
+          status: extracted.payrollStatus ?? "recorded",
+        });
+        linkedEntity = { type: "payroll", data: payroll };
+        linkedEntityType = "payroll";
+        linkedEntityId = payroll.payrollId;
+      } else {
+        const payroll = createPayroll({
+          employeeContactId: employee.contactId,
+          documentId: document.documentId,
+          payrollNumber: extracted.payrollNumber,
+          countryCode: extracted.countryCode,
+          periodStart: required.periodStart,
+          periodEnd: required.periodEnd,
+          paymentDate: extracted.paymentDate,
+          currency: required.currency,
+          grossSalary: required.grossSalary,
+          netSalary: required.netSalary,
+          employeeTaxWithheld: required.employeeTaxWithheld,
+          employeeSocialContributions: required.employeeSocialContributions,
+          employerSocialContributions: required.employerSocialContributions,
+          otherDeductions: required.otherDeductions,
+          otherEarnings: required.otherEarnings,
+          rawLines: required.rawLines,
+          notes: extracted.notes,
+          status: extracted.payrollStatus ?? "recorded",
+        });
+        linkedEntity = { type: "payroll", data: payroll };
+        linkedEntityType = "payroll";
+        linkedEntityId = payroll.payrollId;
+      }
     }
 
     if (input.kind === "contract") {
