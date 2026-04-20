@@ -28,6 +28,7 @@ The Business API stacks allows our AI agents to query and manage various busines
         * contract / agreement
         * invoice
         * expense/bill
+        * payroll slip
         * payment
     * sub-document objects
         * taxes
@@ -68,6 +69,7 @@ For the first implementation pass, the API should optimize for deterministic CRU
 ### Accounting Features (MVP)
 
 * sales invoicing + expense capture
+* imported payroll tracking
 * VAT-ready bookkeeping
 * country-specific compliance rails
 * human accountant handoff
@@ -79,7 +81,7 @@ For MVP we should keep the base infrastructure intentionally small:
 
 * one owned company card per workspace/user account
 * a shared contacts registry for people and companies
-* documents stored once and linked from expenses and sales invoices
+* documents stored once and linked from expenses, payrolls, and sales invoices
 * audit-friendly status fields instead of implicit state
 
 ## Tasks
@@ -98,7 +100,7 @@ For MVP, documents should support:
 
 * binary file upload and retrieval
 * metadata extraction status
-* links to an owning business object such as `expense` or `sales_invoice`
+* links to an owning business object such as `expense`, `payroll`, or `sales_invoice`
 * original filename, MIME type, checksum and upload timestamp
 
 
@@ -115,6 +117,7 @@ Example contact roles for MVP:
 
 * `customer`
 * `supplier`
+* `employee`
 * `both`
 
 ### Accounting API
@@ -327,7 +330,66 @@ Use case: retrieve the structured expense record later.
 
 Use case: retrieve the original invoice PDF later.
 
-#### 4. Sales registry and deals
+#### 4. Payroll registry with imported payroll slips
+
+Payrolls are imported accounting records, not generated payroll calculations.
+
+The source of truth is the payroll slip document received from an accountant or payroll provider. The system extracts a small normalized payroll record and keeps the original document linked for later review.
+
+`POST /api/v1/documents/ingest`
+
+Multipart form fields:
+
+* `file`: `test_nomina.pdf`
+* `kind`: `payroll`
+* `source`: `accountant_upload`
+
+Example extracted payroll shape:
+
+```json
+{
+  "linkedEntity": {
+    "type": "payroll",
+    "data": {
+      "payrollId": "pay_000041",
+      "employeeContactId": "ct_000411",
+      "documentId": "doc_000990",
+      "payrollNumber": "NOM-2026-03-01",
+      "countryCode": "ES",
+      "periodStart": "2026-03-01",
+      "periodEnd": "2026-03-31",
+      "paymentDate": "2026-03-31",
+      "currency": "EUR",
+      "grossSalary": "3000.00",
+      "netSalary": "2310.00",
+      "employeeTaxWithheld": "345.00",
+      "employeeSocialContributions": "210.00",
+      "employerSocialContributions": "690.00",
+      "otherDeductions": "135.00",
+      "otherEarnings": "0.00",
+      "status": "recorded"
+    }
+  }
+}
+```
+
+Minimal payroll notes:
+
+* payroll contact base entity = `person` contact with role `employee`
+* payroll status tracks payment state of the payroll event
+* payroll slips may contain country-specific lines; normalized totals stay small and raw lines preserve detail
+* duplicate imports update the existing payroll and replace the linked document instead of creating a revision chain
+
+Standalone payroll CRUD is also available:
+
+* `POST /api/v1/payrolls`
+* `GET /api/v1/payrolls`
+* `GET /api/v1/payrolls/pay_000041`
+* `PATCH /api/v1/payrolls/pay_000041`
+
+Use case: retrieve the structured payroll record later without reparsing the document.
+
+#### 5. Sales registry and deals
 
 Record a deal before invoice issuance.
 
@@ -377,7 +439,7 @@ Example response:
 
 Use case: list completed sales for a customer.
 
-#### 5. Sales invoice tracking and generation
+#### 6. Sales invoice tracking and generation
 
 Generate a draft sales invoice using company card + customer contact + deal data. In this version of the spec, invoice generation is represented as a normal create operation on `sales-invoices`, with the payload referencing the source deal and invoice options.
 
@@ -450,6 +512,8 @@ MCP can expose the same operations with safer structured inputs for agents. Sugg
 * `business.resolve_contact`
 * `business.create_expense`
 * `business.get_expense`
+* `business.create_payroll`
+* `business.get_payroll`
 * `business.create_deal`
 * `business.generate_sales_invoice`
 * `business.get_sales_invoice`
@@ -540,6 +604,26 @@ wrobo biz expenses create \
 wrobo biz expenses get exp_000118 --json
 wrobo biz documents download doc_000881 --output ./tmp/expense-invoice.pdf
 ```
+
+#### Payrolls
+
+```bash
+wrobo biz documents ingest \
+  --kind payroll \
+  --source accountant_upload \
+  --file ./data/tmp/test_nomina.pdf \
+  --json
+```
+
+```bash
+wrobo biz payrolls get pay_000041 --json
+```
+
+Payroll notes:
+
+* v1 payrolls are imported from slips, not generated from contract rules
+* dedupe identity is employee + period + payroll number, with payment date as fallback
+* duplicate import replaces the linked document and updates the payroll in place
 
 #### Deals and sales invoices
 

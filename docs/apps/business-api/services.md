@@ -10,7 +10,7 @@ see_also:
 
 # Business API Services Design
 
-This guide documents the service design conventions that are already visible in the current `business-api` codebase. Use it when adding internal services for resources such as projects, invoices, contacts, deals, expenses, and similar business objects.
+This guide documents the service design conventions that are already visible in the current `business-api` codebase. Use it when adding internal services for resources such as projects, invoices, contacts, deals, expenses, payrolls, and similar business objects.
 
 The current pattern is a small vertical slice per resource:
 
@@ -252,6 +252,7 @@ Good candidates for future services:
 
 * creating a sales invoice can read company card defaults
 * creating an expense can verify the supplier contact exists
+* creating or importing a payroll can verify the employee contact exists
 * creating a deal can attach to an existing customer contact
 
 Avoid turning services into a large shared utility layer. Prefer resource ownership and only call another service when the business rule genuinely spans resources.
@@ -320,6 +321,29 @@ Keep the first iteration simple:
 * write one lookup helper
 * centralize not-found behavior
 * filter out soft-deleted rows everywhere
+
+## Payroll Service Notes
+
+Payrolls follow the normal resource pattern with one extra rule: import identity matters.
+
+Short definitions:
+
+* payroll = one employee payroll event for one period
+* payroll document = the imported slip file linked to that payroll
+* duplicate payroll import = update existing payroll and replace document, not create a revision chain
+
+Current payroll-specific logic:
+
+* payrolls are import-first, not generated from payroll rules
+* `employeeContactId` should point to a `person` contact with role `employee`
+* normalized payroll buckets stay intentionally small
+* raw payroll lines preserve country-specific detail that does not fit the normalized buckets
+
+Current dedupe rule:
+
+* first match by `employeeContactId + periodStart + periodEnd + payrollNumber`
+* if payroll number is missing, fall back to `employeeContactId + periodStart + periodEnd + paymentDate`
+* if more than one match exists, fail with conflict instead of guessing
 
 ## Checklist For New Services
 

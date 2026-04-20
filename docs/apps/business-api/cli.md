@@ -182,6 +182,21 @@ Ingest an expense invoice and let OCR extract bookkeeping data:
 
 When `documents ingest` receives a bare filename like `invoice.pdf`, it resolves it from `TMP_DIR`. By default that is `business-api/data/tmp` locally and `/workspace/business-api/data/tmp` inside the Docker container.
 
+Ingest a payroll slip the same way:
+
+```bash
+./container.sh exec npm run cli -- documents ingest payroll.pdf '{
+  "kind": "payroll",
+  "source": "accountant_upload"
+}'
+```
+
+Short note:
+
+* bare filenames are resolved from `TMP_DIR`
+* payroll ingest resolves or creates an `employee` contact
+* duplicate payroll imports update the existing payroll and replace the linked document
+
 List documents from a time window:
 
 ```bash
@@ -227,6 +242,50 @@ Combine semantic search with an exact filter and an absolute range:
 ```bash
 ./container.sh exec npm run cli -- expenses list --status recorded --similar "warehouse printer toner invoice" --after 2026-02-01 --before 2026-04-01
 ```
+
+## Payrolls
+
+Payrolls are imported from payroll slips. They are not generated from configured payroll rules in v1.
+
+Create a payroll manually:
+
+```bash
+./container.sh exec npm run cli -- payrolls create '{
+  "employeeContactId": "ct_000411",
+  "payrollNumber": "NOM-2026-03-01",
+  "countryCode": "ES",
+  "periodStart": "2026-03-01",
+  "periodEnd": "2026-03-31",
+  "paymentDate": "2026-03-31",
+  "currency": "EUR",
+  "grossSalary": "3000.00",
+  "netSalary": "2310.00",
+  "employeeTaxWithheld": "345.00",
+  "employeeSocialContributions": "210.00",
+  "employerSocialContributions": "690.00",
+  "otherDeductions": "135.00",
+  "otherEarnings": "0.00",
+  "status": "recorded"
+}'
+```
+
+Get a payroll:
+
+```bash
+./container.sh exec npm run cli -- payrolls get pay_000041
+```
+
+List recorded payrolls:
+
+```bash
+./container.sh exec npm run cli -- payrolls list --status recorded
+```
+
+Payroll definition notes:
+
+* one payroll = one imported payroll event for one employee and one period
+* more than one payroll can exist for the same employee in the same month
+* normalized payroll totals stay small; country-specific detail remains in `rawLines`
 
 ## Sales Invoices
 
