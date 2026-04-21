@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { initializeDatabase } from "./db/connection.js";
 import { createApp } from "./app.js";
 import { getCompanyCard, upsertCompanyCard } from "./services/company-card.js";
+import { createComment, getComment, listComments, updateComment } from "./services/comments.js";
 import { createContact, getContact, listContacts, resolveContact } from "./services/contacts.js";
 import { createDeal, getDeal, listDeals } from "./services/deals.js";
 import { getDocumentDownload, getDocumentMeta, listDocuments, uploadDocument } from "./services/documents.js";
@@ -16,6 +17,8 @@ import { generateSalesInvoice, getSalesInvoice, listSalesInvoices, updateSalesIn
 import { createTask, getTask, listTasks, updateTask } from "./services/tasks.js";
 import {
   companyCardInputSchema,
+  commentInputSchema,
+  commentPatchSchema,
   contactInputSchema,
   contactResolveInputSchema,
   dealInputSchema,
@@ -60,6 +63,20 @@ const HELP_SCOPES: Record<string, HelpScope> = {
       'company-card set \'{"legalName":"Northwind Robotics SL","displayName":"Northwind Robotics"}\'',
     ],
     aliases: ["company"],
+  },
+  comments: {
+    description: "Create, inspect, list, and update generic comments attached to business records.",
+    commands: [
+      "create <json>",
+      "get <id-or-slug>",
+      "list [--commentable-type <type>] [--commentable-id <id>] [--commentable-slug <slug>] [--author-contact-id <id>]",
+      "update <id-or-slug> <json>",
+    ],
+    examples: [
+      'comments create \'{"commentableType":"task","commentableSlug":"prepare-rollout","body":"Customer asked to delay by one week.","authorName":"Hub developer"}\'',
+      "comments list --commentable-type task --commentable-id task_000123",
+    ],
+    aliases: ["comment"],
   },
   contacts: {
     description: "Create, inspect, list, or resolve contacts.",
@@ -167,6 +184,7 @@ const TOP_LEVEL_COMMANDS = [
   "serve",
   "db <subcommand>",
   "company-card <subcommand>",
+  "comments <subcommand>",
   "contacts <subcommand>",
   "documents <subcommand>",
   "expenses <subcommand>",
@@ -191,6 +209,63 @@ function getCliPrefix(args: string[]): string {
 
 function formatExample(command: string, prefix: string): string {
   return `${prefix}${command}`;
+}
+
+function parseCommentListFilters(args: string[]): {
+  commentableType?: import("@warehouse-hub/business-schemas").CommentableType;
+  commentableId?: string;
+  commentableSlug?: string;
+  authorContactId?: string;
+} {
+  const values: Record<string, string | undefined> = {};
+  const allowedKeys = new Set(["commentable-type", "commentable-id", "commentable-slug", "author-contact-id"]);
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg?.startsWith("--")) {
+      throw new Error(`Unknown list option: ${arg}`);
+    }
+
+    const key = arg.slice(2);
+    if (!allowedKeys.has(key)) {
+      throw new Error(`Unknown list option: ${arg}`);
+    }
+
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) {
+      throw new Error(`Missing value for option: ${arg}`);
+    }
+
+    if (values[key] !== undefined) {
+      throw new Error(`Duplicate list option for '${key}': ${arg}`);
+    }
+
+    values[key] = value;
+    index += 1;
+  }
+
+  const commentableType = values["commentable-type"];
+  if (
+    commentableType !== undefined &&
+    commentableType !== "company_card" &&
+    commentableType !== "contact" &&
+    commentableType !== "document" &&
+    commentableType !== "expense" &&
+    commentableType !== "payroll" &&
+    commentableType !== "deal" &&
+    commentableType !== "sales_invoice" &&
+    commentableType !== "project" &&
+    commentableType !== "task"
+  ) {
+    throw new Error(`Unsupported commentable type: ${commentableType}`);
+  }
+
+  return {
+    commentableType,
+    commentableId: values["commentable-id"],
+    commentableSlug: values["commentable-slug"],
+    authorContactId: values["author-contact-id"],
+  };
 }
 
 function getCanonicalScope(scope: string | undefined): string | undefined {
@@ -328,6 +403,28 @@ async function main(): Promise<void> {
   if (command === "company-card" && subcommand === "set") {
     const input = companyCardInputSchema.parse(parseJsonArg(rest[0], "company-card"));
     printJson(upsertCompanyCard(input));
+    return;
+  }
+
+  if (command === "comments" && subcommand === "create") {
+    const input = commentInputSchema.parse(parseJsonArg(rest[0], "comment"));
+    printJson(createComment(input));
+    return;
+  }
+
+  if (command === "comments" && subcommand === "get") {
+    printJson(getComment(rest[0]));
+    return;
+  }
+
+  if (command === "comments" && subcommand === "list") {
+    printJson(listComments(parseCommentListFilters(rest)));
+    return;
+  }
+
+  if (command === "comments" && subcommand === "update") {
+    const input = commentPatchSchema.parse(parseJsonArg(rest[1], "comment patch"));
+    printJson(updateComment(rest[0], input));
     return;
   }
 

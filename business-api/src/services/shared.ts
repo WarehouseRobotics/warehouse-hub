@@ -3,15 +3,25 @@ import { and, eq, isNull, or } from "drizzle-orm";
 import { getOrm } from "../db/connection.js";
 import { companyCard, contacts, deals, documents, expenses, payrolls, projects, salesInvoices, tasks } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
+import type { CommentableType } from "@warehouse-hub/business-schemas";
 
 function notFound(message: string): never {
   throw new AppError(message, { statusCode: 404, code: "not_found" });
 }
 
-export function requireCompanyCardRecord() {
-  const record = getOrm().select().from(companyCard).where(isNull(companyCard.deletedAt)).get();
+export function getCompanyCardRecordByIdOrSlug(idOrSlug?: string) {
+  const conditions = [isNull(companyCard.deletedAt)];
+  if (idOrSlug) {
+    conditions.push(or(eq(companyCard.id, idOrSlug), eq(companyCard.slug, idOrSlug))!);
+  }
+
+  return getOrm().select().from(companyCard).where(and(...conditions)).get();
+}
+
+export function requireCompanyCardRecord(idOrSlug?: string) {
+  const record = getCompanyCardRecordByIdOrSlug(idOrSlug);
   if (!record) {
-    notFound("Company card has not been created yet");
+    notFound(idOrSlug ? `Company card not found: ${idOrSlug}` : "Company card has not been created yet");
   }
 
   return record;
@@ -156,4 +166,50 @@ export function requireTaskRecord(idOrSlug: string) {
   }
 
   return record;
+}
+
+export function resolveCommentableRecord(type: CommentableType, idOrSlug: string): { id: string; slug: string } {
+  switch (type) {
+    case "company_card": {
+      const record = requireCompanyCardRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    case "contact": {
+      const record = requireContactRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    case "document": {
+      const record = requireDocumentRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    case "expense": {
+      const record = requireExpenseRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    case "payroll": {
+      const record = requirePayrollRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    case "deal": {
+      const record = requireDealRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    case "sales_invoice": {
+      const record = requireSalesInvoiceRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    case "project": {
+      const record = requireProjectRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    case "task": {
+      const record = requireTaskRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    default:
+      throw new AppError(`Unsupported commentable type: ${String(type)}`, {
+        statusCode: 400,
+        code: "validation_error",
+      });
+  }
 }

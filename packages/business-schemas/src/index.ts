@@ -1,4 +1,5 @@
 export * from "./company-card.js";
+export * from "./comment.js";
 export * from "./contact.js";
 export * from "./deal.js";
 export * from "./document.js";

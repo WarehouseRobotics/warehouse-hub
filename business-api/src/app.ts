@@ -3,6 +3,7 @@ import express from "express";
 import { errorHandler } from "./middleware/error-handler.js";
 import { requireApiKey } from "./middleware/auth.js";
 import { companyCardRouter } from "./routes/company-card.js";
+import { commentsRouter } from "./routes/comments.js";
 import { contactsRouter } from "./routes/contacts.js";
 import { dealsRouter } from "./routes/deals.js";
 import { documentsRouter } from "./routes/documents.js";
@@ -36,6 +37,7 @@ export function createApp() {
 
   app.use("/api/v1", requireApiKey);
   app.use("/api/v1/company-card", companyCardRouter);
+  app.use("/api/v1/comments", commentsRouter);
   app.use("/api/v1/contacts", contactsRouter);
   app.use("/api/v1/documents", documentsRouter);
   app.use("/api/v1/expenses", expensesRouter);

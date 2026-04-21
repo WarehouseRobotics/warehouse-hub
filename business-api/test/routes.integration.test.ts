@@ -405,4 +405,166 @@ describe("business-api routes", () => {
       }),
     );
   });
+
+  it("creates, filters, updates, and deletes comments through the HTTP API", async () => {
+    const { createProject } = await import("../src/services/projects.js");
+    const { createTask } = await import("../src/services/tasks.js");
+
+    const contactResponse = await fetch(`${baseUrl}/api/v1/contacts`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "company",
+        status: "active",
+        roles: ["customer"],
+        displayName: "Acme Retail GmbH",
+        legalName: "Acme Retail GmbH",
+        email: "ap@acme-retail.example",
+      }),
+    });
+    const contact = (await contactResponse.json()) as { contactId: string; slug: string };
+
+    const companyResponse = await fetch(`${baseUrl}/api/v1/company-card`, {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+    const company = (await companyResponse.json()) as { companyId: string };
+
+    const project = createProject({
+      ownerEntityId: company.companyId,
+      ownerEntityType: "company_card",
+      name: "Implementation",
+      status: "active",
+    });
+    const task = createTask({
+      projectId: project.projectId,
+      title: "Prepare rollout",
+      status: "open",
+      priority: "medium",
+    });
+
+    const createResponse = await fetch(`${baseUrl}/api/v1/comments`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        commentableType: "task",
+        commentableSlug: task.slug,
+        body: "Customer asked to delay by one week.",
+        authorName: "Hub developer",
+        authorContactSlug: contact.slug,
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as {
+      commentId: string;
+      slug: string;
+      commentableId: string;
+      commentableSlug: string;
+      authorContactId: string | null;
+    };
+    expect(created.commentableId).toBe(task.taskId);
+    expect(created.commentableSlug).toBe(task.slug);
+    expect(created.authorContactId).toBe(contact.contactId);
+
+    const listResponse = await fetch(
+      `${baseUrl}/api/v1/comments?commentableType=task&commentableSlug=${encodeURIComponent(task.slug)}`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(listResponse.status).toBe(200);
+    expect((await listResponse.json()) as Array<{ commentId: string }>).toEqual([
+      expect.objectContaining({ commentId: created.commentId }),
+    ]);
+
+    const getResponse = await fetch(`${baseUrl}/api/v1/comments/${created.slug}`, {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+    expect(getResponse.status).toBe(200);
+    expect((await getResponse.json()) as { commentId: string }).toEqual(
+      expect.objectContaining({ commentId: created.commentId }),
+    );
+
+    const patchResponse = await fetch(`${baseUrl}/api/v1/comments/${created.commentId}`, {
+      method: "PATCH",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        body: "Customer asked to delay by two weeks.",
+        authorContactId: null,
+      }),
+    });
+    expect(patchResponse.status).toBe(200);
+    expect((await patchResponse.json()) as { body: string; authorContactId: string | null }).toEqual(
+      expect.objectContaining({
+        body: "Customer asked to delay by two weeks.",
+        authorContactId: null,
+      }),
+    );
+
+    const invalidTypeResponse = await fetch(`${baseUrl}/api/v1/comments?commentableType=unknown`, {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+    expect(invalidTypeResponse.status).toBe(400);
+
+    const missingTypeResponse = await fetch(
+      `${baseUrl}/api/v1/comments?commentableSlug=${encodeURIComponent(task.slug)}`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(missingTypeResponse.status).toBe(400);
+
+    const invalidTargetResponse = await fetch(`${baseUrl}/api/v1/comments`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        commentableType: "task",
+        commentableId: "task_missing",
+        body: "Missing task target.",
+        authorName: "Hub developer",
+      }),
+    });
+    expect(invalidTargetResponse.status).toBe(404);
+
+    const deleteResponse = await fetch(`${baseUrl}/api/v1/comments/${created.commentId}`, {
+      method: "DELETE",
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+    expect(deleteResponse.status).toBe(204);
+
+    const afterDeleteResponse = await fetch(
+      `${baseUrl}/api/v1/comments?commentableType=task&commentableId=${encodeURIComponent(task.taskId)}`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(afterDeleteResponse.status).toBe(200);
+    expect((await afterDeleteResponse.json()) as unknown[]).toEqual([]);
+  });
 });
