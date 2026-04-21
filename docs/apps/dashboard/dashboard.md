@@ -128,6 +128,8 @@ Single-record views like `CompanyCardView` take their own state type (`CompanyCa
 
 Component-level CSS classes (`.wh-card`, `.wh-badge`, `.wh-table`, `.wh-tabs`, etc.) are defined in `src/index.css`. **Do not replicate these with Tailwind utilities** — use the `wh-*` classes for structural components. Tailwind is for layout, spacing, and one-off utilities only.
 
+Responsive reflow is controlled in `src/index.css`. The dashboard keeps its desktop/tablet app shell through widths `>= 768px` and switches to the stacked mobile layout only below `768px` (`max-width: 767px`).
+
 When adding a class that appears in the HTML design templates (`docs/design/design-system/`) but is missing from `index.css`, port it from `docs/design/design-system/assets/components.css` — the token variable names (`--paper-1`, `--ember`, `--ink-3`, etc.) are the same in both.
 
 ## Extending the Dashboard
