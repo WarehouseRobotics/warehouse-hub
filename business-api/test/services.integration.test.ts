@@ -1272,7 +1272,7 @@ describe("business-api service flows", () => {
     const { createDeal } = await import("../src/services/deals.js");
     const { generateSalesInvoice, updateSalesInvoice } = await import("../src/services/sales-invoices.js");
     const { createProject } = await import("../src/services/projects.js");
-    const { createTask, getTask } = await import("../src/services/tasks.js");
+    const { createTask, getTask, updateTask } = await import("../src/services/tasks.js");
     const { findSimilar } = await import("../src/lib/embeddings.js");
 
     const company = upsertCompanyCard({
@@ -1370,5 +1370,7 @@ describe("business-api service flows", () => {
     });
 
     expect(getTask(task.taskId).subtasks).toHaveLength(1);
+    expect(updateTask(task.taskId, { status: "done" }).status).toBe("done");
+    expect(updateTask(task.taskId, { status: "open" }).status).toBe("open");
   });
 });

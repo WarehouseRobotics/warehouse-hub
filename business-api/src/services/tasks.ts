@@ -53,7 +53,7 @@ function assertTaskTransition(fromStatus: string, toStatus: string): void {
   const allowedTransitions: Record<string, string[]> = {
     open: ["open", "in_progress", "done", "cancelled"],
     in_progress: ["in_progress", "done", "cancelled"],
-    done: ["done"],
+    done: ["open", "done"],
     cancelled: ["cancelled"],
   };
 
