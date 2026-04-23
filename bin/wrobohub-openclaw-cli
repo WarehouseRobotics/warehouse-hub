@@ -1,3 +1,8 @@
 #!/bin/sh
 
-OPENCLAW_FORCE_NO_BUILD=1 pnpm run openclaw "$@"
+WORKDIR="${HOME}/src/openclaw"
+
+(
+    cd "$WORKDIR" || exit 1
+    OPENCLAW_FORCE_NO_BUILD=1 pnpm run openclaw "$@"
+)
