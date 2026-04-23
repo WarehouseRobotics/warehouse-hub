@@ -17,11 +17,12 @@ The platform is composed of:
     * The agents use the foundational Business API as MCP and CLI tool calls to help manage the business, CRM, accounting and so on
 * externally available frontend bot, that can be managed and extended by the internal team of agents
 * file assets exchange GUI webapp     
-
+* there a mini web-server in `openclaw-control-api` that serves as a web API facade for the openclaw cli tool - it allows the business-api in the container to invoke openclaw cli commands.
 
 ## Source Code Documentation 
 
 The `docs` folder contains Markdown documentation for each platform component – use it to search for relevant code design rules, feature architecture and other useful information about Warehouse Hub.
+
 
 ## Shared Business Schemas
 
