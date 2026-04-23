@@ -5,7 +5,7 @@ metadata:
   {
     "openclaw":
       {
-        "requires": { "bins": ["docker"], "env": ["HUB_TMP_DIR"], "config": [] }
+        "requires": { "bins": ["docker"], "env": ["HUB_TMP_DIR", "HUB_URL"], "config": [] }
       },
   }
 ---
@@ -20,17 +20,23 @@ Use this skill when you need to:
 
 Sales invoices and expenses must be created with "paid" status unless specified otherwise. Allowed invoice statuses are: "draft" | "sent" | "overdue" | "finalized" | "paid" | "cancelled". Let the user know which status you used when creating.
 
-## Two Invoice Directions
+## Types of Invoices
 
 ```yaml
-directions:
-  - direction: Inbound — supplier bills you
-    term: Expense invoice
-    cli_scope: expenses / documents ingest
-  - direction: Outbound — you bill a customer
-    term: Sales invoice
-    cli_scope: sales-invoices / documents ingest
+- type: Inbound — supplier bills you
+  term: Expense invoice
+  cli_scope: expenses / documents ingest
+- type: Payroll - payments to employees (special kind of document)
+  terms: Payrolls, payslips, salaries, etc.
+  cli_scope: payrolls
+- type: Outbound — you bill a customer
+  term: Sales invoice
+  cli_scope: sales-invoices / documents ingest
 ```
+
+So we'll use kind 'expenses' for bills from suppliers, "sales-invoices" for our own invoices to clients and "payrolls" for salary payments to employees.
+
+If the kind of the document isn't clear from user's input, **look at the provided image or the pdf to deduct the document kind.**
 
 ---
 
@@ -165,6 +171,25 @@ wrobo-biz sales-invoices list --after 2026-04-01 --before 2026-05-01
 `documents ingest` does not automatically deduplicate — if the same PDF is ingested twice, two records are created. Verify with a list or search first.
 
 ---
+
+## What to Report to the User After Ingest
+
+Once the ingest operation completes for one or more documents, report the following to the user:
+
+* date, kind, employee/provider/client (as a link to the dashboard app), document number (like invoice number) and total amount for each document ingested
+* signal if any of the documents were duplicates (and if the were reimported or ignored)
+* if there were any issues when ingesting and some documents didn't go through - inform about the problem.
+
+In your response, provide dashboard app links to the resulting contacts and documents:
+
+```yaml
+resource_url_format:
+  contacts: $HUB_URL/contacts/<id>
+  expenses: $HUB_URL/expenses/<id>
+  payrolls: $HUB_URL/payrolls/<id>
+  sales_invoices: $HUB_URL/sales-invoices/<id>
+```
+
 
 ## Quick Reference
 

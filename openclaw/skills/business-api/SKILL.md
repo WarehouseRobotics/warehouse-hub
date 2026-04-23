@@ -54,6 +54,9 @@ wrobo-biz expenses list --since 1m
 
 # For sales
 wrobo-biz sales-invoices list --after 2025-01-30
+
+# For payrolls
+wrobo-biz payrolls list --after 2025-01-30
 ```
 
 For more filters consult scope help with `wrobo-biz help <scope>`.
