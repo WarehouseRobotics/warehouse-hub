@@ -406,6 +406,60 @@ describe("business-api routes", () => {
     );
   });
 
+  it("patches contact channel identifiers and notification preferences through the HTTP API", async () => {
+    const createResponse = await fetch(`${baseUrl}/api/v1/contacts`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "person",
+        roles: ["contact"],
+        displayName: "Marta Slack",
+        email: "marta@example.com",
+      }),
+    });
+
+    const created = (await createResponse.json()) as { contactId: string };
+
+    const patchResponse = await fetch(`${baseUrl}/api/v1/contacts/${created.contactId}`, {
+      method: "PATCH",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        slackUserId: "U123456",
+        telegramUserId: "marta_ops",
+        notificationPreferences: {
+          preferredNotificationSchedule: "weekdays 09:00-17:00 Europe/Madrid",
+          doNotDisturb: false,
+          channelRooms: {
+            slack: ["C-ops"],
+            telegram: ["ops-alerts"],
+          },
+        },
+      }),
+    });
+
+    expect(patchResponse.status).toBe(200);
+    expect((await patchResponse.json()) as { slackUserId: string | null }).toEqual(
+      expect.objectContaining({
+        slackUserId: "U123456",
+        telegramUserId: "marta_ops",
+        notificationPreferences: {
+          preferredNotificationSchedule: "weekdays 09:00-17:00 Europe/Madrid",
+          doNotDisturb: false,
+          channelRooms: {
+            slack: ["C-ops"],
+            telegram: ["ops-alerts"],
+          },
+        },
+      }),
+    );
+  });
+
   it("creates, filters, updates, and deletes comments through the HTTP API", async () => {
     const { createProject } = await import("../src/services/projects.js");
     const { createTask } = await import("../src/services/tasks.js");

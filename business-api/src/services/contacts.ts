@@ -7,7 +7,13 @@ import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
-import type { ContactInput, ContactPatch, ContactResolveInput, ContactType } from "@warehouse-hub/business-schemas";
+import type {
+  ContactInput,
+  ContactNotificationPreferences,
+  ContactPatch,
+  ContactResolveInput,
+  ContactType,
+} from "@warehouse-hub/business-schemas";
 import { requireContactRecord } from "./shared.js";
 
 const LEGAL_SUFFIXES = [
@@ -33,6 +39,30 @@ function parseRoles(raw: string): string[] {
   }
 }
 
+function parseNotificationPreferences(raw: string | null): ContactNotificationPreferences | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as ContactNotificationPreferences;
+  } catch {
+    return null;
+  }
+}
+
+function mapNotificationPreferences(value: ContactNotificationPreferences | null | undefined): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return JSON.stringify(value);
+}
+
+function mergeValue<T>(patchValue: T | undefined, existingValue: T): T {
+  return patchValue !== undefined ? patchValue : existingValue;
+}
+
 function mapContact(record: typeof contacts.$inferSelect) {
   return {
     contactId: record.id,
@@ -45,6 +75,11 @@ function mapContact(record: typeof contacts.$inferSelect) {
     taxId: record.taxId,
     email: record.email,
     phone: record.phone,
+    slackUserId: record.slackUserId,
+    discordUserId: record.discordUserId,
+    whatsappUserId: record.whatsappUserId,
+    telegramUserId: record.telegramUserId,
+    notificationPreferences: parseNotificationPreferences(record.notificationPreferences),
     billingAddress: {
       street1: record.billingAddressStreet1,
       street2: record.billingAddressStreet2,
@@ -140,6 +175,11 @@ export function createContact(data: ContactInput) {
       taxId: data.taxId ?? null,
       email: data.email ?? null,
       phone: data.phone ?? null,
+      slackUserId: data.slackUserId ?? null,
+      discordUserId: data.discordUserId ?? null,
+      whatsappUserId: data.whatsappUserId ?? null,
+      telegramUserId: data.telegramUserId ?? null,
+      notificationPreferences: mapNotificationPreferences(data.notificationPreferences),
       billingAddressStreet1: data.billingAddress?.street1 ?? null,
       billingAddressStreet2: data.billingAddress?.street2 ?? null,
       billingAddressCity: data.billingAddress?.city ?? null,
@@ -224,26 +264,51 @@ export function updateContact(idOrSlug: string, patch: ContactPatch) {
     throw new AppError(`Contact not found: ${idOrSlug}`, { statusCode: 404, code: "not_found" });
   }
 
+  const nextType = patch.type ?? existing.type;
+  const nextParentContactId = mergeValue(patch.parentContactId, existing.parentContactId);
+  validateParentContact(nextParentContactId ?? undefined, nextType);
+
   const now = new Date().toISOString();
   getOrm()
     .update(contacts)
     .set({
-      parentContactId: patch.parentContactId ?? existing.parentContactId,
-      type: patch.type ?? existing.type,
+      parentContactId: nextParentContactId,
+      type: nextType,
       roles: patch.roles ? JSON.stringify(patch.roles) : existing.roles,
       displayName: patch.displayName ?? existing.displayName,
-      legalName: patch.legalName ?? existing.legalName,
-      taxId: patch.taxId ?? existing.taxId,
-      email: patch.email ?? existing.email,
-      phone: patch.phone ?? existing.phone,
-      billingAddressStreet1: patch.billingAddress?.street1 ?? existing.billingAddressStreet1,
-      billingAddressStreet2: patch.billingAddress?.street2 ?? existing.billingAddressStreet2,
-      billingAddressCity: patch.billingAddress?.city ?? existing.billingAddressCity,
+      legalName: mergeValue(patch.legalName, existing.legalName),
+      taxId: mergeValue(patch.taxId, existing.taxId),
+      email: mergeValue(patch.email, existing.email),
+      phone: mergeValue(patch.phone, existing.phone),
+      slackUserId: mergeValue(patch.slackUserId, existing.slackUserId),
+      discordUserId: mergeValue(patch.discordUserId, existing.discordUserId),
+      whatsappUserId: mergeValue(patch.whatsappUserId, existing.whatsappUserId),
+      telegramUserId: mergeValue(patch.telegramUserId, existing.telegramUserId),
+      notificationPreferences:
+        patch.notificationPreferences !== undefined
+          ? mapNotificationPreferences(patch.notificationPreferences)
+          : existing.notificationPreferences,
+      billingAddressStreet1:
+        patch.billingAddress !== undefined
+          ? patch.billingAddress?.street1 ?? null
+          : existing.billingAddressStreet1,
+      billingAddressStreet2:
+        patch.billingAddress !== undefined
+          ? patch.billingAddress?.street2 ?? null
+          : existing.billingAddressStreet2,
+      billingAddressCity:
+        patch.billingAddress !== undefined
+          ? patch.billingAddress?.city ?? null
+          : existing.billingAddressCity,
       billingAddressPostalCode:
-        patch.billingAddress?.postalCode ?? existing.billingAddressPostalCode,
+        patch.billingAddress !== undefined
+          ? patch.billingAddress?.postalCode ?? null
+          : existing.billingAddressPostalCode,
       billingAddressCountryCode:
-        patch.billingAddress?.countryCode ?? existing.billingAddressCountryCode,
-      notes: patch.notes ?? existing.notes,
+        patch.billingAddress !== undefined
+          ? patch.billingAddress?.countryCode ?? null
+          : existing.billingAddressCountryCode,
+      notes: mergeValue(patch.notes, existing.notes),
       status: patch.status ?? existing.status,
       updatedAt: now,
     })

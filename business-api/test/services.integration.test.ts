@@ -219,6 +219,116 @@ describe("business-api service flows", () => {
     ).toThrowError(/Contact resolution is ambiguous/);
   });
 
+  it("updates contact channel identifiers and notification preferences", async () => {
+    const { createContact, updateContact, getContact } = await import("../src/services/contacts.js");
+
+    const contact = createContact({
+      type: "person",
+      status: "active",
+      roles: ["contact"],
+      displayName: "Marta Slack",
+      email: "marta@example.com",
+    });
+
+    const updated = updateContact(contact.contactId, {
+      slackUserId: "U123456",
+      discordUserId: "9988776655",
+      whatsappUserId: "34600111222",
+      telegramUserId: "marta_ops",
+      notificationPreferences: {
+        preferredNotificationSchedule: "weekdays 09:00-17:00 Europe/Madrid",
+        doNotDisturb: true,
+        channelRooms: {
+          slack: ["C-ops", "C-support"],
+          discord: ["operations"],
+          telegram: ["ops-alerts"],
+        },
+      },
+    });
+
+    expect(updated).toEqual(
+      expect.objectContaining({
+        slackUserId: "U123456",
+        discordUserId: "9988776655",
+        whatsappUserId: "34600111222",
+        telegramUserId: "marta_ops",
+        notificationPreferences: {
+          preferredNotificationSchedule: "weekdays 09:00-17:00 Europe/Madrid",
+          doNotDisturb: true,
+          channelRooms: {
+            slack: ["C-ops", "C-support"],
+            discord: ["operations"],
+            telegram: ["ops-alerts"],
+          },
+        },
+      }),
+    );
+
+    const cleared = updateContact(contact.contactId, {
+      slackUserId: null,
+      notificationPreferences: null,
+    });
+
+    expect(cleared.slackUserId).toBeNull();
+    expect(cleared.notificationPreferences).toBeNull();
+    expect(getContact(contact.contactId)).toEqual(
+      expect.objectContaining({
+        discordUserId: "9988776655",
+        slackUserId: null,
+        notificationPreferences: null,
+      }),
+    );
+  });
+
+  it("creates, validates, and revokes contact auth tokens", async () => {
+    const { createContact } = await import("../src/services/contacts.js");
+    const {
+      createContactAuthToken,
+      requireActiveContactAuthToken,
+      revokeContactAuthToken,
+    } = await import("../src/services/contact-auth-tokens.js");
+
+    const contact = createContact({
+      type: "person",
+      status: "active",
+      roles: ["employee"],
+      displayName: "Diego Ops",
+      email: "diego@example.com",
+    });
+
+    const authToken = createContactAuthToken(contact.contactId, {
+      ttlMs: 60_000,
+    });
+
+    expect(authToken).toEqual(
+      expect.objectContaining({
+        authTokenId: expect.stringMatching(/^ctauth_/),
+        contactId: contact.contactId,
+        token: expect.stringMatching(/^ctok_/),
+      }),
+    );
+
+    expect(requireActiveContactAuthToken(authToken.token)).toEqual(
+      expect.objectContaining({
+        authTokenId: authToken.authTokenId,
+        contactId: contact.contactId,
+        revokedAt: null,
+      }),
+    );
+
+    const expiredToken = createContactAuthToken(contact.contactId, {
+      ttlMs: -1,
+    });
+    expect(() => requireActiveContactAuthToken(expiredToken.token)).toThrowError(
+      /invalid or expired/,
+    );
+
+    revokeContactAuthToken(authToken.authTokenId);
+    expect(() => requireActiveContactAuthToken(authToken.token)).toThrowError(
+      /invalid or expired/,
+    );
+  });
+
   it("uploads documents and records expenses with transitions", async () => {
     const { upsertCompanyCard } = await import("../src/services/company-card.js");
     const { createContact } = await import("../src/services/contacts.js");

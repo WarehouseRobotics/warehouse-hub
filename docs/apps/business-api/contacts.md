@@ -36,6 +36,8 @@ A contact has these business fields:
 * roles: one or more of `customer`, `supplier`, `employee`, `both`, `owned`, `contact`
 * naming: `displayName`, optional `legalName`
 * identifiers: optional `taxId`, `email`, `phone`
+* communication accounts: optional `slackUserId`, `discordUserId`, `whatsappUserId`, `telegramUserId`
+* notification preferences: optional structured object for schedules, DND, and known channel rooms
 * billing address: optional structured address
 * notes: optional free text
 * lifecycle: `status` = `active` or `inactive`
@@ -134,6 +136,7 @@ When extending contact support in code, follow these rules:
   DB schema/migrations,
   `mapContact`,
   create/update flows
+* Contact-scoped authentication artifacts should live in separate persistence such as `contact_auth_tokens`, not inside the contact row itself.
 * Keep dashboard/API compatibility in mind: shared fields belong in `business-schemas`; backend-only helpers do not.
 
 ## Non-Goals for This Module
