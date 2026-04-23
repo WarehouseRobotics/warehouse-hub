@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenClaw Control API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.openclaw/workspace-hub-dev/warehouse-hub/openclaw-control-api
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="OPENCLAW_FORCE_NO_BUILD=1"
+Environment="OPENCLAW_HOME=/home/denis/.openclaw"
+ExecStart=%h/.local/bin/python3 %h/.openclaw/workspace-hub-dev/warehouse-hub/openclaw-control-api/main.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw-control-api
+
+[Install]
+WantedBy=default.target
