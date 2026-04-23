@@ -8,6 +8,6 @@ echo "Installing warehouse-hub services to the system"
 
 echo "  Installing openclaw-control-api service ..."
 cp "$REPO_DIR/openclaw/system-image/userhome/.config/systemd/user/openclaw-control-api.service" $HOME/.config/systemd/user/openclaw-control-api.service
-sudo systemctl daemon-reload
-sudo systemctl enable openclaw-control-api
-sudo systemctl start openclaw-control-api
+systemctl daemon-reload --user
+systemctl enable openclaw-control-api --user
+systemctl start openclaw-control-api --user
