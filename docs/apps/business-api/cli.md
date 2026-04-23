@@ -1,3 +1,13 @@
+---
+type: feature-guide
+description: Description of the wrobo-biz CLI tool for manipulating business API objects and resources 
+project_dir: business-api
+frozen: false
+see_also:
+  - docs/apps/Business Foundation API.md
+  - docs/architecture/Business API Architecture.md
+---
+
 # Business API CLI Examples
 
 The `business-api` CLI is typically run inside the Docker development container:

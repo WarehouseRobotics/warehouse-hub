@@ -106,6 +106,12 @@ Each section also has a `*ReloadKey` integer; incrementing it triggers a list re
 
 Note: contacts use `?query=` for server-side search; the other resources use `?similar=` (semantic/vector search). Keep these separate rather than using a generic list function.
 
+
+## Authentication
+
+TODO: 
+
+
 ## Section Patterns
 
 ### Table-based sections (Expenses, Sales Invoices)
