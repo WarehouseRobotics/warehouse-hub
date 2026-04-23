@@ -13,6 +13,10 @@ echo "  Linking $SCRIPT_DIR/wrobo to /usr/bin/wrobo ..."
 unlink /usr/bin/wrobo
 ln -s "$SCRIPT_DIR/wrobo" /usr/bin/wrobo
 
+echo "  Linking $SCRIPT_DIR/wrobohub-openclaw-cli to /usr/bin/wrobohub-openclaw-cli ..."
+unlink /usr/bin/wrobohub-openclaw-cli
+ln -s "$SCRIPT_DIR/wrobohub-openclaw-cli" /usr/bin/wrobohub-openclaw-cli
+
 echo "  Linking $SCRIPT_DIR/wrobohub-follow-log to /usr/bin/wrobohub-follow-logs ..."
 unlink /usr/bin/wrobohub-follow-logs
 ln -s "$SCRIPT_DIR/wrobohub-follow-logs" /usr/bin/wrobohub-follow-logs
