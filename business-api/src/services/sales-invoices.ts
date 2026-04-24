@@ -5,7 +5,13 @@ import { contacts, invoiceNumberSeq, salesInvoices } from "../db/schema/index.js
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
-import { applySimilarityFilter, matchesResolvedDateFilters, resolveListFilters, type ListFilters } from "../lib/list-filters.js";
+import {
+  applySimilarityFilter,
+  compareDateDesc,
+  matchesResolvedDateFilters,
+  resolveListFilters,
+  type ListFilters,
+} from "../lib/list-filters.js";
 import { logger } from "../lib/logger.js";
 import { normalizeMoneyString } from "../lib/money.js";
 import { createSlug } from "../lib/slug-ids.js";
@@ -249,7 +255,14 @@ export async function listSalesInvoices(filters: { status?: string; customerCont
     .where(and(...conditions))
     .all()
     .map(mapSalesInvoice)
-    .filter((invoice) => matchesResolvedDateFilters(invoice.issueDate, resolvedFilters));
+    .filter((invoice) => matchesResolvedDateFilters(invoice.issueDate, resolvedFilters))
+    .sort((left, right) => {
+      return (
+        compareDateDesc(left.issueDate, right.issueDate)
+        || compareDateDesc(left.createdAt, right.createdAt)
+        || right.salesInvoiceId.localeCompare(left.salesInvoiceId)
+      );
+    });
 
   return applySimilarityFilter(items, {
     entityType: "sales_invoice",

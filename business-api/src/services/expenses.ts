@@ -5,7 +5,13 @@ import { contacts, expenses } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
-import { applySimilarityFilter, matchesResolvedDateFilters, resolveListFilters, type ListFilters } from "../lib/list-filters.js";
+import {
+  applySimilarityFilter,
+  compareDateDesc,
+  matchesResolvedDateFilters,
+  resolveListFilters,
+  type ListFilters,
+} from "../lib/list-filters.js";
 import { logger } from "../lib/logger.js";
 import { normalizeMoneyString } from "../lib/money.js";
 import { createSlug } from "../lib/slug-ids.js";
@@ -164,7 +170,14 @@ export async function listExpenses(filters: {
     .where(and(...conditions))
     .all()
     .map(mapExpense)
-    .filter((expense) => matchesResolvedDateFilters(expense.invoiceDate ?? expense.createdAt, resolvedFilters));
+    .filter((expense) => matchesResolvedDateFilters(expense.invoiceDate ?? expense.createdAt, resolvedFilters))
+    .sort((left, right) => {
+      return (
+        compareDateDesc(left.invoiceDate, right.invoiceDate)
+        || compareDateDesc(left.createdAt, right.createdAt)
+        || right.expenseId.localeCompare(left.expenseId)
+      );
+    });
 
   return applySimilarityFilter(items, {
     entityType: "expense_invoice",

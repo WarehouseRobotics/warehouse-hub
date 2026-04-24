@@ -827,6 +827,258 @@ describe("business-api service flows", () => {
     ).toThrowError("Sales invoice with invoiceNumber = SVC-2026-002 already exists");
   });
 
+  it("lists accounting records by descending document date with deterministic fallbacks", async () => {
+    const { eq } = await import("drizzle-orm");
+    const { getOrm } = await import("../src/db/connection.js");
+    const { expenses } = await import("../src/db/schema/expenses.js");
+    const { payrolls } = await import("../src/db/schema/payrolls.js");
+    const { salesInvoices } = await import("../src/db/schema/sales-invoices.js");
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    const { createContact } = await import("../src/services/contacts.js");
+    const { createExpense, listExpenses } = await import("../src/services/expenses.js");
+    const { createPayroll, listPayrolls } = await import("../src/services/payrolls.js");
+    const { importSalesInvoice, listSalesInvoices } = await import("../src/services/sales-invoices.js");
+
+    upsertCompanyCard({
+      legalName: "Northwind Robotics SL",
+      displayName: "Northwind Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    const supplier = createContact({
+      type: "company",
+      status: "active",
+      roles: ["supplier"],
+      displayName: "Papeleria Centro SL",
+      legalName: "Papeleria Centro SL",
+    });
+
+    const customer = createContact({
+      type: "company",
+      status: "active",
+      roles: ["customer"],
+      displayName: "Acme Retail GmbH",
+      legalName: "Acme Retail GmbH",
+    });
+
+    const employee = createContact({
+      type: "person",
+      status: "active",
+      roles: ["employee"],
+      displayName: "Marta Payroll",
+      legalName: "Marta Payroll",
+    });
+
+    const salesInvoiceA = importSalesInvoice({
+      customerContactId: customer.contactId,
+      invoiceNumber: "2026-0040",
+      issueDate: "2026-04-02",
+      currency: "EUR",
+      totals: {
+        net: "100.00",
+        tax: "21.00",
+        gross: "121.00",
+      },
+      status: "finalized",
+    });
+    const salesInvoiceB = importSalesInvoice({
+      customerContactId: customer.contactId,
+      invoiceNumber: "2026-0041",
+      issueDate: "2026-04-02",
+      currency: "EUR",
+      totals: {
+        net: "120.00",
+        tax: "25.20",
+        gross: "145.20",
+      },
+      status: "finalized",
+    });
+    const salesInvoiceC = importSalesInvoice({
+      customerContactId: customer.contactId,
+      invoiceNumber: "2026-0042",
+      issueDate: "2026-04-03",
+      currency: "EUR",
+      totals: {
+        net: "140.00",
+        tax: "29.40",
+        gross: "169.40",
+      },
+      status: "finalized",
+    });
+
+    const expenseA = createExpense({
+      supplierContactId: supplier.contactId,
+      invoiceNumber: "EXP-001",
+      invoiceDate: "2026-03-05",
+      dueDate: "2026-04-05",
+      currency: "EUR",
+      totals: {
+        net: "50.00",
+        tax: "10.50",
+        gross: "60.50",
+      },
+      category: "office_supplies",
+      status: "recorded",
+    });
+    const expenseB = createExpense({
+      supplierContactId: supplier.contactId,
+      invoiceNumber: "EXP-002",
+      currency: "EUR",
+      totals: {
+        net: "60.00",
+        tax: "12.60",
+        gross: "72.60",
+      },
+      category: "office_supplies",
+      status: "recorded",
+    });
+    const expenseC = createExpense({
+      supplierContactId: supplier.contactId,
+      invoiceNumber: "EXP-003",
+      invoiceDate: "2026-04-01",
+      dueDate: "2026-05-01",
+      currency: "EUR",
+      totals: {
+        net: "70.00",
+        tax: "14.70",
+        gross: "84.70",
+      },
+      category: "office_supplies",
+      status: "recorded",
+    });
+    const expenseD = createExpense({
+      supplierContactId: supplier.contactId,
+      invoiceNumber: "EXP-004",
+      currency: "EUR",
+      totals: {
+        net: "80.00",
+        tax: "16.80",
+        gross: "96.80",
+      },
+      category: "office_supplies",
+      status: "recorded",
+    });
+
+    const payrollA = createPayroll({
+      employeeContactId: employee.contactId,
+      payrollNumber: "PAY-001",
+      countryCode: "ES",
+      periodStart: "2026-01-01",
+      periodEnd: "2026-01-31",
+      paymentDate: "2026-02-05",
+      currency: "EUR",
+      grossSalary: "2000.00",
+      netSalary: "1500.00",
+      status: "recorded",
+    });
+    const payrollB = createPayroll({
+      employeeContactId: employee.contactId,
+      payrollNumber: "PAY-002",
+      countryCode: "ES",
+      periodStart: "2026-02-01",
+      periodEnd: "2026-02-28",
+      currency: "EUR",
+      grossSalary: "2000.00",
+      netSalary: "1500.00",
+      status: "recorded",
+    });
+    const payrollC = createPayroll({
+      employeeContactId: employee.contactId,
+      payrollNumber: "PAY-003",
+      countryCode: "ES",
+      periodStart: "2026-03-01",
+      periodEnd: "2026-03-31",
+      paymentDate: "2026-04-05",
+      currency: "EUR",
+      grossSalary: "2000.00",
+      netSalary: "1500.00",
+      status: "recorded",
+    });
+
+    getOrm()
+      .update(salesInvoices)
+      .set({ createdAt: "2026-04-02T09:00:00.000Z", updatedAt: "2026-04-02T09:00:00.000Z" })
+      .where(eq(salesInvoices.id, salesInvoiceA.salesInvoiceId))
+      .run();
+    getOrm()
+      .update(salesInvoices)
+      .set({ createdAt: "2026-04-02T10:00:00.000Z", updatedAt: "2026-04-02T10:00:00.000Z" })
+      .where(eq(salesInvoices.id, salesInvoiceB.salesInvoiceId))
+      .run();
+    getOrm()
+      .update(salesInvoices)
+      .set({ createdAt: "2026-04-03T11:00:00.000Z", updatedAt: "2026-04-03T11:00:00.000Z" })
+      .where(eq(salesInvoices.id, salesInvoiceC.salesInvoiceId))
+      .run();
+
+    getOrm()
+      .update(expenses)
+      .set({ createdAt: "2026-03-05T09:00:00.000Z", updatedAt: "2026-03-05T09:00:00.000Z" })
+      .where(eq(expenses.id, expenseA.expenseId))
+      .run();
+    getOrm()
+      .update(expenses)
+      .set({ createdAt: "2026-03-10T09:00:00.000Z", updatedAt: "2026-03-10T09:00:00.000Z" })
+      .where(eq(expenses.id, expenseB.expenseId))
+      .run();
+    getOrm()
+      .update(expenses)
+      .set({ createdAt: "2026-04-01T09:00:00.000Z", updatedAt: "2026-04-01T09:00:00.000Z" })
+      .where(eq(expenses.id, expenseC.expenseId))
+      .run();
+    getOrm()
+      .update(expenses)
+      .set({ createdAt: "2026-03-15T09:00:00.000Z", updatedAt: "2026-03-15T09:00:00.000Z" })
+      .where(eq(expenses.id, expenseD.expenseId))
+      .run();
+
+    getOrm()
+      .update(payrolls)
+      .set({ createdAt: "2026-02-05T09:00:00.000Z", updatedAt: "2026-02-05T09:00:00.000Z" })
+      .where(eq(payrolls.id, payrollA.payrollId))
+      .run();
+    getOrm()
+      .update(payrolls)
+      .set({ createdAt: "2026-03-01T09:00:00.000Z", updatedAt: "2026-03-01T09:00:00.000Z" })
+      .where(eq(payrolls.id, payrollB.payrollId))
+      .run();
+    getOrm()
+      .update(payrolls)
+      .set({ createdAt: "2026-04-05T09:00:00.000Z", updatedAt: "2026-04-05T09:00:00.000Z" })
+      .where(eq(payrolls.id, payrollC.payrollId))
+      .run();
+
+    expect((await listSalesInvoices()).map((invoice) => invoice.invoiceNumber)).toEqual([
+      "2026-0042",
+      "2026-0041",
+      "2026-0040",
+    ]);
+
+    expect((await listExpenses()).map((expense) => expense.invoiceNumber)).toEqual([
+      "EXP-003",
+      "EXP-001",
+      "EXP-004",
+      "EXP-002",
+    ]);
+
+    expect((await listPayrolls()).map((payroll) => payroll.payrollNumber)).toEqual([
+      "PAY-003",
+      "PAY-001",
+      "PAY-002",
+    ]);
+  });
+
   it("ingests an expense invoice image with overrides and searchable OCR content", async () => {
     const { upsertCompanyCard } = await import("../src/services/company-card.js");
     const { createContact, listContacts } = await import("../src/services/contacts.js");

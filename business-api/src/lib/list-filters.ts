@@ -143,6 +143,28 @@ export function extractDateOnly(value: string | null | undefined): string | unde
   return match?.[1];
 }
 
+export function compareDateDesc(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): number {
+  const leftDate = extractDateOnly(left);
+  const rightDate = extractDateOnly(right);
+
+  if (leftDate && rightDate) {
+    return rightDate.localeCompare(leftDate);
+  }
+
+  if (leftDate) {
+    return -1;
+  }
+
+  if (rightDate) {
+    return 1;
+  }
+
+  return 0;
+}
+
 export function matchesResolvedDateFilters(
   value: string | null | undefined,
   filters: ResolvedListFilters,

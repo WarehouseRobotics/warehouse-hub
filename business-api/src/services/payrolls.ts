@@ -5,7 +5,13 @@ import { contacts, payrolls } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
-import { applySimilarityFilter, matchesResolvedDateFilters, resolveListFilters, type ListFilters } from "../lib/list-filters.js";
+import {
+  applySimilarityFilter,
+  compareDateDesc,
+  matchesResolvedDateFilters,
+  resolveListFilters,
+  type ListFilters,
+} from "../lib/list-filters.js";
 import { logger } from "../lib/logger.js";
 import { normalizeMoneyString } from "../lib/money.js";
 import { createSlug } from "../lib/slug-ids.js";
@@ -212,7 +218,15 @@ export async function listPayrolls(filters: {
     .where(and(...conditions))
     .all()
     .map(mapPayroll)
-    .filter((payroll) => matchesResolvedDateFilters(payroll.periodEnd, resolvedFilters));
+    .filter((payroll) => matchesResolvedDateFilters(payroll.periodEnd, resolvedFilters))
+    .sort((left, right) => {
+      return (
+        compareDateDesc(left.paymentDate, right.paymentDate)
+        || compareDateDesc(left.periodEnd, right.periodEnd)
+        || compareDateDesc(left.createdAt, right.createdAt)
+        || right.payrollId.localeCompare(left.payrollId)
+      );
+    });
 
   return applySimilarityFilter(items, {
     entityType: "payroll",
