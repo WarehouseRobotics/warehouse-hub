@@ -35,6 +35,7 @@ import {
   taskPatchSchema,
 } from "@warehouse-hub/business-schemas";
 import { formatDocumentIngestCliOutput } from "./lib/cli-document-ingest-format.js";
+import { mergeExpenseAndPayrollListItems, parseExpenseListCliFilters } from "./lib/expense-list-cli.js";
 import { parseCliListFilters } from "./lib/list-filters.js";
 import { formatCliErrorAsMarkdown, isTruthyEnvValue } from "./lib/cli-error-format.js";
 import { logger } from "./lib/logger.js";
@@ -108,12 +109,13 @@ const HELP_SCOPES: Record<string, HelpScope> = {
     commands: [
       "create <json>",
       "get <id-or-slug>",
-      "list [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
+      "list [--status <status>] [--include-payrolls] [--similar <text>] [--limit <n>] [--since <duration>] [--before <date>] [--after <date>]",
       "update <id-or-slug> <json>",
     ],
     examples: [
       'expenses create \'{"supplierContactId":"ct_000245","invoiceNumber":"FC-2026-0042","invoiceDate":"2026-03-25","currency":"EUR"}\'',
       "expenses list --status recorded",
+      "expenses list --status recorded --include-payrolls",
       'expenses list --similar "office toner cartridges from papeleria centro" --since 2m',
     ],
     aliases: ["purchase-invoices", "expense-invoices", "bills"],
@@ -544,7 +546,23 @@ async function main(): Promise<void> {
   }
 
   if (command === "expenses" && subcommand === "list") {
-    printJson(await listExpenses(parseCliListFilters(rest)));
+    const filters = parseExpenseListCliFilters(rest);
+    if (!filters.includePayrolls) {
+      printJson(await listExpenses(filters));
+      return;
+    }
+
+    const expenses = await listExpenses(filters);
+    const payrolls = await listPayrolls({
+      similar: filters.similar,
+      limit: filters.limit,
+      since: filters.since,
+      before: filters.before,
+      after: filters.after,
+      status: filters.status,
+    });
+
+    printJson(mergeExpenseAndPayrollListItems(expenses, payrolls));
     return;
   }
 

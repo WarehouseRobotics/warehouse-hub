@@ -241,6 +241,12 @@ List recorded expenses:
 ./container.sh exec npm run cli -- expenses list --status recorded
 ```
 
+List recorded expenses together with payroll entries in one combined feed:
+
+```bash
+./container.sh exec npm run cli -- expenses list --status recorded --include-payrolls
+```
+
 Find an expense by semantic similarity within the last two months:
 
 ```bash

@@ -31,6 +31,7 @@ wrobo-biz
 wrobo-biz help
 wrobo-biz help contacts
 wrobo-biz help expenses
+wrobo-biz help payrolls
 wrobo-biz help invoices
 ```
 
@@ -49,8 +50,8 @@ wrobo-biz company-card get
 # Get a contact by ID or slug
 wrobo-biz contacts get ct_000245
 
-# For bills/purchases
-wrobo-biz expenses list --since 1m
+# For bills/purchases (with optional argument to include payrolls too)
+wrobo-biz expenses list --since 1m --include-payrolls
 
 # For sales
 wrobo-biz sales-invoices list --after 2025-01-30
@@ -171,6 +172,8 @@ Important filter behavior:
 - `--before` and `--after` must use `YYYY-MM-DD`.
 - `--since` must use a relative duration like `1d`, `2m`, or `1y`.
 - Other list endpoints such as `contacts list`, `deals list`, `projects list`, and `tasks list` do not currently accept these filters.
+
+The `expenses list` command can include a special `--include-payrolls` parameter to include salaries/payrolls in the list of expenses (otherwise they must be fetched separately via payrolls).
 
 ## Recommended Workflows
 
