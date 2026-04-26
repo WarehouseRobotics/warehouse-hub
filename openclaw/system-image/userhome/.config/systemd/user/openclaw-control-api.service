@@ -7,7 +7,7 @@ Type=simple
 WorkingDirectory=%h/.openclaw/workspace-hub-dev/warehouse-hub/openclaw-control-api
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 Environment="OPENCLAW_FORCE_NO_BUILD=1"
-Environment="OPENCLAW_HOME=/home/denis/.openclaw"
+Environment="OPENCLAW_HOME=/home/denis"
 ExecStart=%h/.local/bin/python3 %h/.openclaw/workspace-hub-dev/warehouse-hub/openclaw-control-api/main.py
 Restart=on-failure
 RestartSec=5
