@@ -6,7 +6,7 @@ A minimal HTTP server that exposes the `wrobohub-openclaw-cli` script over a loc
 
 `main.py` is a zero-dependency Python 3 HTTP server (stdlib only). On each authenticated `POST /openclaw/cli` request it runs `../bin/wrobohub-openclaw-cli` as a subprocess, forwarding the provided arguments, and returns the process output as JSON.
 
-The CLI script path is always resolved relative to `main.py` itself, so the server works correctly regardless of the working directory it is launched from.
+The CLI script path is always resolved relative to `main.py` itself. The subprocess is launched from the OpenClaw worktree so config discovery matches direct `wrobohub-openclaw-cli` usage.
 
 ## Endpoint
 
@@ -53,6 +53,7 @@ The token is validated against `OPENCLAW_GATEWAY_TOKEN` read from `$HOME/.opencl
 |----------------------|---------|-------------|
 | `OPENCLAW_CONTROL_API_HOST` | `127.0.0.1` | Interface to bind to |
 | `OPENCLAW_CONTROL_API_PORT` | `8181` | Port to listen on |
+| `OPENCLAW_CONTROL_API_CLI_WORKDIR` | `$HOME/src/openclaw` | Working directory used when launching `wrobohub-openclaw-cli` |
 
 ## Running manually
 

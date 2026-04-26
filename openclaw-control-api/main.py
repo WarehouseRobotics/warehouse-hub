@@ -13,6 +13,12 @@ _CLI_SCRIPT = (_THIS_DIR / ".." / "bin" / "wrobohub-openclaw-cli").resolve()
 _ENV_FILE = pathlib.Path.home() / ".openclaw" / ".env"
 _HOST = os.environ.get("OPENCLAW_CONTROL_API_HOST", "127.0.0.1")
 _PORT = int(os.environ.get("OPENCLAW_CONTROL_API_PORT", "8181"))
+_CLI_WORKDIR = pathlib.Path(
+    os.environ.get(
+        "OPENCLAW_CONTROL_API_CLI_WORKDIR",
+        pathlib.Path.home() / "src" / "openclaw",
+    )
+).expanduser()
 
 _HOME = pathlib.Path.home()
 _PNPM_CANDIDATE_DIRS = [
@@ -89,6 +95,7 @@ class Handler(BaseHTTPRequestHandler):
                 [str(_CLI_SCRIPT)] + body,
                 capture_output=True,
                 text=True,
+                cwd=_CLI_WORKDIR,
                 env=_CHILD_ENV,
             )
         except OSError as exc:

@@ -72,6 +72,7 @@ Runtime configuration:
 
 - `OPENCLAW_CONTROL_API_HOST`: bind host, default `127.0.0.1`
 - `OPENCLAW_CONTROL_API_PORT`: bind port, default `8181`
+- `OPENCLAW_CONTROL_API_CLI_WORKDIR`: working directory used when launching `wrobohub-openclaw-cli`, default `$HOME/src/openclaw`
 
 For callers inside Docker, the target base URL is often:
 
@@ -217,6 +218,7 @@ curl -sS \
 - This API is intended as a bridge between local Warehouse Hub components, especially containerized `business-api` code and a host-side OpenClaw runtime, not as a public internet-facing API.
 - Because `stdout` and `stderr` are returned as strings, callers should parse `stdout` themselves when using CLI commands with `--json`.
 - The HTTP wrapper preserves the CLI command surface, so new CLI flags and subcommands usually do not require HTTP API changes.
+- The wrapper launches the CLI from the configured OpenClaw worktree so config discovery matches direct CLI usage.
 - Unknown or invalid CLI arguments are handled by the underlying CLI process, not by the HTTP wrapper.
 
 ## Related docs
