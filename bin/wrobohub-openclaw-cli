@@ -15,5 +15,5 @@ fi
 
 (
     cd "$WORKDIR" || exit 1
-    OPENCLAW_FORCE_NO_BUILD=1 "$PNPM" run openclaw "$@"
+    OPENCLAW_FORCE_NO_BUILD=1 OPENCLAW_HIDE_BANNER=1 "$PNPM" run openclaw "$@"
 )
