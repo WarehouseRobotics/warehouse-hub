@@ -32,11 +32,7 @@ _CHILD_ENV["PATH"] = os.pathsep.join(
     [str(d) for d in _PNPM_CANDIDATE_DIRS] + [_CHILD_ENV.get("PATH", "")]
 )
 
-
-def _debug_log(message: str) -> None:
-    print(f"[control-api] {message}", file=sys.stdout, flush=True)
 _CHILD_ENV.setdefault("OPENCLAW_HOME", str(_HOME))
-
 
 def _load_gateway_token() -> str:
     """Parse OPENCLAW_GATEWAY_TOKEN from $HOME/.openclaw/.env."""
@@ -96,18 +92,6 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "body must be a JSON array of strings"})
             return
 
-        _debug_log(
-            "launching cli "
-            + json.dumps(
-                {
-                    "argv": [str(_CLI_SCRIPT)] + body,
-                    "cwd": str(_CLI_WORKDIR),
-                    "openclaw_home": _CHILD_ENV.get("OPENCLAW_HOME"),
-                    "path": _CHILD_ENV.get("PATH"),
-                }
-            )
-        )
-
         try:
             result = subprocess.run(
                 [str(_CLI_SCRIPT)] + body,
@@ -117,20 +101,8 @@ class Handler(BaseHTTPRequestHandler):
                 env=_CHILD_ENV,
             )
         except OSError as exc:
-            _debug_log(f"cli exec failed: {exc}")
             self._send_json(500, {"error": f"cli exec failed: {exc}"})
             return
-
-        _debug_log(
-            "cli finished "
-            + json.dumps(
-                {
-                    "exit_code": result.returncode,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                }
-            )
-        )
 
         self._send_json(
             200,
