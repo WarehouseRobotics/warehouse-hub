@@ -125,6 +125,8 @@ describe("data-cache service flows", () => {
         expect(body[2]).toBe("accounting");
         expect(body[4]).toContain("2026-04-26");
         expect(body[4]).toContain("JSON response schema:");
+        expect(body[5]).toBe("--deliver");
+        expect(body[6]).toBe("--json");
 
         return new Response(
           JSON.stringify({

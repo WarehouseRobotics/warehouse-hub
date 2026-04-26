@@ -215,7 +215,8 @@ Control API request shape:
   "<OPENCLAW_DATA_FETCHER_AGENT>",
   "--message",
   "<interpolated prompt>",
-  "--deliver"
+  "--deliver",
+  "--json"
 ]
 ```
 
@@ -226,6 +227,8 @@ steps:
   - "first fenced ```json ... ``` block"
   - "otherwise parse full stdout as JSON"
 ```
+
+The `--json` flag is included so the OpenClaw CLI returns structured output without extra wrapper text when supported.
 
 Fetch failures are non-fatal to lookup flow. The service logs the issue and continues with fallback behavior when possible.
 

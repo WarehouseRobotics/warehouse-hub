@@ -95,7 +95,7 @@ function validateEntryValue(schema: JsonObject, value: JsonObject): void {
 
   const valid = validate(value);
   if (!valid) {
-    throw new AppError("Entry value does not match cache schema", {
+    throw new AppError(`Entry value does not match cache schema. Data: ${JSON.stringify(value, null, 2)}. Schema: ${JSON.stringify(schema, null, 2)}`, {
       statusCode: 400,
       code: "validation_error",
       details: validate.errors ?? [],
@@ -354,6 +354,7 @@ async function fetchMissingValue(
           "--message",
           prompt,
           "--deliver",
+          "--json",
         ]),
         signal: controller.signal,
       },
