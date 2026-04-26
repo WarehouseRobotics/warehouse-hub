@@ -2,6 +2,7 @@ export * from "./company-card.js";
 export * from "./comments.js";
 export * from "./contact-auth-tokens.js";
 export * from "./contacts.js";
+export * from "./data-caches.js";
 export * from "./deals.js";
 export * from "./documents.js";
 export * from "./embeddings.js";

@@ -31,6 +31,7 @@
   "dependencies": {
     "@toon-format/toon": "^2.1.0",
     "@warehouse-hub/business-schemas": "file:../packages/business-schemas",
+    "ajv": "^8.17.1",
     "better-sqlite3": "^11.8.1",
     "bullmq": "^5.73.0",
     "decimal.js": "^10.6.0",

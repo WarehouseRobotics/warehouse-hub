@@ -14,6 +14,10 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   LLMS_CONFIG_PATH: z.string().optional(),
   EMBEDDING_API_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+  OPENCLAW_CONTROL_API_HOST: z.string().default("127.0.0.1"),
+  OPENCLAW_CONTROL_API_PORT: z.coerce.number().int().positive().default(8181),
+  OPENCLAW_DATA_FETCHER_AGENT: z.string().optional(),
+  OPENCLAW_GATEWAY_TOKEN: z.string().optional(),
   OCR_LANG: z.string().default("eng"),
   OCR_STUB_MODE: z
     .enum(["true", "false"])

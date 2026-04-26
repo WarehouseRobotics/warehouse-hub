@@ -5,6 +5,7 @@ import { requireApiKey } from "./middleware/auth.js";
 import { companyCardRouter } from "./routes/company-card.js";
 import { commentsRouter } from "./routes/comments.js";
 import { contactsRouter } from "./routes/contacts.js";
+import { dataCachesRouter } from "./routes/data-caches.js";
 import { dealsRouter } from "./routes/deals.js";
 import { documentsRouter } from "./routes/documents.js";
 import { expensesRouter } from "./routes/expenses.js";
@@ -39,6 +40,7 @@ export function createApp() {
   app.use("/api/v1/company-card", companyCardRouter);
   app.use("/api/v1/comments", commentsRouter);
   app.use("/api/v1/contacts", contactsRouter);
+  app.use("/api/v1/data-caches", dataCachesRouter);
   app.use("/api/v1/documents", documentsRouter);
   app.use("/api/v1/expenses", expensesRouter);
   app.use("/api/v1/payrolls", payrollsRouter);

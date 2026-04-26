@@ -7,6 +7,14 @@ import { createApp } from "./app.js";
 import { getCompanyCard, upsertCompanyCard } from "./services/company-card.js";
 import { createComment, getComment, listComments, updateComment } from "./services/comments.js";
 import { createContact, getContact, listContacts, resolveContact } from "./services/contacts.js";
+import {
+  bulkImport as bulkImportDataCacheEntries,
+  createCache,
+  getCache,
+  listCaches,
+  lookup as lookupDataCache,
+  upsertEntry as upsertDataCacheEntry,
+} from "./services/data-caches.js";
 import { createDeal, getDeal, listDeals } from "./services/deals.js";
 import { getDocumentDownload, getDocumentMeta, listDocuments, uploadDocument } from "./services/documents.js";
 import { ingestDocument } from "./services/document-ingestion.js";
@@ -39,6 +47,13 @@ import { mergeExpenseAndPayrollListItems, parseExpenseListCliFilters } from "./l
 import { parseCliListFilters } from "./lib/list-filters.js";
 import { formatCliErrorAsMarkdown, isTruthyEnvValue } from "./lib/cli-error-format.js";
 import { logger } from "./lib/logger.js";
+import {
+  dataCacheBulkImportSchema,
+  dataCacheInputSchema,
+  dataCacheLookupSchema,
+  dataCacheEntryUpsertSchema,
+  type JsonObject,
+} from "./schemas/data-caches.js";
 
 type HelpScope = {
   description: string;
@@ -87,6 +102,24 @@ const HELP_SCOPES: Record<string, HelpScope> = {
       'contacts create \'{"type":"company","status":"active","roles":["customer"],"displayName":"Acme Retail GmbH"}\'',
       'contacts resolve \'{"autoCreate":true,"matchBy":["taxId","email"],"contact":{"type":"company","displayName":"Acme Retail GmbH"}}\'',
     ],
+  },
+  "data-cache": {
+    description: "Manage persistent reference-data caches and lookup missing values via OpenClaw agents.",
+    commands: [
+      "list",
+      "create <slug> --name <display-name> --key-type <type> [--description <text>] [--value-schema <json>] [--fetcher-config <json>] [--ttl-days <days>]",
+      "get <slug>",
+      "lookup <slug> <key> --strategy <strategy> [--max-staleness-days <days>] [--fetch-timeout-ms <ms>]",
+      "upsert <slug> <key> --value <json> [--expires-at <iso-datetime>]",
+      "import <slug> --file <path> [--key-col <name>] [--value-col <name>]",
+    ],
+    examples: [
+      "data-cache list",
+      'data-cache create currency-rates-eur-usd --name "Currency Rates EUR/USD" --key-type date --value-schema \'{"type":"object","properties":{"rate":{"type":"string"}},"required":["rate"]}\' --fetcher-config \'{"prompt":"Look up EUR/USD rate for {{ key }}. JSON only."}\' --ttl-days 1',
+      "data-cache lookup currency-rates-eur-usd 2026-04-26 --strategy staleness_window --max-staleness-days 7",
+      'data-cache upsert currency-rates-eur-usd 2026-04-26 --value \'{"rate":"1.0823"}\'',
+    ],
+    aliases: ["data-caches"],
   },
   documents: {
     description: "Upload, ingest, search, inspect, and download business documents.",
@@ -188,6 +221,7 @@ const TOP_LEVEL_COMMANDS = [
   "company-card <subcommand>",
   "comments <subcommand>",
   "contacts <subcommand>",
+  "data-cache <subcommand>",
   "documents <subcommand>",
   "expenses <subcommand>",
   "payrolls <subcommand>",
@@ -355,6 +389,113 @@ function resolveDocumentCliInputPath(filePath: string): string {
   return path.join(config.tmpDir, filePath);
 }
 
+function parseFlagArgs(args: string[]): { positionals: string[]; options: Record<string, string> } {
+  const positionals: string[] = [];
+  const options: Record<string, string> = {};
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg.startsWith("--")) {
+      positionals.push(arg);
+      continue;
+    }
+
+    const key = arg.slice(2);
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) {
+      throw new Error(`Missing value for option: ${arg}`);
+    }
+
+    options[key] = value;
+    index += 1;
+  }
+
+  return { positionals, options };
+}
+
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+
+    if (char === "\"") {
+      if (inQuotes && next === "\"") {
+        current += "\"";
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current);
+  return cells.map((cell) => cell.trim());
+}
+
+function parseCsvEntries(filePath: string, keyColumn: string, valueColumn?: string): Array<{ key: string; value: JsonObject }> {
+  const raw = fs.readFileSync(filePath, "utf8");
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0);
+
+  if (lines.length < 2) {
+    throw new Error("CSV file must contain a header row and at least one data row");
+  }
+
+  const headers = parseCsvLine(lines[0]);
+  const keyIndex = headers.indexOf(keyColumn);
+  if (keyIndex === -1) {
+    throw new Error(`CSV key column not found: ${keyColumn}`);
+  }
+
+  const valueIndex = valueColumn ? headers.indexOf(valueColumn) : -1;
+  if (valueColumn && valueIndex === -1) {
+    throw new Error(`CSV value column not found: ${valueColumn}`);
+  }
+
+  return lines.slice(1).map((line) => {
+    const cells = parseCsvLine(line);
+    const key = cells[keyIndex];
+    if (!key) {
+      throw new Error("CSV row is missing a key value");
+    }
+
+    if (valueColumn && valueIndex >= 0) {
+      return {
+        key,
+        value: {
+          value: cells[valueIndex] ?? "",
+        },
+      };
+    }
+
+    const value = headers.reduce<Record<string, string>>((accumulator, header, index) => {
+      if (index === keyIndex) {
+        return accumulator;
+      }
+
+      accumulator[header] = cells[index] ?? "";
+      return accumulator;
+    }, {});
+
+    return { key, value };
+  });
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const positionalArgs = args.filter((arg) => arg !== "--in-docker" && arg !== "--verbose");
@@ -449,6 +590,103 @@ async function main(): Promise<void> {
   if (command === "contacts" && subcommand === "resolve") {
     const input = contactResolveInputSchema.parse(parseJsonArg(rest[0], "contact resolve payload"));
     printJson(resolveContact(input));
+    return;
+  }
+
+  if (command === "data-cache" && subcommand === "list") {
+    printJson(listCaches());
+    return;
+  }
+
+  if (command === "data-cache" && subcommand === "create") {
+    const slug = rest[0];
+    if (!slug) {
+      throw new Error("Missing cache slug");
+    }
+
+    const { options } = parseFlagArgs(rest.slice(1));
+    const input = dataCacheInputSchema.parse({
+      slug,
+      displayName: options.name,
+      description: options.description,
+      keyType: options["key-type"],
+      valueSchema: options["value-schema"] ? parseJsonArg(options["value-schema"], "data-cache value schema") : undefined,
+      fetcherConfig: options["fetcher-config"] ? parseJsonArg(options["fetcher-config"], "data-cache fetcher config") : undefined,
+      defaultTtlDays: options["ttl-days"] ? Number(options["ttl-days"]) : undefined,
+    });
+    printJson(createCache(input));
+    return;
+  }
+
+  if (command === "data-cache" && subcommand === "get") {
+    printJson(getCache(rest[0]));
+    return;
+  }
+
+  if (command === "data-cache" && subcommand === "lookup") {
+    const slug = rest[0];
+    const key = rest[1];
+    if (!slug || !key) {
+      throw new Error("Usage: data-cache lookup <slug> <key> --strategy <strategy>");
+    }
+
+    const { options } = parseFlagArgs(rest.slice(2));
+    const input = dataCacheLookupSchema.parse({
+      key,
+      strategy: options.strategy,
+      maxStalenessWindow: options["max-staleness-days"] ? Number(options["max-staleness-days"]) : undefined,
+      fetchTimeoutMs: options["fetch-timeout-ms"] ? Number(options["fetch-timeout-ms"]) : undefined,
+    });
+    printJson(await lookupDataCache(slug, input.key, input));
+    return;
+  }
+
+  if (command === "data-cache" && subcommand === "upsert") {
+    const slug = rest[0];
+    const key = rest[1];
+    if (!slug || !key) {
+      throw new Error("Usage: data-cache upsert <slug> <key> --value <json>");
+    }
+
+    const { options } = parseFlagArgs(rest.slice(2));
+    const input = dataCacheEntryUpsertSchema.parse({
+      key,
+      value: parseJsonArg(options.value, "data-cache entry value"),
+      expiresAt: options["expires-at"],
+    });
+    printJson(upsertDataCacheEntry(slug, input.key, input.value, "manual", input.expiresAt));
+    return;
+  }
+
+  if (command === "data-cache" && subcommand === "import") {
+    const slug = rest[0];
+    if (!slug) {
+      throw new Error("Usage: data-cache import <slug> --file <path>");
+    }
+
+    const { options } = parseFlagArgs(rest.slice(1));
+    const filePath = options.file;
+    if (!filePath) {
+      throw new Error("Missing --file option");
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    let entries: Array<{ key: string; value: JsonObject; expiresAt?: string }>;
+
+    if (ext === ".json") {
+      const parsed = parseJsonArg(fs.readFileSync(filePath, "utf8"), "data-cache import file");
+      entries = Array.isArray(parsed) ? dataCacheBulkImportSchema.parse({ entries: parsed }).entries : dataCacheBulkImportSchema.parse(parsed).entries;
+    } else if (ext === ".csv") {
+      if (!options["key-col"]) {
+        throw new Error("CSV imports require --key-col");
+      }
+
+      entries = parseCsvEntries(filePath, options["key-col"], options["value-col"]);
+    } else {
+      throw new Error(`Unsupported import file type: ${ext || "unknown"}`);
+    }
+
+    printJson(bulkImportDataCacheEntries(slug, entries));
     return;
   }
 

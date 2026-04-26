@@ -980,6 +980,11 @@ describe("business-api service flows", () => {
       currency: "EUR",
       grossSalary: "2000.00",
       netSalary: "1500.00",
+      employeeTaxWithheld: "0.00",
+      employeeSocialContributions: "0.00",
+      employerSocialContributions: "0.00",
+      otherDeductions: "0.00",
+      otherEarnings: "0.00",
       status: "recorded",
     });
     const payrollB = createPayroll({
@@ -991,6 +996,11 @@ describe("business-api service flows", () => {
       currency: "EUR",
       grossSalary: "2000.00",
       netSalary: "1500.00",
+      employeeTaxWithheld: "0.00",
+      employeeSocialContributions: "0.00",
+      employerSocialContributions: "0.00",
+      otherDeductions: "0.00",
+      otherEarnings: "0.00",
       status: "recorded",
     });
     const payrollC = createPayroll({
@@ -1003,6 +1013,11 @@ describe("business-api service flows", () => {
       currency: "EUR",
       grossSalary: "2000.00",
       netSalary: "1500.00",
+      employeeTaxWithheld: "0.00",
+      employeeSocialContributions: "0.00",
+      employerSocialContributions: "0.00",
+      otherDeductions: "0.00",
+      otherEarnings: "0.00",
       status: "recorded",
     });
 
