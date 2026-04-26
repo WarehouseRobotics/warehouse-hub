@@ -11,8 +11,8 @@ _THIS_DIR = pathlib.Path(__file__).parent.resolve()
 _CLI_SCRIPT = (_THIS_DIR / ".." / "bin" / "wrobohub-openclaw-cli").resolve()
 
 _ENV_FILE = pathlib.Path.home() / ".openclaw" / ".env"
-_HOST = os.environ.get("CONTROL_API_HOST", "127.0.0.1")
-_PORT = int(os.environ.get("CONTROL_API_PORT", "8181"))
+_HOST = os.environ.get("OPENCLAW_CONTROL_API_HOST", "127.0.0.1")
+_PORT = int(os.environ.get("OPENCLAW_CONTROL_API_PORT", "8181"))
 
 
 def _load_gateway_token() -> str:

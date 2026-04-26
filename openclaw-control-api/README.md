@@ -51,8 +51,8 @@ The token is validated against `OPENCLAW_GATEWAY_TOKEN` read from `$HOME/.opencl
 
 | Environment variable | Default | Description |
 |----------------------|---------|-------------|
-| `CONTROL_API_HOST` | `127.0.0.1` | Interface to bind to |
-| `CONTROL_API_PORT` | `8181` | Port to listen on |
+| `OPENCLAW_CONTROL_API_HOST` | `127.0.0.1` | Interface to bind to |
+| `OPENCLAW_CONTROL_API_PORT` | `8181` | Port to listen on |
 
 ## Running manually
 

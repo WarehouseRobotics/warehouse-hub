@@ -319,8 +319,17 @@ async function fetchMissingValue(
   }
 
   if (!fetcherAgent || !gatewayToken) {
+    logger.warn("Data cache fetcher is configured but OpenClaw environment is incomplete", {      
+      cacheSlug: cache.slug,
+    });
+
+    // Explain what's missing:
     logger.warn("Data cache fetcher is configured but OpenClaw environment is incomplete", {
       cacheSlug: cache.slug,
+      fetcherAgent,
+      gatewayToken: gatewayToken ? "present" : "MISSING",
+      controlApiHost,
+      controlApiPort,
     });
     return null;
   }

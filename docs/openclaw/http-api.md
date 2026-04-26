@@ -4,9 +4,9 @@ The OpenClaw control API lets services invoke `wrobohub-openclaw-cli` over HTTP 
 
 In Warehouse Hub, the main use-case is that `business-api` runs inside a Docker container, while the OpenClaw gateway runs on the host system. The control API is the bridge between them: `business-api` can call this local HTTP wrapper on the host, and the wrapper then executes `wrobohub-openclaw-cli` against the running host-side OpenClaw setup.
 
-Inside the `business-api` container, `CONTROL_API_HOST` will usually be set to `host.docker.internal`
+Inside the `business-api` container, `OPENCLAW_CONTROL_API_HOST` will usually be set to `host.docker.internal`
 
-That lets containerized code reach the host machine directly. The main exception is when the OpenClaw gateway and its control API are themselves running in another container, in which case `CONTROL_API_HOST` should point at that container or service instead.
+That lets containerized code reach the host machine directly. The main exception is when the OpenClaw gateway and its control API are themselves running in another container, in which case `OPENCLAW_CONTROL_API_HOST` should point at that container or service instead.
 
 ## Typical use-case
 
@@ -21,7 +21,7 @@ Example: ask an internal agent to prepare a response and deliver it back to the 
 
 HTTP form:
 
-`POST $CONTROL_API_HOST/openclaw/cli` with payload:
+`POST $OPENCLAW_CONTROL_API_HOST/openclaw/cli` with payload:
 
 ```json
 [
@@ -70,8 +70,8 @@ http://127.0.0.1:8181
 
 Runtime configuration:
 
-- `CONTROL_API_HOST`: bind host, default `127.0.0.1`
-- `CONTROL_API_PORT`: bind port, default `8181`
+- `OPENCLAW_CONTROL_API_HOST`: bind host, default `127.0.0.1`
+- `OPENCLAW_CONTROL_API_PORT`: bind port, default `8181`
 
 For callers inside Docker, the target base URL is often:
 
