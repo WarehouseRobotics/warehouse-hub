@@ -2,7 +2,18 @@
 
 WORKDIR="${HOME}/src/openclaw"
 
+if command -v pnpm > /dev/null 2>&1; then
+    PNPM="pnpm"
+elif [ -x "${HOME}/.local/share/pnpm/pnpm" ]; then
+    PNPM="${HOME}/.local/share/pnpm/pnpm"
+elif [ -x "${HOME}/Library/pnpm/pnpm" ]; then
+    PNPM="${HOME}/Library/pnpm/pnpm"
+else
+    echo "error: pnpm not found" >&2
+    exit 1
+fi
+
 (
     cd "$WORKDIR" || exit 1
-    OPENCLAW_FORCE_NO_BUILD=1 pnpm run openclaw "$@"
+    OPENCLAW_FORCE_NO_BUILD=1 "$PNPM" run openclaw "$@"
 )
