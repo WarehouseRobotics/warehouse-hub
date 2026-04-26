@@ -352,9 +352,7 @@ async function fetchMissingValue(
           "--agent",
           fetcherAgent,
           "--message",
-          prompt,
-          "--deliver",
-          "--json",
+          prompt
         ]),
         signal: controller.signal,
       },
