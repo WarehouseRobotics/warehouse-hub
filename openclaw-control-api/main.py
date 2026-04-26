@@ -30,6 +30,7 @@ _CHILD_ENV = os.environ.copy()
 _CHILD_ENV["PATH"] = os.pathsep.join(
     [str(d) for d in _PNPM_CANDIDATE_DIRS] + [_CHILD_ENV.get("PATH", "")]
 )
+_CHILD_ENV.setdefault("OPENCLAW_HOME", str(_HOME))
 
 
 def _load_gateway_token() -> str:
