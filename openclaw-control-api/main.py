@@ -14,6 +14,17 @@ _ENV_FILE = pathlib.Path.home() / ".openclaw" / ".env"
 _HOST = os.environ.get("OPENCLAW_CONTROL_API_HOST", "127.0.0.1")
 _PORT = int(os.environ.get("OPENCLAW_CONTROL_API_PORT", "8181"))
 
+_HOME = pathlib.Path.home()
+_PNPM_CANDIDATE_DIRS = [
+    _HOME / ".local" / "share" / "pnpm",
+    _HOME / "Library" / "pnpm",
+    *sorted((_HOME / ".nvm" / "versions" / "node").glob("*/bin")),
+]
+_CHILD_ENV = os.environ.copy()
+_CHILD_ENV["PATH"] = os.pathsep.join(
+    [str(d) for d in _PNPM_CANDIDATE_DIRS] + [_CHILD_ENV.get("PATH", "")]
+)
+
 
 def _load_gateway_token() -> str:
     """Parse OPENCLAW_GATEWAY_TOKEN from $HOME/.openclaw/.env."""
@@ -78,6 +89,7 @@ class Handler(BaseHTTPRequestHandler):
                 [str(_CLI_SCRIPT)] + body,
                 capture_output=True,
                 text=True,
+                env=_CHILD_ENV,
             )
         except OSError as exc:
             self._send_json(500, {"error": f"cli exec failed: {exc}"})
