@@ -42,6 +42,7 @@ The Business API stacks allows our AI agents to query and manage various busines
     * prospective lead (company + persons + lead info)
     * customer (like a project group for tracking sales per customer)
         * notes/comments
+        * booking / appointment
         * invoice
         * sale (like a project per one particular sale)
         * subscription (for recurring sales)
@@ -110,6 +111,7 @@ The CRM MVP should cover:
 
 * contacts registry for customers and suppliers
 * optional person records under a company contact
+* basic bookings for scheduled small-business work
 * basic deals/sales records
 * invoice generation from company card + contact + deal data
 
@@ -119,6 +121,39 @@ Example contact roles for MVP:
 * `supplier`
 * `employee`
 * `both`
+
+## Bookings Subset
+
+Bookings should be modeled as scheduled service commitments between the owned business and customer contacts. In the platform object model, bookings sit between CRM, operational work, and billing:
+
+* CRM context: who the booking is for and what was agreed
+* operational context: when and where the work should happen
+* workflow context: what task, project, deal, or invoice it is related to
+
+This plays well with the existing business context approach because `booking` is another stable business object that links existing primitives together instead of introducing a parallel scheduling domain.
+
+For MVP, the intended split is:
+
+* `booking` for the scheduled customer-facing commitment
+* `booking_assignment_profile` for default employee booking availability
+* `booking_availability_exception` for one-off overrides such as time off or blocked windows
+
+High-level rules:
+
+* bookings must remain operational records, not accounting records
+* deals remain the source of commercial scope and pricing
+* tasks remain the place for execution detail
+* sales invoices remain the billing and tax source of truth
+* employee availability should stay simple and rule-based for the first pass
+
+MVP scope should include:
+
+* booking CRUD and rescheduling flows
+* employee assignment validation against availability configuration
+* optional links from bookings to `project`, `deal`, `task`, and `sales_invoice`
+* agent-friendly date-range agenda queries
+
+Detailed booking specs, API examples, availability rules, MCP tools, and CLI examples live in [docs/apps/business-api/bookings.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/bookings.md).
 
 ### Accounting API
 
