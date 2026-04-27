@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Warehouse Hub · Bookings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/components.css"/>
+<style>
+  .bk-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:16px; }
+  .bk-summary .c { padding:14px; background:var(--paper-1); border:1px solid var(--rule-1); border-radius:8px; }
+  .bk-summary .l { font-family:var(--font-mono); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-3); }
+  .bk-summary .v { font-family:var(--font-mono); font-size:22px; font-weight:500; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; margin-top:6px; }
+  .bk-summary .s { font-family:var(--font-mono); font-size:11px; color:var(--ink-3); margin-top:4px; }
+
+  .week { display:grid; grid-template-columns: 56px repeat(5, 1fr); border:1px solid var(--rule-1); border-radius:8px; background:var(--paper-1); overflow:hidden; }
+  .week .col { border-left: 1px solid var(--rule-1); position:relative; }
+  .week .col:first-child { border-left:0; }
+  .week .head { padding:10px 12px; border-bottom:1px solid var(--rule-1); font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-3); display:flex; align-items:baseline; gap:8px; background:var(--paper-0); }
+  .week .head .d { font-size:14px; color:var(--ink-1); font-weight:500; letter-spacing:-0.01em; text-transform:none; }
+  .week .head.today .d { color:var(--ember-ink); }
+  .week .head.today::after { content:''; position:absolute; bottom:-1px; left:0; right:0; height:2px; background:var(--ember); }
+  .week .grid { position:relative; height:660px; }
+  .hour { position:absolute; left:0; right:0; height:60px; border-bottom: 1px dashed var(--rule-1); }
+  .hour-label { position:absolute; left:8px; right:0; text-align:right; padding-right:8px; font-family:var(--font-mono); font-size:10px; color:var(--ink-3); letter-spacing:0.06em; transform: translateY(-6px); }
+  .now { position:absolute; left:0; right:0; height:0; border-top:1.5px solid var(--ember); z-index:3; }
+  .now::before { content:''; position:absolute; left:-4px; top:-4px; width:7px; height:7px; border-radius:50%; background:var(--ember); }
+
+  .bk-event {
+    position:absolute; left:6px; right:6px; border-radius:6px; padding:8px 10px; cursor:pointer;
+    background: var(--paper-0); border: 1px solid var(--rule-2); display:flex; flex-direction:column; gap:2px;
+    box-shadow: var(--shadow-flat); overflow: hidden; transition: transform .12s, box-shadow .12s;
+    border-left-width: 3px;
+  }
+  .bk-event:hover { transform: translateY(-1px); box-shadow: 0 4px 12px oklch(20% 0.005 80 / 0.08); }
+  .bk-event.confirmed   { border-left-color: var(--ember); background: var(--ember-soft); color: var(--ember-ink); }
+  .bk-event.in_progress { border-left-color: var(--info); background: var(--info-soft); color: oklch(40% 0.10 240); }
+  .bk-event.tentative   { border-left-color: var(--ink-4); background: var(--paper-0); color: var(--ink-2); border-style: solid; border-left-style: dashed; }
+  .bk-event.completed   { border-left-color: var(--ok); background: var(--ok-soft); color: oklch(38% 0.08 145); }
+  .bk-event.cancelled   { border-left-color: var(--danger); background: var(--paper-0); color: var(--ink-3); text-decoration: line-through; opacity:.6; }
+  .bk-event .t { font-family: var(--font-mono); font-size:10.5px; letter-spacing:0.04em; opacity:0.85; }
+  .bk-event .ttl { font-size:12px; font-weight:500; line-height:1.25; letter-spacing:-0.005em; color: var(--ink-1); }
+  html.dark .bk-event .ttl { color: var(--paper-0); }
+  .bk-event .meta { display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:10px; opacity:0.8; }
+  .bk-event .avs { display:flex; gap:-4px; margin-left:auto; }
+  .bk-event .avs .a { width:14px; height:14px; border-radius:50%; background:var(--paper-3); color:var(--ink-2); font-size:8px; display:grid; place-items:center; font-family:var(--font-mono); border:1px solid var(--paper-0); margin-left:-4px; }
+
+  .legend-row { display:flex; align-items:center; gap:14px; font-family:var(--font-mono); font-size:10.5px; color:var(--ink-3); letter-spacing:0.06em; }
+  .legend-row .k { width:8px; height:8px; border-radius:2px; display:inline-block; margin-right:6px; vertical-align:1px; }
+
+  .ag-bar { display:grid; grid-template-columns: 200px 1fr; gap:0; border:1px solid var(--rule-1); border-radius:8px; overflow:hidden; background:var(--paper-1); }
+  .ag-row { display:contents; }
+  .ag-cell-name { padding:14px 16px; border-top:1px solid var(--rule-1); display:flex; gap:10px; align-items:center; }
+  .ag-cell-name:first-child, .ag-row:first-child .ag-cell-name { border-top:0; }
+  .ag-cell-track { position:relative; padding:14px 0; border-top:1px solid var(--rule-1); border-left:1px solid var(--rule-1); height: 56px; background-image: linear-gradient(to right, var(--rule-1) 1px, transparent 1px); background-size: calc(100%/10) 100%; background-repeat: repeat-x; }
+  .ag-bar-block {
+    position:absolute; top:8px; bottom:8px; padding:4px 8px; border-radius:5px; border-left:3px solid var(--ember);
+    background: var(--ember-soft); color: var(--ember-ink); font-size:11px; font-weight:500; letter-spacing:-0.005em; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+  }
+  .ag-bar-block.tentative { border-left-style: dashed; opacity:.85; background: var(--paper-2); color: var(--ink-2); }
+  .ag-bar-block.maintenance { border-left-color: var(--info); background: var(--info-soft); color: oklch(40% 0.10 240); }
+  .ag-bar-block.completed { border-left-color: var(--ok); background: var(--ok-soft); }
+  .ag-bar-axis { display:grid; grid-template-columns: 200px 1fr; }
+  .ag-axis-cell { padding:8px 0; border-left:1px solid var(--rule-1); display:grid; grid-template-columns: repeat(10,1fr); font-family:var(--font-mono); font-size:10px; color:var(--ink-3); letter-spacing:0.08em; background: var(--paper-0); }
+  .ag-axis-cell span { padding-left:6px; border-left:1px dashed var(--rule-1); }
+  .ag-axis-cell span:first-child { border-left:0; }
+
+  .right-rail { display:grid; grid-template-columns: 1.4fr 1fr; gap:20px; align-items:flex-start; }
+</style>
+</head><body>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel" src="assets/boot.jsx"></script>
+<script type="text/babel">
+const { useState } = React;
+const DAY_LABELS = [
+  { k: 'mon', short: 'MON', d: '27', today: true },
+  { k: 'tue', short: 'TUE', d: '28' },
+  { k: 'wed', short: 'WED', d: '29' },
+  { k: 'thu', short: 'THU', d: '30' },
+  { k: 'fri', short: 'FRI', d: '01' },
+];
+const HOURS = [8,9,10,11,12,13,14,15,16,17,18];
+const MIN_H = HOURS[0]*60;
+const MAX_H = HOURS[HOURS.length-1]*60;
+const PX_PER_MIN = 660 / (MAX_H - MIN_H);
+const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60 + m; };
+const topOf = t => (toMin(t) - MIN_H) * PX_PER_MIN;
+const heightOf = (s,e) => (toMin(e) - toMin(s)) * PX_PER_MIN;
+
+function svcLabel(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function locIcon(k) {
+  if (k === 'remote') return <I.globe size={11}/>;
+  if (k === 'phone')  return <I.phone size={11}/>;
+  if (k === 'on_site') return <I.mapPin size={11}/>;
+  return <I.dot size={11}/>;
+}
+
+function BookingsPage() {
+  const [view, setView] = useState('week');
+  const [selectedId, setSelectedId] = useState('book_000091');
+
+  // group bookings by day
+  const byDay = Object.fromEntries(DAY_LABELS.map(d => [d.k, BOOKINGS.filter(b => b.day === d.k).sort((a,b) => toMin(a.start) - toMin(b.start))]));
+  const total = BOOKINGS.length;
+  const confirmed = BOOKINGS.filter(b => b.status === 'confirmed').length;
+  const tentative = BOOKINGS.filter(b => b.status === 'tentative').length;
+  const employeesUsed = new Set(BOOKINGS.flatMap(b => b.assigned)).size;
+
+  // selected booking details
+  const sel = BOOKINGS.find(b => b.id === selectedId) || BOOKINGS[0];
+  const selAssignees = sel.assigned.map(id => EMPLOYEES.find(e => e.id === id)).filter(Boolean);
+
+  // agent assignment heatmap (Tue 28 Apr)
+  const heatmapDate = "tue";
+  const heatmapBookings = byDay[heatmapDate];
+
+  return (
+    <AppShell active="bookings" crumbs={["Operations","Bookings","Week of 27 Apr"]} agentPreset="advisor">
+      <div className="wh-page-head">
+        <div>
+          <div className="micro">Operations · week 18 · 27 Apr — 1 May 2026</div>
+          <h1>Bookings</h1>
+          <div className="sub">{total} scheduled · {confirmed} confirmed · {tentative} tentative · {employeesUsed} employees engaged</div>
+        </div>
+        <div className="wh-page-actions">
+          <div className="wh-segmented">
+            <button>Day</button>
+            <button className={view==='week'?'on':''} onClick={() => setView('week')}>Week</button>
+            <button>Month</button>
+            <button>Agenda</button>
+          </div>
+          <button className="wh-btn"><I.refresh size={13}/> Conflict check</button>
+          <button className="wh-btn primary"><I.plus/> New booking</button>
+        </div>
+      </div>
+
+      <div className="bk-summary">
+        <div className="c"><div className="l">Scheduled · this week</div><div className="v">{total}</div><div className="s">{confirmed} confirmed · {tentative} tentative</div></div>
+        <div className="c"><div className="l">On-site days</div><div className="v">7<span style={{fontSize:13,color:'var(--ink-3)',marginLeft:4}}>days</span></div><div className="s">3 customers · 4 cities</div></div>
+        <div className="c"><div className="l">Employee load · avg</div><div className="v">62<span style={{fontSize:13,color:'var(--ink-3)',marginLeft:4}}>%</span></div><div className="s">peak Tue · 84% on Laura M.</div></div>
+        <div className="c"><div className="l">Awaiting confirmation</div><div className="v" style={{color:'oklch(58% 0.16 85)'}}>3</div><div className="s">2 customer-side · 1 internal</div></div>
+      </div>
+
+      <div className="wh-filterbar" style={{ marginBottom: 16 }}>
+        <div className="wh-input" style={{ width: 260 }}><I.search/><input placeholder="Search by customer, employee, project…"/></div>
+        <div className="wh-btn sm">Service type <span style={{color:'var(--ink-3)',marginLeft:4}}>all</span> <I.chevD size={12}/></div>
+        <div className="wh-btn sm">Employee <span style={{color:'var(--ink-3)',marginLeft:4}}>any</span> <I.chevD size={12}/></div>
+        <div className="wh-btn sm">Status <span style={{color:'var(--ink-3)',marginLeft:4}}>all</span> <I.chevD size={12}/></div>
+        <div className="wh-btn sm">Customer <span style={{color:'var(--ink-3)',marginLeft:4}}>any</span> <I.chevD size={12}/></div>
+        <div className="spacer"/>
+        <div className="legend-row">
+          <span><span className="k" style={{ background:'var(--ember)' }}></span>confirmed</span>
+          <span><span className="k" style={{ background:'var(--info)' }}></span>in progress</span>
+          <span><span className="k" style={{ background:'var(--ink-4)', borderRadius:0, border:'1px dashed var(--ink-3)', boxSizing:'border-box', backgroundColor:'transparent' }}></span>tentative</span>
+          <span><span className="k" style={{ background:'var(--ok)' }}></span>completed</span>
+        </div>
+      </div>
+
+      {/* WEEK GRID */}
+      <div className="week" style={{ marginBottom: 20 }}>
+        <div className="col">
+          <div className="head" style={{ visibility: 'hidden' }}><span>·</span></div>
+          <div className="grid">
+            {HOURS.map(h => <div key={h} className="hour-label" style={{ top: (h*60 - MIN_H) * PX_PER_MIN }}>{String(h).padStart(2,'0')}:00</div>)}
+          </div>
+        </div>
+
+        {DAY_LABELS.map(day => (
+          <div key={day.k} className="col">
+            <div className={`head ${day.today?'today':''}`} style={{ position:'relative' }}>
+              <span>{day.short}</span><span className="d">{day.d}</span>
+              {day.today && <span style={{marginLeft:'auto', fontFamily:'var(--font-mono)', fontSize:10, color:'var(--ember-ink)', letterSpacing:'0.08em'}}>TODAY</span>}
+            </div>
+            <div className="grid">
+              {HOURS.map(h => <div key={h} className="hour" style={{ top: (h*60 - MIN_H) * PX_PER_MIN }} />)}
+              {day.today && <div className="now" style={{ top: (10*60 + 14 - MIN_H) * PX_PER_MIN }} />}
+              {byDay[day.k].map(b => (
+                <div key={b.id}
+                     className={`bk-event ${b.status}`}
+                     onClick={() => setSelectedId(b.id)}
+                     style={{ top: topOf(b.start), height: Math.max(36, heightOf(b.start, b.end)) - 4, outline: b.id === selectedId ? '2px solid var(--ink-1)' : 'none' }}>
+                  <div className="t">{b.start}–{b.end} · {svcLabel(b.serviceType)}</div>
+                  <div className="ttl">{b.title}</div>
+                  <div className="meta">
+                    {locIcon(b.location.kind)}
+                    <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.customer}</span>
+                    <span className="avs">
+                      {b.assigned.slice(0,3).map(id => {
+                        const e = EMPLOYEES.find(x => x.id === id);
+                        return <span key={id} className="a">{e ? e.initials[0] : '·'}</span>;
+                      })}
+                      {b.assigned.length > 3 && <span className="a">+{b.assigned.length-3}</span>}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="right-rail">
+        {/* Selected booking detail card */}
+        <div className="wh-card">
+          <div className="wh-card-head">
+            <div>
+              <div className="micro">{sel.id}</div>
+              <h3 style={{display:'flex',alignItems:'center',gap:10}}>{sel.title} <StatusBadge status={sel.status === 'in_progress' ? 'doing' : sel.status === 'tentative' ? 'review' : sel.status === 'completed' ? 'done' : 'sent'}/></h3>
+            </div>
+            <div style={{display:'flex',gap:6}}>
+              <button className="wh-btn ghost icon sm"><I.refresh size={13}/></button>
+              <button className="wh-btn sm">Reschedule</button>
+              <button className="wh-btn primary sm">Complete</button>
+            </div>
+          </div>
+          <div className="wh-card-body">
+            <dl className="wh-dl">
+              <dt>Customer</dt>     <dd className="mono" style={{color:'var(--ember-ink)'}}>{sel.customerId} · {sel.customer}</dd>
+              <dt>Service type</dt> <dd><span className="wh-badge">{svcLabel(sel.serviceType)}</span></dd>
+              <dt>When</dt>         <dd className="mono">{sel.date} · {sel.start}–{sel.end} <span style={{color:'var(--ink-3)'}}>({sel.timezone})</span></dd>
+              <dt>Where</dt>        <dd>{sel.location.kind === 'remote' ? '☁ ' : sel.location.kind === 'phone' ? '☎ ' : '⌖ '}{sel.location.label} <span className="wh-badge" style={{marginLeft:8}}>{sel.location.kind.replace('_',' ')}</span></dd>
+              <dt>Project</dt>      <dd className="mono" style={{color:'var(--ember-ink)'}}>{sel.project || '—'}</dd>
+              <dt>Deal</dt>         <dd className="mono" style={{color: sel.deal ? 'var(--ember-ink)' : 'var(--ink-3)'}}>{sel.deal || 'no linked deal'}</dd>
+              <dt>Assigned</dt>     <dd>
+                <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                  {selAssignees.map(e => (
+                    <div key={e.id} style={{ display:'flex',alignItems:'center', gap:6, padding:'3px 8px 3px 3px', background:'var(--paper-2)', border:'1px solid var(--rule-1)', borderRadius:999 }}>
+                      <span className="wh-avatar" style={{ width:18, height:18, fontSize:9 }}>{e.initials}</span>
+                      <span style={{ fontSize:12 }}>{e.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </dd>
+              <dt>Notes</dt>        <dd>{sel.notes || <span style={{color:'var(--ink-3)'}}>—</span>}</dd>
+            </dl>
+          </div>
+        </div>
+
+        {/* Agent suggestion */}
+        <div>
+          <div className="wh-card" style={{ marginBottom: 16 }}>
+            <div className="wh-card-head"><h3>Conflict check</h3><span className="micro">live</span></div>
+            <div className="wh-card-body">
+              {[
+                { ok: true,  label: 'Inside weekly availability for both assignees' },
+                { ok: true,  label: 'No overlapping confirmed bookings · buffers respected' },
+                { ok: true,  label: 'Service type \u201cvisit\u201d allowed by both profiles' },
+                { ok: false, label: '⚠ Hugo Bentancor at 4/4 daily booking cap on Tue · marginal' },
+              ].map((c,i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 0', fontSize:12.5 }}>
+                  <span style={{ width:14, height:14, borderRadius:999, background: c.ok?'var(--ok-soft)':'var(--warn-soft)', color: c.ok?'var(--ok)':'oklch(55% 0.14 85)', display:'grid', placeItems:'center', fontSize:10, fontFamily:'var(--font-mono)'}}>{c.ok?'✓':'!'}</span>
+                  <span>{c.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ padding: 14, background: 'var(--paper-1)', border: '1px dashed var(--ember)', borderRadius: 8, display:'flex', gap: 12 }}>
+            <div className="wh-avatar agent">◆</div>
+            <div style={{ flex:1, fontSize: 13 }}>
+              <div style={{ fontWeight: 500, marginBottom: 4 }}>Advisor · scheduling note</div>
+              <div style={{ color: 'var(--ink-2)', lineHeight: 1.5 }}>The Algeciras visit on Wed sits outside Marek's weekly availability (he leaves at 13:00 Wed). Want me to propose Thu 10–13 instead?</div>
+              <div style={{ marginTop: 8, display:'flex', gap: 8 }}>
+                <button className="wh-btn sm">Dismiss</button>
+                <button className="wh-btn primary sm">Propose Thu 10:00</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Employee assignment heatmap for Tue 28 Apr */}
+      <div style={{ marginTop: 24 }}>
+        <div className="wh-page-head" style={{ marginBottom: 12 }}>
+          <div>
+            <div className="micro">Employee load · Tue 28 Apr</div>
+            <h2 style={{margin:0,fontSize:18,letterSpacing:'-0.012em',fontWeight:500}}>Bookable employees</h2>
+          </div>
+          <div className="wh-page-actions">
+            <button className="wh-btn sm">Manage profiles →</button>
+          </div>
+        </div>
+
+        <div className="ag-bar-axis">
+          <div></div>
+          <div className="ag-axis-cell">
+            {HOURS.slice(0,-1).map(h => <span key={h}>{String(h).padStart(2,'0')}:00</span>)}
+          </div>
+        </div>
+
+        <div className="ag-bar">
+          {EMPLOYEES.map(e => {
+            const items = BOOKINGS.filter(b => b.day === heatmapDate && b.assigned.includes(e.id));
+            const todayWindows = e.weekly.tue || [];
+            return (
+              <React.Fragment key={e.id}>
+                <div className="ag-cell-name">
+                  <div className="wh-avatar" style={{width:28,height:28,fontSize:11}}>{e.initials}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-0.005em' }}>{e.name}</div>
+                    <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: '0.04em' }}>{e.role} · {e.bookable ? 'bookable' : 'not bookable'}</div>
+                  </div>
+                </div>
+                <div className="ag-cell-track">
+                  {todayWindows.map(([s,en], i) => (
+                    <div key={i} style={{
+                      position:'absolute', top:0, bottom:0,
+                      left: ((toMin(s) - MIN_H) / (MAX_H - MIN_H)) * 100 + '%',
+                      width: ((toMin(en) - toMin(s)) / (MAX_H - MIN_H)) * 100 + '%',
+                      background: 'var(--paper-2)', borderLeft: '1px solid var(--rule-1)', borderRight:'1px solid var(--rule-1)', opacity: 0.5
+                    }} title="available"/>
+                  ))}
+                  {items.map(b => {
+                    const left = ((toMin(b.start) - MIN_H) / (MAX_H - MIN_H)) * 100;
+                    const width = ((toMin(b.end) - toMin(b.start)) / (MAX_H - MIN_H)) * 100;
+                    const cls = b.serviceType === 'maintenance' ? 'maintenance' : b.status;
+                    return (
+                      <div key={b.id} className={`ag-bar-block ${cls}`} style={{ left: left+'%', width: width+'%' }} onClick={() => setSelectedId(b.id)} title={b.title}>
+                        {b.start} · {b.title}
+                      </div>
+                    );
+                  })}
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+
+mountApp(<BookingsPage/>);
+</script>
+</body></html>

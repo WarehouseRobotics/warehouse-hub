@@ -163,6 +163,12 @@ const SIDEBAR_GROUPS = [
     ],
   },
   {
+    title: "Operations",
+    items: [
+      { id: "bookings",  label: "Bookings",   icon: I.clock,  href: "Bookings.html", count: 12 },
+    ],
+  },
+  {
     title: "Configure",
     items: [
       { id: "company",   label: "Company card", icon: I.building, href: "Onboarding.html" },
@@ -464,11 +470,90 @@ function StatusBadge({ status }) {
   return <span className={`wh-badge ${s.c}`}><span className="dot" />{s.label}</span>;
 }
 
+/* =============================================================
+   EMPLOYEES & BOOKINGS — sample data
+   ============================================================= */
+const EMPLOYEES = [
+  { id: "ct_emp_000011", name: "Laura Mendes",     role: "Senior solutions engineer", initials: "LM", tz: "Europe/Madrid",
+    bookable: true,  bookingTypes: ["visit","installation","maintenance"], bufferBefore: 30, bufferAfter: 30, maxPerDay: 3,
+    weekly: { mon:[["09:00","13:00"],["15:00","18:00"]], tue:[["09:00","17:00"]], wed:[["09:00","17:00"]], thu:[["09:00","17:00"]], fri:[["09:00","14:00"]], sat:[], sun:[] } },
+  { id: "ct_emp_000012", name: "Hugo Bentancor",   role: "Field technician",          initials: "HB", tz: "Europe/Madrid",
+    bookable: true,  bookingTypes: ["installation","maintenance"],         bufferBefore: 15, bufferAfter: 30, maxPerDay: 4,
+    weekly: { mon:[["08:00","17:00"]], tue:[["08:00","17:00"]], wed:[["08:00","17:00"]], thu:[["08:00","17:00"]], fri:[["08:00","17:00"]], sat:[], sun:[] } },
+  { id: "ct_emp_000013", name: "Sofía Aragón",     role: "Customer success",          initials: "SA", tz: "Europe/Madrid",
+    bookable: true,  bookingTypes: ["consultation","training","workshop"], bufferBefore: 15, bufferAfter: 15, maxPerDay: 5,
+    weekly: { mon:[["10:00","18:00"]], tue:[["10:00","18:00"]], wed:[["10:00","18:00"]], thu:[["10:00","18:00"]], fri:[["10:00","16:00"]], sat:[], sun:[] } },
+  { id: "ct_emp_000014", name: "Marek Jankowski",  role: "Robotics engineer",          initials: "MJ", tz: "Europe/Berlin",
+    bookable: true,  bookingTypes: ["visit","installation"],               bufferBefore: 60, bufferAfter: 30, maxPerDay: 2,
+    weekly: { mon:[["09:00","17:00"]], tue:[["09:00","17:00"]], wed:[["09:00","13:00"]], thu:[["09:00","17:00"]], fri:[["09:00","17:00"]], sat:[], sun:[] } },
+  { id: "ct_emp_000015", name: "Patricia Ruiz",    role: "Owner",                      initials: "PR", tz: "Europe/Madrid",
+    bookable: false, bookingTypes: ["consultation"],                        bufferBefore: 0,  bufferAfter: 0,  maxPerDay: null,
+    weekly: { mon:[["10:00","12:00"]], tue:[], wed:[["10:00","12:00"]], thu:[], fri:[["10:00","12:00"]], sat:[], sun:[] } },
+];
+
+// Anchor: Mon 27 Apr 2026
+const BOOKINGS = [
+  { id: "book_000091", title: "Warehouse automation discovery visit", customer: "Acme Retail GmbH",  customerId: "ct_000245",
+    serviceType: "visit",        status: "confirmed",   day: "tue", start: "09:00", end: "11:00", date: "2026-04-28",
+    timezone: "Europe/Madrid", location: { kind: "on_site", label: "Acme Retail warehouse · Madrid Norte" },
+    assigned: ["ct_emp_000011","ct_emp_000012"], deal: "deal_000072", project: "proj_000018", notes: "Focus on packing line bottlenecks." },
+  { id: "book_000092", title: "WMS migration kickoff",                customer: "Kröger Logistik",   customerId: "ct_000234",
+    serviceType: "consultation", status: "confirmed",   day: "mon", start: "10:00", end: "11:30", date: "2026-04-27",
+    timezone: "Europe/Madrid", location: { kind: "remote", label: "Google Meet" },
+    assigned: ["ct_emp_000013"], deal: null, project: "proj_000019", notes: "Expect 4 stakeholders." },
+  { id: "book_000093", title: "Sorter recalibration · routine",       customer: "Mistral Supply Co.",customerId: "ct_000238",
+    serviceType: "maintenance",  status: "in_progress", day: "mon", start: "14:00", end: "16:00", date: "2026-04-27",
+    timezone: "Europe/Madrid", location: { kind: "on_site", label: "Mistral Lyon DC" },
+    assigned: ["ct_emp_000014"], deal: "deal_000071", project: "proj_000017", notes: "Bring spare belt segment." },
+  { id: "book_000094", title: "AGV fleet site survey",                customer: "Port of Algeciras", customerId: "ct_000242",
+    serviceType: "visit",        status: "tentative",   day: "wed", start: "11:00", end: "14:00", date: "2026-04-29",
+    timezone: "Europe/Madrid", location: { kind: "on_site", label: "Algeciras · Terminal 4" },
+    assigned: ["ct_emp_000011","ct_emp_000014"], deal: "deal_000070", project: "proj_000016", notes: "Travel day before." },
+  { id: "book_000095", title: "Operator training session 2",          customer: "Lumafield SL",      customerId: "ct_000244",
+    serviceType: "training",     status: "confirmed",   day: "wed", start: "09:30", end: "11:00", date: "2026-04-29",
+    timezone: "Europe/Madrid", location: { kind: "on_site", label: "Lumafield Barcelona HQ" },
+    assigned: ["ct_emp_000013"], deal: null, project: "proj_000022", notes: "Bring printed quick-reference cards." },
+  { id: "book_000096", title: "Coldchain audit walkthrough",          customer: "Tanka Foods",       customerId: "ct_000231",
+    serviceType: "consultation", status: "confirmed",   day: "thu", start: "10:00", end: "12:00", date: "2026-04-30",
+    timezone: "Europe/Madrid", location: { kind: "on_site", label: "Tanka Valencia plant" },
+    assigned: ["ct_emp_000011"], deal: null, project: "proj_000021", notes: "" },
+  { id: "book_000097", title: "Phase II proposal review",             customer: "Kröger Logistik",   customerId: "ct_000234",
+    serviceType: "consultation", status: "confirmed",   day: "thu", start: "15:00", end: "16:00", date: "2026-04-30",
+    timezone: "Europe/Madrid", location: { kind: "remote", label: "Zoom" },
+    assigned: ["ct_emp_000013","ct_emp_000015"], deal: "deal_000069", project: "proj_000019", notes: "" },
+  { id: "book_000098", title: "Quarterly check-in",                   customer: "Ochre & Oak",       customerId: "ct_000229",
+    serviceType: "consultation", status: "tentative",   day: "fri", start: "10:30", end: "11:30", date: "2026-05-01",
+    timezone: "Europe/Madrid", location: { kind: "phone", label: "Phone" },
+    assigned: ["ct_emp_000013"], deal: null, project: null, notes: "" },
+  { id: "book_000099", title: "Workshop · packing line redesign",     customer: "Acme Retail GmbH",  customerId: "ct_000245",
+    serviceType: "workshop",     status: "confirmed",   day: "fri", start: "13:30", end: "17:00", date: "2026-05-01",
+    timezone: "Europe/Madrid", location: { kind: "on_site", label: "Acme Retail Madrid Norte" },
+    assigned: ["ct_emp_000011","ct_emp_000012","ct_emp_000013"], deal: "deal_000072", project: "proj_000018", notes: "Whiteboard + 3 facilitators." },
+  { id: "book_000100", title: "Site assessment · Black Friday prep",  customer: "Ochre & Oak",       customerId: "ct_000229",
+    serviceType: "visit",        status: "tentative",   day: "tue", start: "14:30", end: "16:00", date: "2026-04-28",
+    timezone: "Europe/Madrid", location: { kind: "remote", label: "Google Meet" },
+    assigned: ["ct_emp_000013"], deal: "deal_000067", project: null, notes: "" },
+  { id: "book_000101", title: "Conveyor maintenance · monthly",       customer: "Mistral Supply Co.",customerId: "ct_000238",
+    serviceType: "maintenance",  status: "completed",   day: "mon", start: "08:00", end: "09:30", date: "2026-04-27",
+    timezone: "Europe/Madrid", location: { kind: "on_site", label: "Mistral Lyon DC" },
+    assigned: ["ct_emp_000012"], deal: null, project: "proj_000017", notes: "Routine. No issues found." },
+  { id: "book_000102", title: "Installation · pick-to-light",         customer: "Kröger Logistik",   customerId: "ct_000234",
+    serviceType: "installation", status: "confirmed",   day: "tue", start: "11:00", end: "16:00", date: "2026-04-28",
+    timezone: "Europe/Berlin", location: { kind: "on_site", label: "Kröger Hamburg DC · Aisle 12" },
+    assigned: ["ct_emp_000014","ct_emp_000012"], deal: "deal_000069", project: "proj_000019", notes: "Bring rack-mount adapters." },
+];
+
+const AVAILABILITY_EXCEPTIONS = [
+  { id: "bex_000001", contactId: "ct_emp_000011", kind: "time_off",           start: "2026-05-04", end: "2026-05-08", reason: "vacation",       notes: "" },
+  { id: "bex_000002", contactId: "ct_emp_000012", kind: "blocked",            start: "2026-04-29", end: "2026-04-29", reason: "training",       notes: "Internal certification." },
+  { id: "bex_000003", contactId: "ct_emp_000013", kind: "available_override", start: "2026-05-02", end: "2026-05-02", reason: "Saturday slot",  notes: "Customer-specific." },
+];
+
 /* Export to window */
 Object.assign(window, {
   WRMark, WRWordmark, I,
   Topbar, Sidebar, AgentDock,
   useTheme, Spark,
-  EXPENSES, INVOICES, CONTACTS, DEALS, TASKS,
+  EXPENSES, INVOICES, CONTACTS, DEALS, TASKS, EMPLOYEES, BOOKINGS, AVAILABILITY_EXCEPTIONS,
   fmtEUR, fmtShort, StatusBadge,
 });
