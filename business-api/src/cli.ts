@@ -120,6 +120,8 @@ const HELP_SCOPES: Record<string, HelpScope> = {
       "check-assignment-conflicts <json-or-flags>",
     ],
     examples: [
+      "bookings create --customer-contact-id ct_000245 --title \"Warehouse automation discovery visit\" --service-type visit --status confirmed --start 2026-04-10T09:00:00+02:00 --end 2026-04-10T11:00:00+02:00 --timezone Europe/Madrid --assigned-contact-id ct_emp_000011 --location-kind on_site --location-label \"Acme Retail warehouse\"",
+      'bookings create \'{"customerContactId":"ct_000245","title":"Remote onboarding workshop","serviceType":"workshop","status":"tentative","scheduledStartAt":"2026-04-11T14:00:00+02:00","scheduledEndAt":"2026-04-11T16:00:00+02:00","timezone":"Europe/Madrid","assignedContactIds":["ct_emp_000011"],"location":{"kind":"remote","label":"Zoom"}}\'',
       "bookings list --from 2026-04-10T00:00:00Z --to 2026-04-17T00:00:00Z",
       "bookings complete book_000091 --completion-notes \"Site survey completed\" --create-follow-up-task",
     ],
