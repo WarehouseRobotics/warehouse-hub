@@ -166,6 +166,70 @@ List all contacts:
 ./container.sh exec npm run cli -- contacts list
 ```
 
+## Bookings
+
+Create a booking:
+
+```bash
+./container.sh exec npm run cli -- bookings create \
+  --customer-contact-id ct_000245 \
+  --project-id proj_000018 \
+  --title "Warehouse automation discovery visit" \
+  --service-type visit \
+  --status confirmed \
+  --start 2026-04-10T09:00:00+02:00 \
+  --end 2026-04-10T11:00:00+02:00 \
+  --timezone Europe/Madrid \
+  --assigned-contact-id ct_emp_000011
+```
+
+List agenda items for a date range or employee:
+
+```bash
+./container.sh exec npm run cli -- bookings list \
+  --from 2026-04-10T00:00:00Z \
+  --to 2026-04-17T00:00:00Z \
+  --assigned-contact-id ct_emp_000011
+```
+
+Complete or cancel a booking:
+
+```bash
+./container.sh exec npm run cli -- bookings complete book_000091 \
+  --completion-notes "Site survey completed" \
+  --create-follow-up-task
+
+./container.sh exec npm run cli -- bookings cancel book_000091 \
+  --reason customer_requested_reschedule
+```
+
+Configure employee availability:
+
+```bash
+./container.sh exec npm run cli -- booking-assignment-profiles set ct_emp_000011 \
+  --timezone Europe/Madrid \
+  --availability "monday|09:00|13:00" \
+  --availability "monday|15:00|18:00" \
+  --availability "tuesday|09:00|17:00" \
+  --buffer-before-minutes 30 \
+  --buffer-after-minutes 30 \
+  --max-bookings-per-day 3 \
+  --booking-type visit
+```
+
+Record a one-off exception:
+
+```bash
+./container.sh exec npm run cli -- booking-availability-exceptions create \
+  --contact-id ct_emp_000011 \
+  --kind time_off \
+  --start 2026-04-10T00:00:00+02:00 \
+  --end 2026-04-10T23:59:59+02:00 \
+  --reason vacation
+```
+
+See [bookings.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/bookings.md) for the full REST, validation, and conflict-check behavior.
+
 ## Documents
 
 Upload a raw document:

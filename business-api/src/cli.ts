@@ -4,6 +4,25 @@ import path from "node:path";
 import { config } from "./config.js";
 import { initializeDatabase } from "./db/connection.js";
 import { createApp } from "./app.js";
+import {
+  cancelBooking,
+  checkBookingAssignmentConflicts,
+  completeBooking,
+  createBooking,
+  createBookingAvailabilityException,
+  getBooking,
+  getBookingAssignmentProfile,
+  getBookingAvailabilityException,
+  listBookingAssignmentProfiles,
+  listBookingAvailabilityExceptions,
+  listBookings,
+  softDeleteBooking,
+  softDeleteBookingAssignmentProfile,
+  softDeleteBookingAvailabilityException,
+  updateBooking,
+  updateBookingAvailabilityException,
+  upsertBookingAssignmentProfile,
+} from "./services/bookings.js";
 import { getCompanyCard, upsertCompanyCard } from "./services/company-card.js";
 import { createComment, getComment, listComments, updateComment } from "./services/comments.js";
 import { createContact, getContact, listContacts, resolveContact } from "./services/contacts.js";
@@ -25,6 +44,14 @@ import { generateSalesInvoice, getSalesInvoice, listSalesInvoices, updateSalesIn
 import { createTask, getTask, listTasks, updateTask } from "./services/tasks.js";
 import {
   companyCardInputSchema,
+  bookingAssignmentConflictCheckSchema,
+  bookingAssignmentProfileInputSchema,
+  bookingAvailabilityExceptionInputSchema,
+  bookingAvailabilityExceptionPatchSchema,
+  bookingCancelSchema,
+  bookingCompleteSchema,
+  bookingInputSchema,
+  bookingPatchSchema,
   commentInputSchema,
   commentPatchSchema,
   contactInputSchema,
@@ -79,6 +106,43 @@ const HELP_SCOPES: Record<string, HelpScope> = {
       'company-card set \'{"legalName":"Northwind Robotics SL","displayName":"Northwind Robotics"}\'',
     ],
     aliases: ["company"],
+  },
+  bookings: {
+    description: "Create, inspect, schedule, complete, and cancel customer bookings.",
+    commands: [
+      "create <json-or-flags>",
+      "get <id-or-slug>",
+      "list [--from <iso>] [--to <iso>] [--status <status>] [--customer-contact-id <id>] [--assigned-contact-id <id>] [--project-id <id>] [--deal-id <id>]",
+      "update <id-or-slug> <json>",
+      "complete <id-or-slug> [--completion-notes <text>] [--create-follow-up-task]",
+      "cancel <id-or-slug> --reason <text>",
+      "delete <id-or-slug>",
+      "check-assignment-conflicts <json-or-flags>",
+    ],
+    examples: [
+      "bookings list --from 2026-04-10T00:00:00Z --to 2026-04-17T00:00:00Z",
+      "bookings complete book_000091 --completion-notes \"Site survey completed\" --create-follow-up-task",
+    ],
+  },
+  "booking-assignment-profiles": {
+    description: "Configure employee availability for booking assignment.",
+    commands: ["list", "get <contact-id>", "set <contact-id> <json-or-flags>", "delete <contact-id>"],
+    examples: [
+      "booking-assignment-profiles set ct_emp_000011 --timezone Europe/Madrid --availability monday|09:00|13:00 --booking-type visit",
+    ],
+  },
+  "booking-availability-exceptions": {
+    description: "Manage one-off employee booking availability exceptions.",
+    commands: [
+      "create <json-or-flags>",
+      "list [--contact-id <id>] [--kind <kind>]",
+      "get <id-or-slug>",
+      "update <id-or-slug> <json>",
+      "delete <id-or-slug>",
+    ],
+    examples: [
+      "booking-availability-exceptions create --contact-id ct_emp_000011 --kind time_off --start 2026-04-10T00:00:00+02:00 --end 2026-04-10T23:59:59+02:00 --reason vacation",
+    ],
   },
   comments: {
     description: "Create, inspect, list, and update generic comments attached to business records.",
@@ -219,6 +283,9 @@ const TOP_LEVEL_COMMANDS = [
   "serve",
   "db <subcommand>",
   "company-card <subcommand>",
+  "bookings <subcommand>",
+  "booking-assignment-profiles <subcommand>",
+  "booking-availability-exceptions <subcommand>",
   "comments <subcommand>",
   "contacts <subcommand>",
   "data-cache <subcommand>",
@@ -289,6 +356,7 @@ function parseCommentListFilters(args: string[]): {
     commentableType !== "expense" &&
     commentableType !== "payroll" &&
     commentableType !== "deal" &&
+    commentableType !== "booking" &&
     commentableType !== "sales_invoice" &&
     commentableType !== "project" &&
     commentableType !== "task"
@@ -411,6 +479,178 @@ function parseFlagArgs(args: string[]): { positionals: string[]; options: Record
   }
 
   return { positionals, options };
+}
+
+function parseFlexibleFlagArgs(
+  args: string[],
+  booleanKeys = new Set<string>(),
+  repeatableKeys = new Set<string>(),
+): { positionals: string[]; options: Record<string, string>; booleans: Set<string>; repeated: Record<string, string[]> } {
+  const positionals: string[] = [];
+  const options: Record<string, string> = {};
+  const booleans = new Set<string>();
+  const repeated: Record<string, string[]> = {};
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg.startsWith("--")) {
+      positionals.push(arg);
+      continue;
+    }
+
+    const key = arg.slice(2);
+    if (booleanKeys.has(key)) {
+      booleans.add(key);
+      continue;
+    }
+
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) {
+      throw new Error(`Missing value for option: ${arg}`);
+    }
+
+    if (repeatableKeys.has(key)) {
+      repeated[key] = [...(repeated[key] ?? []), value];
+    } else {
+      options[key] = value;
+    }
+    index += 1;
+  }
+
+  return { positionals, options, booleans, repeated };
+}
+
+function parseNumberOption(value: string | undefined): number | undefined {
+  return value === undefined ? undefined : Number(value);
+}
+
+function parseBookingLocation(options: Record<string, string>) {
+  if (!options["location-kind"]) {
+    return undefined;
+  }
+
+  return {
+    kind: options["location-kind"],
+    label: options["location-label"],
+    address: options["street1"] || options.city || options["postal-code"] || options.country
+      ? {
+          street1: options["street1"],
+          street2: options["street2"],
+          city: options.city,
+          postalCode: options["postal-code"],
+          countryCode: options.country,
+        }
+      : undefined,
+    remoteUrl: options["remote-url"],
+    notes: options["location-notes"],
+  };
+}
+
+function parseBookingInputArg(args: string[]) {
+  if (args[0]?.trim().startsWith("{")) {
+    return bookingInputSchema.parse(parseJsonArg(args[0], "booking"));
+  }
+
+  const { options, repeated } = parseFlexibleFlagArgs(args, new Set(["json"]), new Set(["assigned-contact-id"]));
+  return bookingInputSchema.parse({
+    customerContactId: options["customer-contact-id"],
+    projectId: options["project-id"],
+    dealId: options["deal-id"],
+    taskId: options["task-id"],
+    salesInvoiceId: options["sales-invoice-id"],
+    title: options.title,
+    serviceType: options["service-type"],
+    status: options.status,
+    scheduledStartAt: options.start,
+    scheduledEndAt: options.end,
+    timezone: options.timezone,
+    location: parseBookingLocation(options),
+    assignedContactIds: repeated["assigned-contact-id"] ?? [],
+    notes: options.notes,
+  });
+}
+
+function parseBookingListFilters(args: string[]) {
+  const { options } = parseFlexibleFlagArgs(args, new Set(["json"]));
+  return {
+    from: options.from,
+    to: options.to,
+    status: options.status,
+    customerContactId: options["customer-contact-id"],
+    assignedContactId: options["assigned-contact-id"],
+    projectId: options["project-id"],
+    dealId: options["deal-id"],
+  };
+}
+
+function parseBookingConflictCheckArg(args: string[]) {
+  if (args[0]?.trim().startsWith("{")) {
+    return bookingAssignmentConflictCheckSchema.parse(parseJsonArg(args[0], "booking conflict check"));
+  }
+
+  const { options, repeated } = parseFlexibleFlagArgs(args, new Set(["json"]), new Set(["assigned-contact-id"]));
+  return bookingAssignmentConflictCheckSchema.parse({
+    bookingId: options["booking-id"],
+    serviceType: options["service-type"],
+    scheduledStartAt: options.start,
+    scheduledEndAt: options.end,
+    timezone: options.timezone,
+    assignedContactIds: repeated["assigned-contact-id"] ?? [],
+  });
+}
+
+function parseBookingAvailabilityEntries(values: string[] | undefined) {
+  const byDay = new Map<string, Array<{ start: string; end: string }>>();
+  for (const value of values ?? []) {
+    const [dayOfWeek, start, end] = value.split("|");
+    if (!dayOfWeek || !start || !end) {
+      throw new Error(`Invalid availability value: ${value}. Expected day|HH:MM|HH:MM`);
+    }
+
+    byDay.set(dayOfWeek, [...(byDay.get(dayOfWeek) ?? []), { start, end }]);
+  }
+
+  return Array.from(byDay.entries()).map(([dayOfWeek, windows]) => ({ dayOfWeek, windows }));
+}
+
+function parseBookingAssignmentProfileArg(args: string[]) {
+  if (args[0]?.trim().startsWith("{")) {
+    return bookingAssignmentProfileInputSchema.parse(parseJsonArg(args[0], "booking assignment profile"));
+  }
+
+  const { options, repeated, booleans } = parseFlexibleFlagArgs(
+    args,
+    new Set(["json", "not-bookable"]),
+    new Set(["availability", "booking-type"]),
+  );
+  return bookingAssignmentProfileInputSchema.parse({
+    isBookable: !booleans.has("not-bookable"),
+    timezone: options.timezone,
+    weeklyAvailability: parseBookingAvailabilityEntries(repeated.availability),
+    bufferBeforeMinutes: parseNumberOption(options["buffer-before-minutes"]),
+    bufferAfterMinutes: parseNumberOption(options["buffer-after-minutes"]),
+    maxBookingsPerDay: parseNumberOption(options["max-bookings-per-day"]),
+    bookingTypes: repeated["booking-type"],
+    effectiveFrom: options["effective-from"],
+    effectiveTo: options["effective-to"],
+    notes: options.notes,
+  });
+}
+
+function parseBookingAvailabilityExceptionArg(args: string[]) {
+  if (args[0]?.trim().startsWith("{")) {
+    return bookingAvailabilityExceptionInputSchema.parse(parseJsonArg(args[0], "booking availability exception"));
+  }
+
+  const { options } = parseFlexibleFlagArgs(args, new Set(["json"]));
+  return bookingAvailabilityExceptionInputSchema.parse({
+    contactId: options["contact-id"],
+    kind: options.kind,
+    startAt: options.start,
+    endAt: options.end,
+    reason: options.reason,
+    notes: options.notes,
+  });
 }
 
 function parseCsvLine(line: string): string[] {
@@ -546,6 +786,107 @@ async function main(): Promise<void> {
   if (command === "company-card" && subcommand === "set") {
     const input = companyCardInputSchema.parse(parseJsonArg(rest[0], "company-card"));
     printJson(upsertCompanyCard(input));
+    return;
+  }
+
+  if (command === "bookings" && subcommand === "create") {
+    printJson(createBooking(parseBookingInputArg(rest)));
+    return;
+  }
+
+  if (command === "bookings" && subcommand === "get") {
+    printJson(getBooking(rest[0]));
+    return;
+  }
+
+  if (command === "bookings" && subcommand === "list") {
+    printJson(listBookings(parseBookingListFilters(rest)));
+    return;
+  }
+
+  if (command === "bookings" && subcommand === "update") {
+    const input = bookingPatchSchema.parse(parseJsonArg(rest[1], "booking patch"));
+    printJson(updateBooking(rest[0], input));
+    return;
+  }
+
+  if (command === "bookings" && subcommand === "complete") {
+    const input = rest[1]?.trim().startsWith("{")
+      ? bookingCompleteSchema.parse(parseJsonArg(rest[1], "booking completion"))
+      : bookingCompleteSchema.parse({
+          completionNotes: parseFlexibleFlagArgs(rest.slice(1), new Set(["create-follow-up-task", "json"])).options["completion-notes"],
+          createFollowUpTask: parseFlexibleFlagArgs(rest.slice(1), new Set(["create-follow-up-task", "json"])).booleans.has("create-follow-up-task"),
+          followUpTaskTitle: parseFlexibleFlagArgs(rest.slice(1), new Set(["create-follow-up-task", "json"])).options["follow-up-task-title"],
+        });
+    printJson(completeBooking(rest[0], input));
+    return;
+  }
+
+  if (command === "bookings" && subcommand === "cancel") {
+    const input = rest[1]?.trim().startsWith("{")
+      ? bookingCancelSchema.parse(parseJsonArg(rest[1], "booking cancellation"))
+      : bookingCancelSchema.parse({ reason: parseFlexibleFlagArgs(rest.slice(1), new Set(["json"])).options.reason });
+    printJson(cancelBooking(rest[0], input));
+    return;
+  }
+
+  if (command === "bookings" && subcommand === "delete") {
+    softDeleteBooking(rest[0]);
+    printJson({ ok: true });
+    return;
+  }
+
+  if (command === "bookings" && subcommand === "check-assignment-conflicts") {
+    printJson({ conflicts: checkBookingAssignmentConflicts(parseBookingConflictCheckArg(rest)) });
+    return;
+  }
+
+  if (command === "booking-assignment-profiles" && subcommand === "list") {
+    printJson(listBookingAssignmentProfiles());
+    return;
+  }
+
+  if (command === "booking-assignment-profiles" && subcommand === "get") {
+    printJson(getBookingAssignmentProfile(rest[0]));
+    return;
+  }
+
+  if (command === "booking-assignment-profiles" && subcommand === "set") {
+    printJson(upsertBookingAssignmentProfile(rest[0], parseBookingAssignmentProfileArg(rest.slice(1))));
+    return;
+  }
+
+  if (command === "booking-assignment-profiles" && subcommand === "delete") {
+    softDeleteBookingAssignmentProfile(rest[0]);
+    printJson({ ok: true });
+    return;
+  }
+
+  if (command === "booking-availability-exceptions" && subcommand === "create") {
+    printJson(createBookingAvailabilityException(parseBookingAvailabilityExceptionArg(rest)));
+    return;
+  }
+
+  if (command === "booking-availability-exceptions" && subcommand === "list") {
+    const { options } = parseFlexibleFlagArgs(rest, new Set(["json"]));
+    printJson(listBookingAvailabilityExceptions({ contactId: options["contact-id"], kind: options.kind }));
+    return;
+  }
+
+  if (command === "booking-availability-exceptions" && subcommand === "get") {
+    printJson(getBookingAvailabilityException(rest[0]));
+    return;
+  }
+
+  if (command === "booking-availability-exceptions" && subcommand === "update") {
+    const input = bookingAvailabilityExceptionPatchSchema.parse(parseJsonArg(rest[1], "booking availability exception patch"));
+    printJson(updateBookingAvailabilityException(rest[0], input));
+    return;
+  }
+
+  if (command === "booking-availability-exceptions" && subcommand === "delete") {
+    softDeleteBookingAvailabilityException(rest[0]);
+    printJson({ ok: true });
     return;
   }
 

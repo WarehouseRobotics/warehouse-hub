@@ -19,6 +19,7 @@ function parseCommentableType(value: unknown): CommentableType | undefined {
     case "expense":
     case "payroll":
     case "deal":
+    case "booking":
     case "sales_invoice":
     case "project":
     case "task":

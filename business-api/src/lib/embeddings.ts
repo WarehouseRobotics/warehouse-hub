@@ -15,6 +15,7 @@ export type EmbeddingEntityType =
   | "company_card"
   | "contact"
   | "document"
+  | "booking"
   | "deal"
   | "expense_invoice"
   | "payroll"
@@ -142,6 +143,19 @@ function createEmbeddingDocument(entityType: EmbeddingEntityType, entity: Record
         ocrStatus: entity.ocrStatus,
         ocrText: entity.ocrText,
         extractedData: entity.extractedData,
+      };
+    case "booking":
+      return {
+        entityType,
+        title: entity.title,
+        serviceType: entity.serviceType,
+        status: entity.status,
+        scheduledStartAt: entity.scheduledStartAt,
+        scheduledEndAt: entity.scheduledEndAt,
+        timezone: entity.timezone,
+        location: entity.location,
+        notes: entity.notes,
+        completionNotes: entity.completionNotes,
       };
     case "expense_invoice":
       return {

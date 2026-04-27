@@ -7,6 +7,7 @@ export const commentableTypeSchema = z.enum([
   "expense",
   "payroll",
   "deal",
+  "booking",
   "sales_invoice",
   "project",
   "task",

@@ -21,10 +21,14 @@ export function errorHandler(
   }
 
   if (error instanceof AppError) {
+    const extra = error.details && typeof error.details === "object" && !Array.isArray(error.details)
+      ? error.details
+      : {};
     response.status(error.statusCode).json({
       error: {
         code: error.code,
         message: error.message,
+        ...extra,
         details: error.details,
       },
     });

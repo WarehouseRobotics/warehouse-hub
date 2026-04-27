@@ -151,7 +151,18 @@ export function compareDateDesc(
   const rightDate = extractDateOnly(right);
 
   if (leftDate && rightDate) {
-    return rightDate.localeCompare(leftDate);
+    const dateComparison = rightDate.localeCompare(leftDate);
+    if (dateComparison !== 0) {
+      return dateComparison;
+    }
+
+    const leftTimestamp = Date.parse(left ?? "");
+    const rightTimestamp = Date.parse(right ?? "");
+    if (!Number.isNaN(leftTimestamp) && !Number.isNaN(rightTimestamp)) {
+      return rightTimestamp - leftTimestamp;
+    }
+
+    return 0;
   }
 
   if (leftDate) {

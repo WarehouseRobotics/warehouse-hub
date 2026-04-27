@@ -1,68 +1,89 @@
 ---
 type: feature-guide
-description: Booking and employee availability specification for the Business API
+description: Implemented booking and employee availability scope for the Business API
 project_dir: business-api
 frozen: false
 see_also:
   - docs/apps/Business Foundation API.md
   - docs/architecture/Business API Architecture.md
   - docs/apps/business-api/contacts.md
-  - packages/business-schemas
+  - docs/apps/business-api/cli.md
+  - packages/business-schemas/src/booking.ts
 ---
 
 # Bookings in the Business API
 
 ## Purpose
 
-For small businesses, a practical MVP booking should be modeled as a scheduled service commitment between the owned business and a customer contact.
-
-It is not:
-
-* a full calendar platform
-* the accounting source of truth
-* an HR rostering system
-
-Instead, it should sit cleanly between CRM, tasks, and invoicing:
+Bookings are implemented as scheduled service commitments between the owned business and customer contacts. They sit between CRM, operational work, and billing:
 
 * CRM context: who the booking is for and what was agreed
 * operational context: when and where the work should happen
-* workflow context: what task, project, deal, or invoice it is related to
+* workflow context: which project, deal, task, or sales invoice the booking relates to
 
-This plays well with the existing business context approach because `booking` becomes another stable business object that links existing primitives together instead of introducing a separate scheduling domain with its own incompatible rules.
+Bookings are operational records. They do not calculate prices, taxes, invoice numbers, or payments. Deals remain the commercial scope and pricing record, tasks remain the execution checklist, and sales invoices remain the accounting source of truth.
 
-## Booking Concept
+The implemented MVP covers:
 
-A booking represents one scheduled unit of work such as:
+* booking create, list, get, update, soft-delete, complete, and cancel flows
+* date-range agenda queries for day/week views
+* assignment validation against employee booking profiles and availability exceptions
+* optional links to `project`, `deal`, `task`, and `sales_invoice`
+* optional follow-up task creation when completing a booking
+* comments and embeddings for `booking` records
+* REST and CLI surfaces
 
-* an on-site visit
-* a consultation call
-* an installation slot
-* a maintenance appointment
-* a workshop or training session
+Not implemented in this pass:
 
-For MVP, a booking should always belong to the owned workspace and should usually point to one customer contact. It may also point to a customer project or deal when the work is part of a broader commercial relationship.
+* staff shift planning
+* recurrence rules
+* resource/equipment capacity
+* public self-serve booking pages
+* automatic availability optimization
+* payment capture at booking time
+* MCP tools
 
-Suggested first-pass booking fields:
+## Data Model
+
+The implementation uses three SQLite/Drizzle tables:
+
+* `bookings`
+  scheduled customer-facing service commitments
+* `booking_assignment_profiles`
+  one active employee availability profile per employee contact
+* `booking_availability_exceptions`
+  one-off blocks or overrides for an employee
+
+Shared API contracts live in `packages/business-schemas/src/booking.ts`.
+
+### Booking
+
+Implemented booking fields:
 
 * `bookingId`
+* `slug`
 * `customerContactId`
-* `projectId` optional, for grouping repeated work with the same customer
-* `dealId` optional, when the booking was sold as part of a quote or sale
+* `projectId` optional
+* `dealId` optional
+* `taskId` optional
+* `salesInvoiceId` optional
 * `title`
-* `serviceType` such as `consultation`, `visit`, `installation`, `maintenance`
+* `serviceType`
 * `status`
 * `scheduledStartAt`
 * `scheduledEndAt`
 * `timezone`
-* `location`
-  on-site address, remote meeting note, or free-text location label
+* `location` optional
 * `assignedContactIds`
-  internal employee/person contacts assigned to perform the work
-* `notes`
+* `notes` optional
 * `completionNotes` optional
-* `salesInvoiceId` optional, when invoiced later
+* `completedAt` optional
+* `cancelledAt` optional
+* `cancellationReason` optional
+* `createdAt`
+* `updatedAt`
 
-Recommended status model for MVP:
+Supported booking statuses:
 
 * `tentative`
 * `confirmed`
@@ -71,208 +92,33 @@ Recommended status model for MVP:
 * `cancelled`
 * `no_show`
 
-Recommended design rules:
+Supported service types:
 
-* bookings store operational facts, not deep staffing or availability logic
-* bookings can exist before a deal or invoice exists
-* tasks remain the place for execution detail and subtasks
-* deals remain the place for commercial scope and pricing
-* sales invoices remain the place for tax and accounting facts
+* `consultation`
+* `visit`
+* `installation`
+* `maintenance`
+* `workshop`
+* `training`
+* `other`
 
-## Scope
+Supported location kinds:
 
-Include:
+* `on_site`
+* `remote`
+* `phone`
+* `office`
+* `other`
 
-* manual create, list, get, update, cancel, complete flows
-* customer and internal assignee linkage via contacts
-* employee booking-availability configuration
-* one-off availability exceptions for time off or blocked periods
-* date range search for day/week agenda views
-* optional links to project, deal, and sales invoice
-* optional follow-up task creation using the existing tasks model
-
-Do not include yet:
-
-* staff shift planning
-* recurrence rules
-* resource/equipment capacity planning
-* public self-serve booking pages
-* automatic availability optimization
-* payment capture at booking time
-
-## Relationship Rules
-
-To keep business context deterministic and composable:
-
-* a booking must reference one `customerContactId`
-* a booking may reference one `projectId`
-* a booking may reference one `dealId`
-* a booking may reference one `salesInvoiceId`
-* assigned employee contacts should be validated against availability configuration at assignment time
-* a booking may create one internal project task for fulfillment follow-up
-* multiple bookings may point to the same project or deal
-
-This gives us a practical pattern for small businesses:
-
-* recurring customer relationship lives in `contact` and optionally `project`
-* sold work lives in `deal`
-* scheduled execution lives in `booking`
-* bookable working hours live in employee availability configuration
-* execution checklist lives in `task`
-* billable record lives in `sales_invoice`
-
-## Employee Booking Availability
-
-Availability should not live directly on the booking. A better fit for the business-context model is a separate contact-linked configuration object plus optional exception records:
-
-* `booking_assignment_profile`
-  linked to one internal employee/person contact and stores the employee's default booking availability rules
-* `booking_availability_exception`
-  linked to one internal employee/person contact and stores overrides such as holiday, sick leave, blocked time, or one-off extra availability
-
-Bookings then reference assigned contacts, while services validate those assignments against the employee availability profile and its exceptions.
-
-For MVP, employee booking availability should be modeled as a small scheduling subset, separate from bookings themselves.
-
-Recommended object split:
-
-* `booking_assignment_profile`
-  one per internal employee/person contact; defines whether the person can be assigned to bookings, their normal weekly availability windows, and assignment constraints such as buffer times or max bookings per day
-* `booking_availability_exception`
-  one-off time windows that override the default profile, such as vacation, sick leave, training, manual block, or temporary overtime window
-
-This is preferable to linking one scheduling entity to both contact and booking because the business meaning is different:
-
-* profile and exceptions describe supply-side availability
-* booking describes demand-side commitment
-* assignment is the relation between the two and should be validated, not duplicated as configuration
-
-Suggested `booking_assignment_profile` fields:
-
-* `profileId`
-* `contactId`
-* `isBookable`
-* `timezone`
-* `weeklyAvailability`
-  day-of-week plus one or more local time windows
-* `bufferBeforeMinutes` optional
-* `bufferAfterMinutes` optional
-* `maxBookingsPerDay` optional
-* `bookingTypes` optional, if some employees only handle specific service types
-* `effectiveFrom` optional
-* `effectiveTo` optional
-* `notes` optional
-
-Suggested `booking_availability_exception` fields:
-
-* `exceptionId`
-* `contactId`
-* `kind`
-  `time_off`, `blocked`, `available_override`
-* `startAt`
-* `endAt`
-* `reason`
-* `notes`
-
-Practical rules for MVP:
-
-* only internal person contacts with role `employee` can have assignment profiles
-* one active assignment profile per employee contact
-* bookings do not copy the whole availability profile
-* bookings only store assigned contact IDs and the result of validation happens in service logic
-* soft conflicts should be possible for agents to inspect, but hard conflicts should block invalid assignment by default
-
-Suggested validation behavior:
-
-* creating or updating a booking with `assignedContactIds` checks that each employee:
-  is bookable
-  is available during the requested time window in their timezone
-  has no conflicting exception blocks
-  has no overlapping confirmed or in-progress bookings
-* API can expose a `conflicts` array in validation errors for agent-friendly recovery
-
-Example availability profile:
-
-`PUT /api/v1/booking-assignment-profiles/ct_emp_000011`
-
-```json
-{
-  "isBookable": true,
-  "timezone": "Europe/Madrid",
-  "weeklyAvailability": [
-    {
-      "dayOfWeek": "monday",
-      "windows": [{"start": "09:00", "end": "13:00"}, {"start": "15:00", "end": "18:00"}]
-    },
-    {
-      "dayOfWeek": "tuesday",
-      "windows": [{"start": "09:00", "end": "17:00"}]
-    },
-    {
-      "dayOfWeek": "wednesday",
-      "windows": [{"start": "09:00", "end": "17:00"}]
-    },
-    {
-      "dayOfWeek": "thursday",
-      "windows": [{"start": "09:00", "end": "17:00"}]
-    },
-    {
-      "dayOfWeek": "friday",
-      "windows": [{"start": "09:00", "end": "14:00"}]
-    }
-  ],
-  "bufferBeforeMinutes": 30,
-  "bufferAfterMinutes": 30,
-  "maxBookingsPerDay": 3,
-  "bookingTypes": ["visit", "installation", "maintenance"]
-}
-```
-
-Example exception:
-
-`POST /api/v1/booking-availability-exceptions`
-
-```json
-{
-  "contactId": "ct_emp_000011",
-  "kind": "time_off",
-  "startAt": "2026-04-10T00:00:00+02:00",
-  "endAt": "2026-04-10T23:59:59+02:00",
-  "reason": "vacation"
-}
-```
-
-Example assignment conflict response:
-
-```json
-{
-  "error": {
-    "code": "booking_assignment_conflict",
-    "message": "One or more assigned employees are not available for this booking window.",
-    "conflicts": [
-      {
-        "contactId": "ct_emp_000011",
-        "type": "availability_exception",
-        "details": "Employee is marked as time_off during the requested slot."
-      }
-    ]
-  }
-}
-```
-
-## API Surface
-
-The examples below are intended as a feasible first iteration for REST, MCP, and CLI.
-
-### Create a booking
-
-`POST /api/v1/bookings`
+Example booking input:
 
 ```json
 {
   "customerContactId": "ct_000245",
   "projectId": "proj_000018",
   "dealId": "deal_000072",
+  "taskId": "task_000310",
+  "salesInvoiceId": "sinv_000041",
   "title": "Warehouse automation discovery visit",
   "serviceType": "visit",
   "status": "confirmed",
@@ -294,32 +140,209 @@ The examples below are intended as a feasible first iteration for REST, MCP, and
 }
 ```
 
-Example response:
+## Relationship Rules
+
+Bookings are validated against existing business objects:
+
+* `customerContactId` must reference an active contact with role `customer` or `both`.
+* `projectId`, when present, must reference a project owned by the booking customer contact.
+* `dealId`, when present, must reference a deal for the booking customer contact.
+* `salesInvoiceId`, when present, must reference a sales invoice for the booking customer contact.
+* If both `dealId` and `salesInvoiceId` are present and the invoice has a deal, the invoice deal must match the booking deal.
+* `taskId`, when present, must reference a task in a project owned by the booking customer contact.
+* If both `projectId` and `taskId` are present, the task must belong to that project.
+* `assignedContactIds` must contain active person contacts with role `employee`.
+
+The booking time window must be valid:
+
+* `scheduledStartAt` must be before `scheduledEndAt`.
+* For v1 assignment validation, bookings must fit inside one local calendar day in the supplied `timezone`.
+
+## Availability Model
+
+Availability is stored separately from bookings:
+
+* profile and exceptions describe supply-side availability
+* booking describes demand-side commitment
+* assigned contacts are validated against those rules during booking create/update
+
+### Assignment Profile
+
+`booking_assignment_profiles` are addressed by employee `contactId`.
+
+Implemented profile fields:
+
+* `profileId`
+* `slug`
+* `contactId`
+* `isBookable`
+* `timezone`
+* `weeklyAvailability`
+* `bufferBeforeMinutes` optional
+* `bufferAfterMinutes` optional
+* `maxBookingsPerDay` optional
+* `bookingTypes` optional
+* `effectiveFrom` optional
+* `effectiveTo` optional
+* `notes` optional
+* `createdAt`
+* `updatedAt`
+
+Only active person contacts with role `employee` can have assignment profiles. There is one profile per employee contact; `PUT /api/v1/booking-assignment-profiles/:contactId` creates or replaces it.
+
+Example:
 
 ```json
 {
-  "bookingId": "book_000091",
-  "customerContactId": "ct_000245",
-  "projectId": "proj_000018",
-  "dealId": "deal_000072",
-  "title": "Warehouse automation discovery visit",
-  "serviceType": "visit",
-  "status": "confirmed",
-  "scheduledStartAt": "2026-04-10T09:00:00+02:00",
-  "scheduledEndAt": "2026-04-10T11:00:00+02:00",
+  "isBookable": true,
   "timezone": "Europe/Madrid",
-  "assignedContactIds": ["ct_emp_000011"],
-  "createdAt": "2026-04-02T08:45:00Z"
+  "weeklyAvailability": [
+    {
+      "dayOfWeek": "monday",
+      "windows": [
+        {"start": "09:00", "end": "13:00"},
+        {"start": "15:00", "end": "18:00"}
+      ]
+    },
+    {
+      "dayOfWeek": "tuesday",
+      "windows": [{"start": "09:00", "end": "17:00"}]
+    }
+  ],
+  "bufferBeforeMinutes": 30,
+  "bufferAfterMinutes": 30,
+  "maxBookingsPerDay": 3,
+  "bookingTypes": ["visit", "installation", "maintenance"]
 }
 ```
 
-### List bookings
+### Availability Exception
+
+Implemented exception fields:
+
+* `exceptionId`
+* `slug`
+* `contactId`
+* `kind`
+* `startAt`
+* `endAt`
+* `reason` optional
+* `notes` optional
+* `createdAt`
+* `updatedAt`
+
+Supported exception kinds:
+
+* `time_off`
+* `blocked`
+* `available_override`
+
+Example:
+
+```json
+{
+  "contactId": "ct_emp_000011",
+  "kind": "time_off",
+  "startAt": "2026-04-10T00:00:00+02:00",
+  "endAt": "2026-04-10T23:59:59+02:00",
+  "reason": "vacation"
+}
+```
+
+## Assignment Conflict Rules
+
+Creating or updating a booking with assigned employees blocks on hard conflicts by default.
+
+The service checks each assigned employee for:
+
+* active person contact with role `employee`
+* existing assignment profile
+* `isBookable = true`
+* profile effective date window
+* allowed `bookingTypes`, when configured
+* weekly availability in the profile timezone
+* `available_override` coverage when outside weekly availability
+* overlapping `time_off` or `blocked` exceptions
+* overlapping `confirmed` or `in_progress` bookings
+* `maxBookingsPerDay` for `tentative`, `confirmed`, and `in_progress` bookings on the employee local date
+
+Buffers are applied before overlap checks:
+
+* `bufferBeforeMinutes` expands the requested start backward
+* `bufferAfterMinutes` expands the requested end forward
+
+Conflict checks can be inspected directly:
+
+`POST /api/v1/bookings/check-assignment-conflicts`
+
+```json
+{
+  "serviceType": "visit",
+  "scheduledStartAt": "2026-04-10T09:00:00+02:00",
+  "scheduledEndAt": "2026-04-10T11:00:00+02:00",
+  "timezone": "Europe/Madrid",
+  "assignedContactIds": ["ct_emp_000011"]
+}
+```
+
+Response:
+
+```json
+{
+  "conflicts": [
+    {
+      "contactId": "ct_emp_000011",
+      "type": "availability_exception",
+      "details": "Employee is marked as time_off during the requested slot."
+    }
+  ]
+}
+```
+
+When a create/update is blocked, the API returns `409`:
+
+```json
+{
+  "error": {
+    "code": "booking_assignment_conflict",
+    "message": "One or more assigned employees are not available for this booking window.",
+    "conflicts": [
+      {
+        "contactId": "ct_emp_000011",
+        "type": "overlapping_booking",
+        "bookingId": "book_000091",
+        "details": "Employee already has an overlapping confirmed or in-progress booking."
+      }
+    ],
+    "details": {
+      "conflicts": [
+        {
+          "contactId": "ct_emp_000011",
+          "type": "overlapping_booking",
+          "bookingId": "book_000091",
+          "details": "Employee already has an overlapping confirmed or in-progress booking."
+        }
+      ]
+    }
+  }
+}
+```
+
+## REST API
+
+All routes are under `/api/v1` and require the existing Business API auth middleware.
+
+### Bookings
+
+Create:
+
+`POST /api/v1/bookings`
+
+List:
 
 `GET /api/v1/bookings?from=2026-04-10T00:00:00Z&to=2026-04-17T00:00:00Z&status=confirmed&assignedContactId=ct_emp_000011`
 
-Use case: build a week agenda for an employee or show all customer visits for a date range.
-
-Suggested filters:
+Supported list filters:
 
 * `from`
 * `to`
@@ -329,9 +352,13 @@ Suggested filters:
 * `projectId`
 * `dealId`
 
-### Update or reschedule a booking
+Get:
 
-`PATCH /api/v1/bookings/book_000091`
+`GET /api/v1/bookings/:id`
+
+Update or reschedule:
+
+`PATCH /api/v1/bookings/:id`
 
 ```json
 {
@@ -342,33 +369,27 @@ Suggested filters:
 }
 ```
 
-Use case: move the appointment or assign an extra employee.
+Soft-delete:
 
-### Complete a booking
+`DELETE /api/v1/bookings/:id`
 
-`POST /api/v1/bookings/book_000091/complete`
+Complete:
+
+`POST /api/v1/bookings/:id/complete`
 
 ```json
 {
   "completionNotes": "Site survey completed. Customer approved next-step proposal.",
-  "createFollowUpTask": true
+  "createFollowUpTask": true,
+  "followUpTaskTitle": "Prepare Acme warehouse proposal"
 }
 ```
 
-Example response:
+If `createFollowUpTask` is true, the booking must have `projectId`. The response includes `followUpTaskId`.
 
-```json
-{
-  "bookingId": "book_000091",
-  "status": "completed",
-  "completedAt": "2026-04-10T10:58:00Z",
-  "followUpTaskId": "task_000412"
-}
-```
+Cancel:
 
-### Cancel a booking
-
-`POST /api/v1/bookings/book_000091/cancel`
+`POST /api/v1/bookings/:id/cancel`
 
 ```json
 {
@@ -376,55 +397,61 @@ Example response:
 }
 ```
 
-Use case: keep an audit-friendly operational history instead of deleting the record.
+Cancellation sets `status`, `cancelledAt`, and `cancellationReason`.
 
-### Configure employee booking availability
+### Assignment Profiles
 
-`PUT /api/v1/booking-assignment-profiles/ct_emp_000011`
+List profiles:
 
-Use case: mark an employee as bookable for specific weekdays and time windows.
+`GET /api/v1/booking-assignment-profiles`
+
+Get profile by employee contact:
+
+`GET /api/v1/booking-assignment-profiles/:contactId`
+
+Create or replace profile:
+
+`PUT /api/v1/booking-assignment-profiles/:contactId`
+
+Soft-delete profile:
+
+`DELETE /api/v1/booking-assignment-profiles/:contactId`
+
+### Availability Exceptions
+
+Create exception:
 
 `POST /api/v1/booking-availability-exceptions`
 
-Use case: record vacation or a temporary blocked window without editing the whole weekly profile.
+List exceptions:
 
-## Workflow Examples
+`GET /api/v1/booking-availability-exceptions?contactId=ct_emp_000011&kind=time_off`
 
-Suggested small-business flows:
+Get exception:
 
-* lead becomes customer contact, then a first consultation booking is scheduled
-* employee profiles define who is assignable before bookings are scheduled
-* completed booking creates a follow-up task for quote preparation
-* accepted deal leads to one or more implementation bookings
-* completed billable booking is linked to a deal, then invoiced through the existing sales invoice flow
+`GET /api/v1/booking-availability-exceptions/:id`
 
-Important boundary for v1:
+Update exception:
 
-* bookings should not calculate tax totals
-* bookings should not replace deals for pricing approval
-* bookings should not replace tasks for execution detail
-* employee availability should stay simple and rule-based, not become a full HR rostering system
+`PATCH /api/v1/booking-availability-exceptions/:id`
 
-## MCP Surface
+Soft-delete exception:
 
-Suggested tool examples:
-
-* `business.create_booking`
-* `business.list_bookings`
-* `business.get_booking`
-* `business.update_booking`
-* `business.complete_booking`
-* `business.cancel_booking`
-* `business.upsert_booking_assignment_profile`
-* `business.create_booking_availability_exception`
-* `business.check_booking_assignment_conflicts`
+`DELETE /api/v1/booking-availability-exceptions/:id`
 
 ## CLI Surface
 
-Suggested CLI style:
+The raw repo CLI is normally run as:
 
 ```bash
-wrobo biz bookings create \
+cd business-api
+./container.sh exec npm run cli -- <command>
+```
+
+Create a booking:
+
+```bash
+./container.sh exec npm run cli -- bookings create \
   --customer-contact-id ct_000245 \
   --project-id proj_000018 \
   --deal-id deal_000072 \
@@ -436,30 +463,44 @@ wrobo biz bookings create \
   --timezone Europe/Madrid \
   --assigned-contact-id ct_emp_000011 \
   --location-kind on_site \
-  --location-label "Acme Retail warehouse" \
-  --city Madrid \
-  --country ES \
-  --json
+  --location-label "Acme Retail warehouse"
 ```
 
+List bookings:
+
 ```bash
-wrobo biz bookings list \
+./container.sh exec npm run cli -- bookings list \
   --from 2026-04-10T00:00:00Z \
   --to 2026-04-17T00:00:00Z \
   --status confirmed \
-  --assigned-contact-id ct_emp_000011 \
-  --json
+  --assigned-contact-id ct_emp_000011
 ```
 
-```bash
-wrobo biz bookings complete book_000091 \
-  --completion-notes "Site survey completed" \
-  --create-follow-up-task \
-  --json
-```
+Get, update, cancel, complete, and delete:
 
 ```bash
-wrobo biz booking-assignment-profiles set ct_emp_000011 \
+./container.sh exec npm run cli -- bookings get book_000091
+./container.sh exec npm run cli -- bookings update book_000091 '{"notes":"Bring meter readings checklist."}'
+./container.sh exec npm run cli -- bookings complete book_000091 --completion-notes "Site survey completed" --create-follow-up-task
+./container.sh exec npm run cli -- bookings cancel book_000091 --reason customer_requested_reschedule
+./container.sh exec npm run cli -- bookings delete book_000091
+```
+
+Check assignment conflicts:
+
+```bash
+./container.sh exec npm run cli -- bookings check-assignment-conflicts \
+  --service-type visit \
+  --start 2026-04-10T09:00:00+02:00 \
+  --end 2026-04-10T11:00:00+02:00 \
+  --timezone Europe/Madrid \
+  --assigned-contact-id ct_emp_000011
+```
+
+Set an assignment profile:
+
+```bash
+./container.sh exec npm run cli -- booking-assignment-profiles set ct_emp_000011 \
   --timezone Europe/Madrid \
   --availability "monday|09:00|13:00" \
   --availability "monday|15:00|18:00" \
@@ -468,16 +509,56 @@ wrobo biz booking-assignment-profiles set ct_emp_000011 \
   --buffer-after-minutes 30 \
   --max-bookings-per-day 3 \
   --booking-type visit \
-  --booking-type installation \
-  --json
+  --booking-type installation
 ```
 
+Manage profiles:
+
 ```bash
-wrobo biz booking-availability-exceptions create \
+./container.sh exec npm run cli -- booking-assignment-profiles list
+./container.sh exec npm run cli -- booking-assignment-profiles get ct_emp_000011
+./container.sh exec npm run cli -- booking-assignment-profiles delete ct_emp_000011
+```
+
+Create and manage exceptions:
+
+```bash
+./container.sh exec npm run cli -- booking-availability-exceptions create \
   --contact-id ct_emp_000011 \
   --kind time_off \
   --start 2026-04-10T00:00:00+02:00 \
   --end 2026-04-10T23:59:59+02:00 \
-  --reason vacation \
-  --json
+  --reason vacation
+
+./container.sh exec npm run cli -- booking-availability-exceptions list --contact-id ct_emp_000011
+./container.sh exec npm run cli -- booking-availability-exceptions get bex_000001
+./container.sh exec npm run cli -- booking-availability-exceptions update bex_000001 '{"notes":"Confirmed by operations."}'
+./container.sh exec npm run cli -- booking-availability-exceptions delete bex_000001
 ```
+
+## Workflow Examples
+
+Supported small-business flows:
+
+* lead becomes a customer contact, then a first consultation booking is scheduled
+* employee profiles define who can be assigned before bookings are created
+* completed booking creates a follow-up task for quote preparation
+* accepted deal leads to one or more implementation bookings
+* completed billable booking is linked to a deal, then invoiced through the existing sales invoice flow
+
+## Implementation Notes
+
+Bookings are implemented in:
+
+* `packages/business-schemas/src/booking.ts`
+* `business-api/src/db/schema/bookings.ts`
+* `business-api/src/services/bookings.ts`
+* `business-api/src/routes/bookings.ts`
+* `business-api/src/cli.ts`
+
+The schema migration is `business-api/src/db/migrations/0006_bookings.sql`.
+
+Integration coverage exists in:
+
+* `business-api/test/services.integration.test.ts`
+* `business-api/test/routes.integration.test.ts`

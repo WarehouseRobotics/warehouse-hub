@@ -622,3 +622,221 @@ describe("business-api routes", () => {
     expect((await afterDeleteResponse.json()) as unknown[]).toEqual([]);
   });
 });
+
+describe("business-api booking routes", () => {
+  let server: Server | undefined;
+  let baseUrl = "";
+
+  beforeEach(async () => {
+    await resetTestState();
+    const { upsertCompanyCard } = await import("../src/services/company-card.js");
+    upsertCompanyCard({
+      legalName: "Northwind Robotics SL",
+      displayName: "Northwind Robotics",
+      taxId: "B12345678",
+      address: {
+        street1: "Calle de Alcala 42",
+        city: "Madrid",
+        postalCode: "28014",
+        countryCode: "ES",
+      },
+      invoiceDefaults: {
+        currency: "EUR",
+        paymentTermsDays: 30,
+        vatMode: "standard",
+      },
+    });
+
+    const { createApp } = await import("../src/app.js");
+    const app = createApp();
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => resolve());
+    });
+
+    const address = server!.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Expected TCP server address");
+    }
+
+    baseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  afterEach(async () => {
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server!.close((error: Error | undefined) => (error ? reject(error) : resolve()));
+      });
+    }
+    server = undefined;
+  });
+
+  it("creates, lists, updates, completes, cancels, and reports assignment conflicts", async () => {
+    const { createContact } = await import("../src/services/contacts.js");
+    const { createProject } = await import("../src/services/projects.js");
+    const { upsertBookingAssignmentProfile } = await import("../src/services/bookings.js");
+
+    const customer = createContact({
+      type: "company",
+      status: "active",
+      roles: ["customer"],
+      displayName: "Acme Retail GmbH",
+    });
+    const employee = createContact({
+      type: "person",
+      status: "active",
+      roles: ["employee"],
+      displayName: "Marta Field",
+      email: "marta@example.com",
+    });
+    const project = createProject({
+      ownerEntityId: customer.contactId,
+      ownerEntityType: "contact",
+      name: "Acme visits",
+      status: "active",
+    });
+    upsertBookingAssignmentProfile(employee.contactId, {
+      isBookable: true,
+      timezone: "Europe/Madrid",
+      weeklyAvailability: [
+        {
+          dayOfWeek: "tuesday",
+          windows: [{ start: "09:00", end: "17:00" }],
+        },
+      ],
+      bookingTypes: ["visit"],
+    });
+
+    const createResponse = await fetch(`${baseUrl}/api/v1/bookings`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        customerContactId: customer.contactId,
+        projectId: project.projectId,
+        title: "Warehouse discovery visit",
+        serviceType: "visit",
+        status: "confirmed",
+        scheduledStartAt: "2026-04-07T09:00:00+02:00",
+        scheduledEndAt: "2026-04-07T10:00:00+02:00",
+        timezone: "Europe/Madrid",
+        assignedContactIds: [employee.contactId],
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as { bookingId: string };
+
+    const listResponse = await fetch(
+      `${baseUrl}/api/v1/bookings?from=2026-04-07T00:00:00Z&to=2026-04-08T00:00:00Z&assignedContactId=${employee.contactId}`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(listResponse.status).toBe(200);
+    expect((await listResponse.json()) as Array<{ bookingId: string }>).toEqual([
+      expect.objectContaining({ bookingId: created.bookingId }),
+    ]);
+
+    const patchResponse = await fetch(`${baseUrl}/api/v1/bookings/${created.bookingId}`, {
+      method: "PATCH",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        notes: "Bring meter readings checklist.",
+      }),
+    });
+    expect(patchResponse.status).toBe(200);
+    expect((await patchResponse.json()) as { notes: string }).toEqual(
+      expect.objectContaining({ notes: "Bring meter readings checklist." }),
+    );
+
+    const conflictResponse = await fetch(`${baseUrl}/api/v1/bookings`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        customerContactId: customer.contactId,
+        projectId: project.projectId,
+        title: "Overlapping visit",
+        serviceType: "visit",
+        status: "confirmed",
+        scheduledStartAt: "2026-04-07T09:30:00+02:00",
+        scheduledEndAt: "2026-04-07T10:30:00+02:00",
+        timezone: "Europe/Madrid",
+        assignedContactIds: [employee.contactId],
+      }),
+    });
+    expect(conflictResponse.status).toBe(409);
+    expect((await conflictResponse.json()) as { error: { code: string; conflicts: unknown[] } }).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({
+          code: "booking_assignment_conflict",
+          conflicts: [expect.objectContaining({ type: "overlapping_booking" })],
+        }),
+      }),
+    );
+
+    const completeResponse = await fetch(`${baseUrl}/api/v1/bookings/${created.bookingId}/complete`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        completionNotes: "Visit complete.",
+        createFollowUpTask: true,
+      }),
+    });
+    expect(completeResponse.status).toBe(200);
+    expect((await completeResponse.json()) as { status: string; followUpTaskId: string }).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        followUpTaskId: expect.stringMatching(/^task_/),
+      }),
+    );
+
+    const secondResponse = await fetch(`${baseUrl}/api/v1/bookings`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        customerContactId: customer.contactId,
+        projectId: project.projectId,
+        title: "Later visit",
+        serviceType: "visit",
+        status: "tentative",
+        scheduledStartAt: "2026-04-07T11:00:00+02:00",
+        scheduledEndAt: "2026-04-07T12:00:00+02:00",
+        timezone: "Europe/Madrid",
+        assignedContactIds: [employee.contactId],
+      }),
+    });
+    expect(secondResponse.status).toBe(201);
+    const second = (await secondResponse.json()) as { bookingId: string };
+
+    const cancelResponse = await fetch(`${baseUrl}/api/v1/bookings/${second.bookingId}/cancel`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ reason: "customer_requested_reschedule" }),
+    });
+    expect(cancelResponse.status).toBe(200);
+    expect((await cancelResponse.json()) as { status: string; cancellationReason: string }).toEqual(
+      expect.objectContaining({
+        status: "cancelled",
+        cancellationReason: "customer_requested_reschedule",
+      }),
+    );
+  });
+});

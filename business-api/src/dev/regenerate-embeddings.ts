@@ -2,6 +2,7 @@ import { eq, isNull } from "drizzle-orm";
 
 import { initializeDatabase, getDatabase, getOrm } from "../db/connection.js";
 import {
+  bookings,
   companyCard,
   contacts,
   deals,
@@ -23,6 +24,7 @@ const SUPPORTED_ENTITY_TYPES: readonly EmbeddingEntityType[] = [
   "company_card",
   "contact",
   "document",
+  "booking",
   "deal",
   "expense_invoice",
   "payroll",
@@ -109,6 +111,30 @@ async function regenerateDocumentEmbeddings(): Promise<number> {
         originalFilename: row.originalFilename,
         mimeType: row.mimeType,
         ocrText: row.ocrText,
+      }),
+    );
+  }
+
+  return rows.length;
+}
+
+async function regenerateBookingEmbeddings(): Promise<number> {
+  const rows = getOrm().select().from(bookings).where(isNull(bookings.deletedAt)).all();
+
+  for (const row of rows) {
+    await upsertEmbedding(
+      "booking",
+      row.id,
+      computeEmbeddingText("booking", {
+        title: row.title,
+        serviceType: row.serviceType,
+        status: row.status,
+        scheduledStartAt: row.scheduledStartAt,
+        scheduledEndAt: row.scheduledEndAt,
+        timezone: row.timezone,
+        location: row.location ? JSON.parse(row.location) : null,
+        notes: row.notes,
+        completionNotes: row.completionNotes,
       }),
     );
   }
@@ -253,6 +279,7 @@ const regenerationHandlers: Record<EmbeddingEntityType, () => Promise<number>> =
   company_card: regenerateCompanyCardEmbeddings,
   contact: regenerateContactEmbeddings,
   document: regenerateDocumentEmbeddings,
+  booking: regenerateBookingEmbeddings,
   deal: regenerateDealEmbeddings,
   expense_invoice: regenerateExpenseEmbeddings,
   payroll: regeneratePayrollEmbeddings,

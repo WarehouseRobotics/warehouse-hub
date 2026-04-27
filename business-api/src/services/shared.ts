@@ -1,7 +1,7 @@
 import { and, eq, isNull, or } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
-import { companyCard, contacts, deals, documents, expenses, payrolls, projects, salesInvoices, tasks } from "../db/schema/index.js";
+import { bookings, companyCard, contacts, deals, documents, expenses, payrolls, projects, salesInvoices, tasks } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import type { CommentableType } from "@warehouse-hub/business-schemas";
 
@@ -112,6 +112,23 @@ export function requireDealRecord(idOrSlug: string) {
   return record;
 }
 
+export function getBookingRecordByIdOrSlug(idOrSlug: string) {
+  return getOrm()
+    .select()
+    .from(bookings)
+    .where(and(isNull(bookings.deletedAt), or(eq(bookings.id, idOrSlug), eq(bookings.slug, idOrSlug))))
+    .get();
+}
+
+export function requireBookingRecord(idOrSlug: string) {
+  const record = getBookingRecordByIdOrSlug(idOrSlug);
+  if (!record) {
+    notFound(`Booking not found: ${idOrSlug}`);
+  }
+
+  return record;
+}
+
 export function getSalesInvoiceRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
@@ -192,6 +209,10 @@ export function resolveCommentableRecord(type: CommentableType, idOrSlug: string
     }
     case "deal": {
       const record = requireDealRecord(idOrSlug);
+      return { id: record.id, slug: record.slug };
+    }
+    case "booking": {
+      const record = requireBookingRecord(idOrSlug);
       return { id: record.id, slug: record.slug };
     }
     case "sales_invoice": {

@@ -153,6 +153,8 @@ MVP scope should include:
 * optional links from bookings to `project`, `deal`, `task`, and `sales_invoice`
 * agent-friendly date-range agenda queries
 
+Implemented v1 also includes booking completion/cancellation audit fields, booking comments and embeddings, direct assignment conflict inspection, and CLI commands for bookings, assignment profiles, and availability exceptions. MCP tools remain future-facing and are not implemented in `business-api` yet.
+
 Detailed booking specs, API examples, availability rules, MCP tools, and CLI examples live in [docs/apps/business-api/bookings.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/bookings.md).
 
 ### Accounting API

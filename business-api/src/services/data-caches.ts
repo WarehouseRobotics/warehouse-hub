@@ -1,4 +1,4 @@
-import Ajv from "ajv";
+import AjvModule from "ajv/dist/2020.js"; // because of NodeNext in tsconfig.json
 import { and, desc, eq } from "drizzle-orm";
 
 import { config } from "../config.js";
@@ -15,6 +15,7 @@ import {
   type JsonObject,
 } from "../schemas/data-caches.js";
 
+const Ajv = AjvModule.default ?? AjvModule;
 const ajv = new Ajv({ allErrors: true });
 const DEFAULT_FETCH_TIMEOUT_MS = 30000;
 const JSON_BLOCK_PATTERN = /```json\s*([\s\S]*?)```/i;
