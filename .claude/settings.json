@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "(cd business-api && sh container.sh status 2>/dev/null | grep -q ': running' || sh container.sh startd >/dev/null 2>&1); (cd dashboard && sh container.sh status 2>/dev/null | grep -q ': running' || docker compose up -d >/dev/null 2>&1)",
+            "async": true,
+            "statusMessage": "Starting dev containers..."
+          }
+        ]
+      }
+    ]
+  }
+}
