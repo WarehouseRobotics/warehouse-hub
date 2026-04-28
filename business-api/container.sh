@@ -8,6 +8,23 @@ ensure_network() {
   docker network inspect "$NETWORK_NAME" >/dev/null 2>&1 || docker network create "$NETWORK_NAME" >/dev/null
 }
 
+show_status() {
+  SERVICE_NAME=$1
+  CONTAINER_ID=$(docker compose ps -q "$SERVICE_NAME")
+
+  if [ -z "$CONTAINER_ID" ]; then
+    echo "$SERVICE_NAME: not running"
+    return
+  fi
+
+  if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_ID")" = "true" ]; then
+    echo "$SERVICE_NAME: running"
+    echo "Container ID: $CONTAINER_ID"
+  else
+    echo "$SERVICE_NAME: not running"
+  fi
+}
+
 case "$CMD" in
   build)
     ensure_network
@@ -24,6 +41,9 @@ case "$CMD" in
     ;;
   stop)
     docker compose stop
+    ;;
+  status)
+    show_status business-api
     ;;
   remove)
     docker compose down
@@ -46,7 +66,7 @@ case "$CMD" in
     docker compose exec business-api "$@"
     ;;
   *)
-    echo "Usage: $0 {build|start|stop|remove|restart|sh|exec <command>}"
+    echo "Usage: $0 {build|start|startd|stop|status|remove|restart|sh|exec <command>}"
     exit 1
     ;;
 esac
