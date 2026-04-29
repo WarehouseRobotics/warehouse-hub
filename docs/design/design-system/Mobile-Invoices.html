@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Warehouse Hub · Invoices (mobile)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/components.css"/>
+<link rel="stylesheet" href="assets/mobile.css"/>
+</head><body>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel" src="assets/mobile-shell.jsx"></script>
+<script type="text/babel" src="assets/boot.jsx"></script>
+<script type="text/babel">
+const { useState } = React;
+
+function InvoicesList({ onOpen }) {
+  const [tab, setTab] = useState("all");
+  const filtered = INVOICES.filter(r => tab === "all" || r.status === tab);
+
+  return (
+    <MAppShell active="invoices" kicker="Accounting" title="Sales invoices" agentPreset="accounting">
+      <div className="wh-m-page-head">
+        <div className="kicker">Accounting · Q1–Q2 2026</div>
+        <h1>Sales invoices</h1>
+        <div className="sub">41 invoices · 1 overdue</div>
+      </div>
+
+      <div className="wh-m-kpi-strip">
+        <div className="wh-m-kpi-cell">
+          <div className="l">Issued · Q1</div>
+          <div className="v">€ 38,210</div>
+        </div>
+        <div className="wh-m-kpi-cell">
+          <div className="l">Paid</div>
+          <div className="v" style={{ color: "var(--ok)" }}>€ 22,636</div>
+        </div>
+        <div className="wh-m-kpi-cell">
+          <div className="l">Outstanding</div>
+          <div className="v">€ 15,574</div>
+        </div>
+        <div className="wh-m-kpi-cell">
+          <div className="l">Avg DSO</div>
+          <div className="v">27<span style={{ fontSize: 11, color: "var(--ink-3)", marginLeft: 4 }}>days</span></div>
+        </div>
+      </div>
+
+      <div className="wh-m-search">
+        <I.search />
+        <input placeholder="Search customer, number…" />
+      </div>
+
+      <div className="wh-m-chips">
+        <button className={`wh-m-chip ${tab === "all" ? "on" : ""}`} onClick={() => setTab("all")}>
+          All <span className="count">{INVOICES.length}</span>
+        </button>
+        <button className={`wh-m-chip ${tab === "draft" ? "on" : ""}`} onClick={() => setTab("draft")}>
+          Draft <span className="count">{INVOICES.filter(r => r.status === "draft").length}</span>
+        </button>
+        <button className={`wh-m-chip ${tab === "sent" ? "on" : ""}`} onClick={() => setTab("sent")}>
+          Sent <span className="count">{INVOICES.filter(r => r.status === "sent").length}</span>
+        </button>
+        <button className={`wh-m-chip ${tab === "paid" ? "on" : ""}`} onClick={() => setTab("paid")}>
+          Paid <span className="count">{INVOICES.filter(r => r.status === "paid").length}</span>
+        </button>
+        <button className={`wh-m-chip ${tab === "overdue" ? "on" : ""}`} onClick={() => setTab("overdue")}>
+          Overdue <span className="count">{INVOICES.filter(r => r.status === "overdue").length}</span>
+        </button>
+        <button className="wh-m-chip"><I.filter /> Period</button>
+      </div>
+
+      <div className="wh-m-shead">
+        <span>{filtered.length} invoices</span>
+        <span className="n">By due date</span>
+      </div>
+
+      <div className="wh-m-list">
+        {filtered.map(r => (
+          <div key={r.id} className="wh-m-inv-row" onClick={() => onOpen(r.id)}>
+            <div className="top">
+              <span className="num">{r.number}</span>
+              <span style={{ flex: 1 }} />
+              <StatusBadge status={r.status}/>
+            </div>
+            <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+              <div className="cust">{r.customer}</div>
+              <div className="proj">{r.project}</div>
+            </div>
+            <div style={{ textAlign: "right", display: "flex", flexDirection: "column", gap: 2 }}>
+              <div className="gross">{fmtEUR(r.gross)}</div>
+              <div className="due">due {r.due.slice(5)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </MAppShell>
+  );
+}
+
+function InvoiceDetail({ id, onBack }) {
+  const r = INVOICES.find(x => x.id === id) || INVOICES[0];
+  return (
+    <MAppShell active="invoices" kicker={`Invoice ${r.number}`} title={r.customer} agentPreset="accounting" hasActionBar hideAgentFab>
+      <button className="wh-m-back" onClick={onBack}><I.chev size={14} style={{ transform: "rotate(180deg)" }}/> Sales invoices</button>
+
+      <div className="wh-m-card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{
+            fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.06em",
+            background: "var(--ember-soft)", color: "var(--ember-ink)",
+            padding: "2px 8px", borderRadius: 4,
+          }}>{r.number}</div>
+          <StatusBadge status={r.status}/>
+        </div>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.018em", lineHeight: 1.15 }}>{fmtEUR(r.gross)}</div>
+          <div className="micro" style={{ marginTop: 4 }}>Issued {r.issued} · due {r.due}</div>
+        </div>
+      </div>
+
+      <div className="wh-m-card">
+        <div className="micro" style={{ marginBottom: 10 }}>Workflow</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", border: "1px solid var(--rule-1)", borderRadius: 6, overflow: "hidden" }}>
+          {["Draft","Sent","Viewed","Paid"].map((s, i) => {
+            const reached = i <= 1; const current = i === 1;
+            return (
+              <div key={s} style={{
+                padding: "8px 6px",
+                borderRight: i < 3 ? "1px solid var(--rule-1)" : "0",
+                background: current ? "var(--ember-soft)" : reached ? "var(--paper-2)" : "var(--paper-0)",
+                color: current ? "var(--ember-ink)" : reached ? "var(--ink-1)" : "var(--ink-3)",
+                textAlign: "center",
+              }}>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase" }}>{i+1}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 500, marginTop: 1 }}>{s}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="wh-m-card">
+        <div className="micro" style={{ marginBottom: 10 }}>Parties</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 12 }}>
+          <div>
+            <div className="micro" style={{ marginBottom: 4 }}>From</div>
+            <div style={{ fontWeight: 500 }}>Northwind Robotics</div>
+            <div style={{ color: "var(--ink-2)" }}>Madrid · ES</div>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--ink-3)", marginTop: 4 }}>VAT ES B12345678</div>
+          </div>
+          <div>
+            <div className="micro" style={{ marginBottom: 4 }}>Bill to</div>
+            <div style={{ fontWeight: 500 }}>{r.customer}</div>
+            <div style={{ color: "var(--ink-2)" }}>Berlin · DE</div>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--ink-3)", marginTop: 4 }}>VAT DE123456789</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="wh-m-card" style={{ padding: 0 }}>
+        <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--rule-1)" }}>
+          <div className="micro">Line items</div>
+        </div>
+        <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--rule-1)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>Warehouse operations audit</div>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--ink-3)", marginTop: 2 }}>1 × €900.00 · VAT 21%</div>
+          </div>
+          <div className="num" style={{ fontSize: 13, fontWeight: 500 }}>€900.00</div>
+        </div>
+        <div style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>Automation workshop</div>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--ink-3)", marginTop: 2 }}>1 × €600.00 · VAT 21%</div>
+          </div>
+          <div className="num" style={{ fontSize: 13, fontWeight: 500 }}>€600.00</div>
+        </div>
+      </div>
+
+      <div className="wh-m-card">
+        <div className="micro" style={{ marginBottom: 10 }}>Totals</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, fontFamily: "var(--font-mono)", fontSize: 13 }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--ink-3)" }}>Net</span><span>{fmtEUR(r.net)}</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--ink-3)" }}>VAT 21%</span><span>{fmtEUR(r.tax)}</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid var(--rule-1)", marginTop: 4, color: "var(--ember-ink)", fontWeight: 600, fontSize: 15 }}>
+            <span>Total due</span><span>{fmtEUR(r.gross)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="wh-m-card">
+        <div className="micro" style={{ marginBottom: 10 }}>Source</div>
+        <dl className="wh-dl" style={{ gridTemplateColumns: "100px 1fr", rowGap: 8, fontSize: 13 }}>
+          <dt>Deal</dt>     <dd className="mono" style={{ color: "var(--ember-ink)" }}>deal_000072</dd>
+          <dt>Customer</dt> <dd className="mono" style={{ color: "var(--ember-ink)" }}>ct_000245</dd>
+          <dt>Currency</dt> <dd>EUR</dd>
+          <dt>Terms</dt>    <dd>30 days</dd>
+        </dl>
+      </div>
+
+      <div className="wh-m-card">
+        <div className="micro" style={{ marginBottom: 10 }}>Timeline</div>
+        <div className="wh-timeline">
+          <div className="item agent"><div className="dot"></div><div className="body"><span className="actor">Advisor Agent</span> scheduled reminder · +7d</div><div className="meta">today</div></div>
+          <div className="item ok"><div className="dot"></div><div className="body"><span className="actor">Customer</span> opened invoice</div><div className="meta">Apr 03</div></div>
+          <div className="item"><div className="dot"></div><div className="body"><span className="actor">Patricia</span> sent via email</div><div className="meta">Apr 02</div></div>
+        </div>
+      </div>
+
+      <div className="wh-m-action-bar">
+        <button className="wh-btn icon"><I.download /></button>
+        <button className="wh-btn icon"><I.link /></button>
+        <button className="wh-btn primary"><I.send size={14}/> Send reminder</button>
+      </div>
+    </MAppShell>
+  );
+}
+
+function InvoicesPage() {
+  const [selected, setSelected] = useState(null);
+  return selected
+    ? <InvoiceDetail id={selected} onBack={() => setSelected(null)} />
+    : <InvoicesList onOpen={(id) => setSelected(id)} />;
+}
+
+mountApp(<InvoicesPage/>);
+</script>
+</body></html>

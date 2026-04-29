@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Warehouse Hub · Tasks (mobile)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/components.css"/>
+<link rel="stylesheet" href="assets/mobile.css"/>
+</head><body>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="assets/shell.jsx"></script>
+<script type="text/babel" src="assets/mobile-shell.jsx"></script>
+<script type="text/babel" src="assets/boot.jsx"></script>
+<script type="text/babel">
+const { useState } = React;
+
+function priorityDot(p) {
+  const c = p === "high" ? "var(--danger)" : p === "med" ? "oklch(72% 0.140 85)" : "var(--ink-4)";
+  return <span className="wh-m-pri" style={{ background: c }} title={p}/>;
+}
+
+function agentGlyph(a) {
+  if (a === "Accounting") return "€";
+  if (a === "Marketing") return "✦";
+  if (a === "Advisor")   return "◆";
+  return a.split(" ").map(x => x[0]).join("").slice(0, 2);
+}
+
+function Tasks() {
+  const [filter, setFilter] = useState("all");
+  const [showDone, setShowDone] = useState(false);
+
+  let list = TASKS;
+  if (filter === "agents")  list = TASKS.filter(t => t.agent);
+  if (filter === "mine")    list = TASKS.filter(t => !t.agent && t.assignee === "PR");
+  if (filter === "high")    list = TASKS.filter(t => t.priority === "high");
+  if (filter === "blocked") list = TASKS.filter(t => t.status === "blocked");
+
+  const groups = {
+    "Today":     list.filter(t => t.due === "today" && t.status !== "done"),
+    "This week": list.filter(t => ["Wed","Thu","Fri"].includes(t.due) && t.status !== "done"),
+    "Later":     list.filter(t => t.due.startsWith("Apr ") && t.status !== "done"),
+    "Done":      list.filter(t => t.status === "done"),
+  };
+
+  return (
+    <MAppShell active="tasks" kicker="Workspace" title="Tasks" agentPreset="advisor">
+      <div className="wh-m-page-head">
+        <div className="kicker">Workspace · {TASKS.length} tasks</div>
+        <h1>Tasks</h1>
+        <div className="sub">Channel between you and the agent team</div>
+      </div>
+
+      <div className="wh-m-seg" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+        <button className="on">List</button>
+        <button>Board</button>
+        <button>Timeline</button>
+      </div>
+
+      <div className="wh-m-search">
+        <I.search />
+        <input placeholder="Search tasks…" />
+      </div>
+
+      <div className="wh-m-chips">
+        <button className={`wh-m-chip ${filter === "all" ? "on" : ""}`} onClick={() => setFilter("all")}>
+          All <span className="count">{TASKS.length}</span>
+        </button>
+        <button className={`wh-m-chip ${filter === "mine" ? "on" : ""}`} onClick={() => setFilter("mine")}>
+          Mine <span className="count">{TASKS.filter(t => !t.agent && t.assignee === "PR").length}</span>
+        </button>
+        <button className={`wh-m-chip ${filter === "agents" ? "on" : ""}`} onClick={() => setFilter("agents")}>
+          <I.sparkle /> Agents <span className="count">{TASKS.filter(t => t.agent).length}</span>
+        </button>
+        <button className={`wh-m-chip ${filter === "high" ? "on" : ""}`} onClick={() => setFilter("high")}>
+          High <span className="count">{TASKS.filter(t => t.priority === "high").length}</span>
+        </button>
+        <button className={`wh-m-chip ${filter === "blocked" ? "on" : ""}`} onClick={() => setFilter("blocked")}>
+          Blocked <span className="count">{TASKS.filter(t => t.status === "blocked").length}</span>
+        </button>
+      </div>
+
+      {Object.entries(groups).map(([name, items]) => {
+        if (name === "Done" && !showDone) {
+          return (
+            <button
+              key={name}
+              className="wh-btn ghost"
+              onClick={() => setShowDone(true)}
+              style={{ alignSelf: "center", height: 34 }}
+            >
+              Show {items.length} done
+            </button>
+          );
+        }
+        if (!items.length) return null;
+        return (
+          <div key={name} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            <div className="wh-m-shead">
+              <span>{name}</span>
+              <span className="n">{items.length}</span>
+            </div>
+            <div className="wh-m-list">
+              {items.map(t => (
+                <div key={t.id} className={`wh-m-task ${t.status === "done" ? "done" : ""}`}>
+                  <div className="check">{t.status === "done" && <I.check size={12} stroke={2.5}/>}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="title">
+                      {priorityDot(t.priority)}
+                      <span style={{ flex: 1, minWidth: 0 }}>{t.title}</span>
+                      {t.status === "blocked" && <span className="wh-badge danger">blocked</span>}
+                      {t.status === "doing"   && <span className="wh-badge info">doing</span>}
+                    </div>
+                    <div className="meta">
+                      <div className={`wh-avatar ${t.agent ? "agent" : ""}`} style={{ width: 16, height: 16, fontSize: 9 }}>
+                        {agentGlyph(t.assignee)}
+                      </div>
+                      <span style={{ color: "var(--ink-2)" }}>{t.assignee}</span>
+                      <span style={{ opacity: 0.5 }}>·</span>
+                      <span>{t.id}</span>
+                    </div>
+                  </div>
+                  <div className="right">
+                    <div className={`due ${t.due === "today" ? "today" : ""}`}>
+                      {t.due === "today" ? "Today" : t.due}
+                    </div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--ink-3)", letterSpacing: "0.08em", textTransform: "uppercase", maxWidth: 80, textAlign: "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {t.project.split("/")[0].trim()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {showDone && groups.Done.length > 0 && (
+        <button
+          className="wh-btn ghost"
+          onClick={() => setShowDone(false)}
+          style={{ alignSelf: "center", height: 34 }}
+        >
+          Hide done
+        </button>
+      )}
+
+      {/* agent suggestion card */}
+      <div className="wh-m-card" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div className="wh-avatar agent" style={{ width: 32, height: 32, fontSize: 14 }}>✦</div>
+        <div style={{ flex: 1, fontSize: 12.5, lineHeight: 1.4 }}>
+          <span style={{ fontWeight: 500 }}>Marketing Agent</span> <span style={{ color: "var(--ink-3)" }}>suggests:</span>
+          <div style={{ marginTop: 2, color: "var(--ink-1)" }}>"Prepare post-workshop case study with Acme Retail"</div>
+        </div>
+        <button className="wh-btn sm">Add</button>
+      </div>
+    </MAppShell>
+  );
+}
+
+mountApp(<Tasks/>);
+</script>
+</body></html>
