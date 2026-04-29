@@ -1,3 +1,4 @@
+export * from "./bank.js";
 export * from "./bookings.js";
 export * from "./company-card.js";
 export * from "./comments.js";

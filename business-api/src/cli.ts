@@ -5,6 +5,21 @@ import { config } from "./config.js";
 import { initializeDatabase } from "./db/connection.js";
 import { createApp } from "./app.js";
 import {
+  createBankAccount,
+  createBankBalanceSnapshot,
+  createBankTransaction,
+  getBankAccount,
+  getBankTransaction,
+  importBankTransactionsFromRows,
+  listBankAccounts,
+  listBankBalanceSnapshots,
+  listBankTransactions,
+  matchBankTransaction,
+  updateBankAccount,
+  updateBankTransaction,
+  upsertBankTransaction,
+} from "./services/bank.js";
+import {
   cancelBooking,
   checkBookingAssignmentConflicts,
   completeBooking,
@@ -48,6 +63,13 @@ import {
   bookingAssignmentProfileInputSchema,
   bookingAvailabilityExceptionInputSchema,
   bookingAvailabilityExceptionPatchSchema,
+  bankAccountInputSchema,
+  bankAccountPatchSchema,
+  bankBalanceSnapshotInputSchema,
+  bankCsvImportOptionsSchema,
+  bankTransactionInputSchema,
+  bankTransactionPatchSchema,
+  bankTransactionUpsertSchema,
   bookingCancelSchema,
   bookingCompleteSchema,
   bookingInputSchema,
@@ -69,6 +91,7 @@ import {
   taskInputSchema,
   taskPatchSchema,
 } from "@warehouse-hub/business-schemas";
+import { parseBankCsvRows } from "./lib/bank-csv.js";
 import { formatDocumentIngestCliOutput } from "./lib/cli-document-ingest-format.js";
 import { mergeExpenseAndPayrollListItems, parseExpenseListCliFilters } from "./lib/expense-list-cli.js";
 import { parseCliListFilters } from "./lib/list-filters.js";
@@ -106,6 +129,43 @@ const HELP_SCOPES: Record<string, HelpScope> = {
       'company-card set \'{"legalName":"Northwind Robotics SL","displayName":"Northwind Robotics"}\'',
     ],
     aliases: ["company"],
+  },
+  "bank-accounts": {
+    description: "Track manually managed bank accounts.",
+    commands: ["create <json>", "get <id-or-slug>", "list [--status <status>]", "update <id-or-slug> <json>"],
+    examples: [
+      'bank-accounts create \'{"bankName":"BBVA","displayName":"Main EUR account","ibanMasked":"ES76********1234","currency":"EUR"}\'',
+      "bank-accounts list --status active",
+    ],
+  },
+  "bank-transactions": {
+    description: "Create, upsert, inspect, list, update, and match bank transactions.",
+    commands: [
+      "create <json>",
+      "upsert <json>",
+      "get <id-or-slug>",
+      "list [--bank-account-id <id>] [--status <status>] [--kind <kind>] [--since <duration>] [--before <date>] [--after <date>]",
+      "update <id-or-slug> <json>",
+      "match <id-or-slug>",
+    ],
+    examples: [
+      'bank-transactions upsert \'{"bankAccountId":"ba_000001","transactionDate":"2026-04-29","amount":"-340,01","currency":"EUR","description":"Adeudo A Su Cargo","reference":"N 2026119000849489 Gestalea Barcelona","runningBalance":"7809,90","source":"slack_screenshot","documentId":"doc_000123","confidence":"high"}\'',
+      "bank-transactions match btx_000001",
+    ],
+  },
+  "bank-balances": {
+    description: "Record observed bank balances from screenshots, statements, or manual entry.",
+    commands: ["record <json>", "list [--bank-account-id <id>] [--since <duration>] [--before <date>] [--after <date>]"],
+    examples: [
+      'bank-balances record \'{"bankAccountId":"ba_000001","observedAt":"2026-04-29T13:36:00+02:00","balance":"7809,90","currency":"EUR","source":"slack_screenshot","documentId":"doc_000123"}\'',
+    ],
+  },
+  "bank-imports": {
+    description: "Import bank exports as evidence documents and upsert transactions.",
+    commands: ["csv <bank-account-id> <file-path> <json-options>"],
+    examples: [
+      'bank-imports csv ba_000001 ./exports/bank.csv \'{"dateColumn":"Date","amountColumn":"Amount","descriptionColumn":"Description","referenceColumn":"Reference","balanceColumn":"Balance","defaultCurrency":"EUR"}\'',
+    ],
   },
   bookings: {
     description: "Create, inspect, schedule, complete, and cancel customer bookings.",
@@ -285,6 +345,10 @@ const TOP_LEVEL_COMMANDS = [
   "serve",
   "db <subcommand>",
   "company-card <subcommand>",
+  "bank-accounts <subcommand>",
+  "bank-transactions <subcommand>",
+  "bank-balances <subcommand>",
+  "bank-imports <subcommand>",
   "bookings <subcommand>",
   "booking-assignment-profiles <subcommand>",
   "booking-availability-exceptions <subcommand>",
@@ -788,6 +852,133 @@ async function main(): Promise<void> {
   if (command === "company-card" && subcommand === "set") {
     const input = companyCardInputSchema.parse(parseJsonArg(rest[0], "company-card"));
     printJson(upsertCompanyCard(input));
+    return;
+  }
+
+  if (command === "bank-accounts" && subcommand === "create") {
+    const input = bankAccountInputSchema.parse(parseJsonArg(rest[0], "bank account"));
+    printJson(createBankAccount(input));
+    return;
+  }
+
+  if (command === "bank-accounts" && subcommand === "get") {
+    printJson(getBankAccount(rest[0]));
+    return;
+  }
+
+  if (command === "bank-accounts" && subcommand === "list") {
+    const { options } = parseFlexibleFlagArgs(rest, new Set(["json"]));
+    printJson(listBankAccounts({ status: options.status }));
+    return;
+  }
+
+  if (command === "bank-accounts" && subcommand === "update") {
+    const input = bankAccountPatchSchema.parse(parseJsonArg(rest[1], "bank account patch"));
+    printJson(updateBankAccount(rest[0], input));
+    return;
+  }
+
+  if (command === "bank-transactions" && subcommand === "create") {
+    const input = bankTransactionInputSchema.parse(parseJsonArg(rest[0], "bank transaction"));
+    printJson(createBankTransaction(input));
+    return;
+  }
+
+  if (command === "bank-transactions" && subcommand === "upsert") {
+    const input = bankTransactionUpsertSchema.parse(parseJsonArg(rest[0], "bank transaction"));
+    printJson(upsertBankTransaction(input));
+    return;
+  }
+
+  if (command === "bank-transactions" && subcommand === "get") {
+    printJson(getBankTransaction(rest[0]));
+    return;
+  }
+
+  if (command === "bank-transactions" && subcommand === "list") {
+    const { options } = parseFlexibleFlagArgs(rest, new Set(["json"]));
+    printJson(
+      await listBankTransactions({
+        ...parseCliListFilters(
+          Object.entries({
+            since: options.since,
+            before: options.before,
+            after: options.after,
+            limit: options.limit,
+          }).flatMap(([key, value]) => (value ? [`--${key}`, value] : [])),
+        ),
+        bankAccountId: options["bank-account-id"],
+        status: options.status,
+        kind: options.kind,
+      }),
+    );
+    return;
+  }
+
+  if (command === "bank-transactions" && subcommand === "update") {
+    const input = bankTransactionPatchSchema.parse(parseJsonArg(rest[1], "bank transaction patch"));
+    printJson(updateBankTransaction(rest[0], input));
+    return;
+  }
+
+  if (command === "bank-transactions" && subcommand === "match") {
+    printJson(matchBankTransaction(rest[0]));
+    return;
+  }
+
+  if (command === "bank-balances" && subcommand === "record") {
+    const input = bankBalanceSnapshotInputSchema.parse(parseJsonArg(rest[0], "bank balance snapshot"));
+    printJson(createBankBalanceSnapshot(input));
+    return;
+  }
+
+  if (command === "bank-balances" && subcommand === "list") {
+    const { options } = parseFlexibleFlagArgs(rest, new Set(["json"]));
+    printJson(
+      listBankBalanceSnapshots({
+        ...parseCliListFilters(
+          Object.entries({
+            since: options.since,
+            before: options.before,
+            after: options.after,
+            limit: options.limit,
+          }).flatMap(([key, value]) => (value ? [`--${key}`, value] : [])),
+        ),
+        bankAccountId: options["bank-account-id"],
+      }),
+    );
+    return;
+  }
+
+  if (command === "bank-imports" && subcommand === "csv") {
+    const bankAccountId = rest[0];
+    const filePath = rest[1];
+    const options = bankCsvImportOptionsSchema.parse(parseJsonArg(rest[2], "bank CSV import options"));
+    if (!bankAccountId || !filePath) {
+      throw new Error("Usage: bank-imports csv <bank-account-id> <file-path> <json-options>");
+    }
+
+    const fileBuffer = fs.readFileSync(filePath);
+    const document = uploadDocument(
+      {
+        fieldname: "file",
+        originalname: path.basename(filePath) || "bank.csv",
+        encoding: "7bit",
+        mimetype: "text/csv",
+        size: fileBuffer.length,
+        buffer: fileBuffer,
+        stream: undefined as never,
+        destination: "",
+        filename: "",
+        path: "",
+      },
+      {
+        kind: "bank_csv",
+        source: options.source,
+      },
+    );
+    const rows = parseBankCsvRows(fileBuffer.toString("utf8"), options);
+    printJson(importBankTransactionsFromRows(bankAccountId, rows, { source: options.source, documentId: document.documentId }));
     return;
   }
 

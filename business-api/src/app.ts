@@ -2,6 +2,7 @@ import express from "express";
 
 import { errorHandler } from "./middleware/error-handler.js";
 import { requireApiKey } from "./middleware/auth.js";
+import { bankAccountsRouter, bankBalanceSnapshotsRouter, bankTransactionMatchesRouter, bankTransactionsRouter } from "./routes/bank.js";
 import { bookingAssignmentProfilesRouter, bookingAvailabilityExceptionsRouter, bookingsRouter } from "./routes/bookings.js";
 import { companyCardRouter } from "./routes/company-card.js";
 import { commentsRouter } from "./routes/comments.js";
@@ -38,6 +39,10 @@ export function createApp() {
   });
 
   app.use("/api/v1", requireApiKey);
+  app.use("/api/v1/bank-accounts", bankAccountsRouter);
+  app.use("/api/v1/bank-transactions", bankTransactionsRouter);
+  app.use("/api/v1/bank-balance-snapshots", bankBalanceSnapshotsRouter);
+  app.use("/api/v1/bank-transaction-matches", bankTransactionMatchesRouter);
   app.use("/api/v1/bookings", bookingsRouter);
   app.use("/api/v1/booking-assignment-profiles", bookingAssignmentProfilesRouter);
   app.use("/api/v1/booking-availability-exceptions", bookingAvailabilityExceptionsRouter);

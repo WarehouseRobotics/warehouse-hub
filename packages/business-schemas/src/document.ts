@@ -8,6 +8,9 @@ export const documentKindSchema = z.enum([
   "sales_invoice",
   "payroll",
   "contract",
+  "bank_screenshot",
+  "bank_statement",
+  "bank_csv",
   "other",
   "expense",
   "sales-invoice",
@@ -69,7 +72,7 @@ export const documentIngestOverridesSchema = sharedDocumentOverrideSchema
 
 export const documentIngestSchema = z
   .object({
-    kind: z.enum(["expense_invoice", "sales_invoice", "payroll", "contract", "expense", "sales-invoice", "expense-invoice"]),
+    kind: z.enum(["expense_invoice", "sales_invoice", "payroll", "contract", "bank_screenshot", "bank_statement", "bank_csv", "expense", "sales-invoice", "expense-invoice"]),
     companyCardId: z.string().min(1).optional(),
     source: z.string().optional(),
     overrides: documentIngestOverridesSchema.optional(),

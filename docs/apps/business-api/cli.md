@@ -277,6 +277,115 @@ List documents from a time window:
 ./container.sh exec npm run cli -- documents list --after 2026-04-01 --before 2026-05-01
 ```
 
+## Bank Accounts and Transactions
+
+Bank tracking is manual and agent-assisted in v1. Bank screenshots, statements, and CSV exports are stored as documents, while the structured bank transactions and balances are created from explicit CLI JSON or CSV import data.
+
+Create a bank account:
+
+```bash
+./container.sh exec npm run cli -- bank-accounts create '{
+  "bankName": "BBVA",
+  "displayName": "Main EUR account",
+  "ibanMasked": "ES76********1234",
+  "currency": "EUR",
+  "status": "active"
+}'
+```
+
+List active bank accounts:
+
+```bash
+./container.sh exec npm run cli -- bank-accounts list --status active
+```
+
+Upload a banking app screenshot as evidence:
+
+```bash
+./container.sh exec npm run cli -- documents upload ./samples/bank/bbva-movements.png '{
+  "kind": "bank_screenshot",
+  "source": "slack_upload"
+}'
+```
+
+Upsert a transaction extracted by an agent from the screenshot:
+
+```bash
+./container.sh exec npm run cli -- bank-transactions upsert '{
+  "bankAccountId": "ba_000001",
+  "transactionDate": "2026-04-29",
+  "amount": "-340,01",
+  "currency": "EUR",
+  "description": "Adeudo A Su Cargo",
+  "reference": "N 2026119000849489 Gestalea Barcelona",
+  "runningBalance": "7.809,90",
+  "source": "slack_screenshot",
+  "confidence": "high",
+  "kind": "bank_transaction",
+  "status": "recorded",
+  "documentId": "doc_000123"
+}'
+```
+
+Record an observed balance from a screenshot or statement:
+
+```bash
+./container.sh exec npm run cli -- bank-balances record '{
+  "bankAccountId": "ba_000001",
+  "observedAt": "2026-04-29T13:36:00+02:00",
+  "balance": "7.809,90",
+  "currency": "EUR",
+  "source": "slack_screenshot",
+  "confidence": "high",
+  "documentId": "doc_000123"
+}'
+```
+
+Create an opening balance or rectification transaction when prior history is missing:
+
+```bash
+./container.sh exec npm run cli -- bank-transactions upsert '{
+  "bankAccountId": "ba_000001",
+  "transactionDate": "2026-04-01",
+  "amount": "1000.00",
+  "currency": "EUR",
+  "description": "Opening balance before tracked history",
+  "source": "manual",
+  "confidence": "high",
+  "kind": "opening_balance",
+  "status": "recorded"
+}'
+```
+
+Match a bank transaction against recorded expenses, payrolls, or finalized sales invoices:
+
+```bash
+./container.sh exec npm run cli -- bank-transactions match btx_000041
+```
+
+The match command auto-confirms only one exact high-confidence candidate. Otherwise it creates suggested matches and leaves accounting records unchanged.
+
+Import a bank CSV export. The CSV file is also stored as a `bank_csv` document and imported rows are upserted using deterministic transaction fingerprints:
+
+```bash
+./container.sh exec npm run cli -- bank-imports csv ba_000001 ./exports/bbva-april.csv '{
+  "dateColumn": "Date",
+  "amountColumn": "Amount",
+  "descriptionColumn": "Description",
+  "referenceColumn": "Reference",
+  "balanceColumn": "Balance",
+  "defaultCurrency": "EUR",
+  "source": "bank_csv"
+}'
+```
+
+Bank transaction notes:
+
+* amounts are signed strings: income is positive, spending is negative
+* screenshot OCR is intentionally outside the CLI; agents pass extracted fields as JSON
+* `runningBalance` and `bank-balances` records are reconciliation evidence, not the source of transaction truth
+* supported transaction kinds are `bank_transaction`, `opening_balance`, `balance_adjustment`, and `transfer`
+
 ## Expenses
 
 Create an expense manually:
