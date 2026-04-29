@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "business-api",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd business-api && ./container.sh start"],
+      "port": 3100
+    },
+    {
+      "name": "business-api-rebuild",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd business-api && ./container.sh build"],
+      "port": 3100
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd dashboard && ./container.sh start"],
+      "port": 3300
+    },
+    {
+      "name": "dashboard-rebuild",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd dashboard && ./container.sh build"],
+      "port": 3300
+    }
+  ]
+}
