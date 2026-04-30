@@ -28,6 +28,8 @@ import {
 import { updatePayroll } from "./payrolls.js";
 import { updateSalesInvoice } from "./sales-invoices.js";
 import {
+  requireBankAccountRecord,
+  requireBankTransactionRecord,
   requireCompanyCardRecord,
   requireDocumentRecord,
   requireExpenseRecord,
@@ -148,42 +150,6 @@ function mapBankTransactionMatch(record: typeof bankTransactionMatches.$inferSel
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
-}
-
-export function getBankAccountRecordByIdOrSlug(idOrSlug: string) {
-  return getOrm()
-    .select()
-    .from(bankAccounts)
-    .where(and(isNull(bankAccounts.deletedAt), or(eq(bankAccounts.id, idOrSlug), eq(bankAccounts.slug, idOrSlug))))
-    .get();
-}
-
-export function requireBankAccountRecord(idOrSlug: string) {
-  const record = getBankAccountRecordByIdOrSlug(idOrSlug);
-  if (!record) {
-    throw new AppError(`Bank account not found: ${idOrSlug}`, { statusCode: 404, code: "not_found" });
-  }
-
-  return record;
-}
-
-export function getBankTransactionRecordByIdOrSlug(idOrSlug: string) {
-  return getOrm()
-    .select()
-    .from(bankTransactions)
-    .where(
-      and(isNull(bankTransactions.deletedAt), or(eq(bankTransactions.id, idOrSlug), eq(bankTransactions.slug, idOrSlug))),
-    )
-    .get();
-}
-
-export function requireBankTransactionRecord(idOrSlug: string) {
-  const record = getBankTransactionRecordByIdOrSlug(idOrSlug);
-  if (!record) {
-    throw new AppError(`Bank transaction not found: ${idOrSlug}`, { statusCode: 404, code: "not_found" });
-  }
-
-  return record;
 }
 
 function requireMatchTarget(targetType: string, targetId: string) {

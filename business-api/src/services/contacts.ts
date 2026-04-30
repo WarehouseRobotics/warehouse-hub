@@ -14,7 +14,7 @@ import type {
   ContactResolveInput,
   ContactType,
 } from "@warehouse-hub/business-schemas";
-import { requireContactRecord } from "./shared.js";
+import { getContactRecordByIdOrSlug, requireContactRecord } from "./shared.js";
 
 const LEGAL_SUFFIXES = [
   "llc",
@@ -92,14 +92,6 @@ function mapContact(record: typeof contacts.$inferSelect) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
-}
-
-function getContactRecordByIdOrSlug(idOrSlug: string) {
-  return getOrm()
-    .select()
-    .from(contacts)
-    .where(and(isNull(contacts.deletedAt), or(eq(contacts.id, idOrSlug), eq(contacts.slug, idOrSlug))))
-    .get();
 }
 
 function scheduleEmbedding(contactId: string, payload: ReturnType<typeof getContact>): void {
@@ -259,10 +251,7 @@ export function getContact(idOrSlug: string) {
 }
 
 export function updateContact(idOrSlug: string, patch: ContactPatch) {
-  const existing = getContactRecordByIdOrSlug(idOrSlug);
-  if (!existing) {
-    throw new AppError(`Contact not found: ${idOrSlug}`, { statusCode: 404, code: "not_found" });
-  }
+  const existing = requireContactRecord(idOrSlug);
 
   const nextType = patch.type ?? existing.type;
   const nextParentContactId = mergeValue(patch.parentContactId, existing.parentContactId);
@@ -321,10 +310,7 @@ export function updateContact(idOrSlug: string, patch: ContactPatch) {
 }
 
 export function softDeleteContact(idOrSlug: string) {
-  const existing = getContactRecordByIdOrSlug(idOrSlug);
-  if (!existing) {
-    throw new AppError(`Contact not found: ${idOrSlug}`, { statusCode: 404, code: "not_found" });
-  }
+  const existing = requireContactRecord(idOrSlug);
 
   getOrm()
     .update(contacts)

@@ -1,7 +1,20 @@
 import { and, eq, isNull, or } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
-import { bookings, companyCard, contacts, deals, documents, expenses, payrolls, projects, salesInvoices, tasks } from "../db/schema/index.js";
+import {
+  bankAccounts,
+  bankTransactions,
+  bookings,
+  companyCard,
+  contacts,
+  deals,
+  documents,
+  expenses,
+  payrolls,
+  projects,
+  salesInvoices,
+  tasks,
+} from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import type { CommentableType } from "@warehouse-hub/business-schemas";
 
@@ -56,6 +69,42 @@ export function requireDocumentRecord(idOrSlug: string) {
   const record = getDocumentRecordByIdOrSlug(idOrSlug);
   if (!record) {
     notFound(`Document not found: ${idOrSlug}`);
+  }
+
+  return record;
+}
+
+export function getBankAccountRecordByIdOrSlug(idOrSlug: string) {
+  return getOrm()
+    .select()
+    .from(bankAccounts)
+    .where(and(isNull(bankAccounts.deletedAt), or(eq(bankAccounts.id, idOrSlug), eq(bankAccounts.slug, idOrSlug))))
+    .get();
+}
+
+export function requireBankAccountRecord(idOrSlug: string) {
+  const record = getBankAccountRecordByIdOrSlug(idOrSlug);
+  if (!record) {
+    notFound(`Bank account not found: ${idOrSlug}`);
+  }
+
+  return record;
+}
+
+export function getBankTransactionRecordByIdOrSlug(idOrSlug: string) {
+  return getOrm()
+    .select()
+    .from(bankTransactions)
+    .where(
+      and(isNull(bankTransactions.deletedAt), or(eq(bankTransactions.id, idOrSlug), eq(bankTransactions.slug, idOrSlug))),
+    )
+    .get();
+}
+
+export function requireBankTransactionRecord(idOrSlug: string) {
+  const record = getBankTransactionRecordByIdOrSlug(idOrSlug);
+  if (!record) {
+    notFound(`Bank transaction not found: ${idOrSlug}`);
   }
 
   return record;
