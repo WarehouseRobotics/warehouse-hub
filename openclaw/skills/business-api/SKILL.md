@@ -12,7 +12,7 @@ metadata:
 
 # Business API CLI Skill
 
-Use the Warehouse Hub Business API CLI `wrobo-biz` command when an Openclaw agent needs deterministic business operations against local hub data: company card setup, contacts, deals, documents, expenses, sales invoices, projects, and tasks.
+Use the Warehouse Hub Business API CLI `wrobo-biz` command when an Openclaw agent needs deterministic business operations against local hub data: company card setup, contacts, deals, documents, expenses, sales invoices, bank accounts, bank transactions, projects, and tasks.
 
 This CLI is the preferred path for structured CRUD-style work that should not depend on an LLM.
 
@@ -31,6 +31,8 @@ wrobo-biz
 wrobo-biz help
 wrobo-biz help contacts
 wrobo-biz help expenses
+wrobo-biz help bank-accounts
+wrobo-biz help bank-transactions
 wrobo-biz help payrolls
 wrobo-biz help invoices
 ```
@@ -99,6 +101,10 @@ Top-level commands:
 - `company-card <subcommand>`
 - `contacts <subcommand>`
 - `documents <subcommand>`
+- `bank-accounts <subcommand>`
+- `bank-transactions <subcommand>`
+- `bank-balances <subcommand>`
+- `bank-imports <subcommand>`
 - `expenses <subcommand>`
 - `deals <subcommand>`
 - `sales-invoices <subcommand>`
@@ -120,6 +126,19 @@ Supported subcommands by scope:
 - `documents list [filters]`
 - `documents get <id-or-slug>`
 - `documents download <id-or-slug> <output-path>`
+- `bank-accounts create '<json>'`
+- `bank-accounts get <id-or-slug>`
+- `bank-accounts list [--status <status>]`
+- `bank-accounts update <id-or-slug> '<json-patch>'`
+- `bank-transactions create '<json>'`
+- `bank-transactions upsert '<json>'`
+- `bank-transactions get <id-or-slug>`
+- `bank-transactions list [filters]`
+- `bank-transactions update <id-or-slug> '<json-patch>'`
+- `bank-transactions match <id-or-slug>`
+- `bank-balances record '<json>'`
+- `bank-balances list [filters]`
+- `bank-imports csv <bank-account-id> <file-path> '<json-options>'`
 - `expenses create '<json>'`
 - `expenses get <id-or-slug>`
 - `expenses list [filters]`
@@ -155,6 +174,8 @@ Supported subcommands by scope:
 Only these list commands accept CLI filters:
 
 - `documents list`
+- `bank-transactions list`
+- `bank-balances list`
 - `expenses list`
 - `sales-invoices list`
 
@@ -165,6 +186,8 @@ Supported filter flags:
 - `--since <duration>` where duration uses `d`, `w`, `m`, or `y`, for example `7d`, `2w`, `3m`
 - `--before <YYYY-MM-DD>`
 - `--after <YYYY-MM-DD>`
+- `--bank-account-id <id>` for bank transaction and balance lists
+- `--status <status>` and `--kind <kind>` for bank transaction lists
 
 Important filter behavior:
 
@@ -172,6 +195,8 @@ Important filter behavior:
 - `--before` and `--after` must use `YYYY-MM-DD`.
 - `--since` must use a relative duration like `1d`, `2m`, or `1y`.
 - Other list endpoints such as `contacts list`, `deals list`, `projects list`, and `tasks list` do not currently accept these filters.
+
+For detailed bank screenshot, CSV import, balance snapshot, rectification, and matching workflows, use the `business-api-bank-tracking` skill.
 
 The `expenses list` command can include a special `--include-payrolls` parameter to include salaries/payrolls in the list of expenses (otherwise they must be fetched separately via payrolls).
 
