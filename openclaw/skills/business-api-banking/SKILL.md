@@ -1,6 +1,6 @@
 ---
 name: business-api-banking
-description: Workflows for ingesting company bank account evidence from banking app screenshots and CSV exports, recording bank transactions and balance snapshots, and matching bank movements to Business API accounting records.
+description: Workflows for ingesting company bank account evidence from banking app screenshots and CSV exports, recording bank transactions and bank balance snapshots, and matching bank movements to Business API accounting records.
 metadata:
   {
     "openclaw":
