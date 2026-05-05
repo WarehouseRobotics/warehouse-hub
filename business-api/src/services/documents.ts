@@ -9,7 +9,7 @@ import { getOrm } from "../db/connection.js";
 import { documents } from "../db/schema/index.js";
 import { computeEmbeddingText, isBenignEmbeddingSyncError, upsertEmbedding } from "../lib/embeddings.js";
 import { createPrefixedId } from "../lib/ids.js";
-import { applySimilarityFilter, matchesResolvedDateFilters, resolveListFilters, type ListFilters } from "../lib/list-filters.js";
+import { applySimilarityFilter, compareDateDesc, matchesResolvedDateFilters, resolveListFilters, type ListFilters } from "../lib/list-filters.js";
 import { logger } from "../lib/logger.js";
 import { createSlug } from "../lib/slug-ids.js";
 import type { DocumentUploadInput } from "@warehouse-hub/business-schemas";
@@ -194,7 +194,12 @@ export async function listDocuments(filters: ListFilters = {}) {
     .where(and(isNull(documents.deletedAt)))
     .all()
     .map(mapDocument)
-    .filter((document) => matchesResolvedDateFilters(document.createdAt, resolvedFilters));
+    .filter((document) => matchesResolvedDateFilters(document.createdAt, resolvedFilters))
+    .sort((left, right) => compareDateDesc(left.createdAt, right.createdAt));
+
+  if (!resolvedFilters.similar && resolvedFilters.limit !== undefined) {
+    return items.slice(0, resolvedFilters.limit);
+  }
 
   return applySimilarityFilter(items, {
     entityType: "document",

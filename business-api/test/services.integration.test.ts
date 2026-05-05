@@ -494,6 +494,9 @@ describe("business-api service flows", () => {
     const { uploadDocument, listDocuments, updateDocumentProcessing } = await import("../src/services/documents.js");
     const { createExpense, listExpenses, updateExpense } = await import("../src/services/expenses.js");
     const { importSalesInvoice, listSalesInvoices } = await import("../src/services/sales-invoices.js");
+    const { eq } = await import("drizzle-orm");
+    const { getOrm } = await import("../src/db/connection.js");
+    const { documents } = await import("../src/db/schema/documents.js");
 
     upsertCompanyCard({
       legalName: "Northwind Robotics SL",
@@ -571,6 +574,23 @@ describe("business-api service flows", () => {
       ocrStatus: "completed",
       ocrText: "consulting statement svc-2026-001",
     });
+
+    getOrm()
+      .update(documents)
+      .set({ createdAt: "2026-04-02T09:00:00.000Z" })
+      .where(eq(documents.id, tonerDocument.documentId))
+      .run();
+    getOrm()
+      .update(documents)
+      .set({ createdAt: "2026-04-03T09:00:00.000Z" })
+      .where(eq(documents.id, consultingDocument.documentId))
+      .run();
+
+    const latestDocument = await waitFor(
+      () => listDocuments({ limit: 1 }),
+      (items) => items.length === 1,
+    );
+    expect(latestDocument.map((item) => item.documentId)).toEqual([consultingDocument.documentId]);
 
     const tonerExpense = createExpense({
       supplierContactId: supplier.contactId,
