@@ -5,3 +5,4 @@ test-data/
 node_modules
 business-api/eng.traineddata
 packages/business-schemas/dist/
+.claude/settings.local.json
