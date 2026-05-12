@@ -13,3 +13,4 @@ export * from "./payrolls.js";
 export * from "./projects.js";
 export * from "./sales-invoices.js";
 export * from "./tasks.js";
+export * from "./tax-reports.js";

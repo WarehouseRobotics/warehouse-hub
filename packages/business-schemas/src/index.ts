@@ -10,3 +10,4 @@ export * from "./payroll.js";
 export * from "./project.js";
 export * from "./sales-invoice.js";
 export * from "./task.js";
+export * from "./tax-report.js";

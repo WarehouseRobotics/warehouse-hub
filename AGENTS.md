@@ -89,3 +89,13 @@ CLI command results still print their business payloads as JSON on stdout so the
 When writing tests:
 
 * Do not make existing required fields of objects nullable just to pass tests
+
+## Project Task Management
+
+Use the task-management skill for tracking project tasks. When performing tasks, you should check taskboard context and track tasks' states using the taskboards skill. This project data:
+
+- taskboards project: `warehouse-hub`
+- business-api board: `business-api`
+- dashboard frontend board: `dashboard`
+
+Keep up with the task boards: **check and update taskboard tasks often!**
