@@ -8,6 +8,7 @@ import {
   getTaxReport,
   listTaxCarryforwards,
   listTaxReports,
+  softDeleteTaxReport,
 } from "../services/tax-reports.js";
 import { taxReportCreateRequestSchema } from "@warehouse-hub/business-schemas";
 
@@ -26,7 +27,7 @@ function parseOptionalInteger(
     return undefined;
   }
 
-  if (typeof value !== "string" || !/^\d+$/.test(value)) {
+  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
     throw new AppError(`${label} must be a positive integer`, {
       statusCode: 400,
       code: "validation_error",
@@ -105,6 +106,11 @@ taxReportsRouter.post(
 
 taxReportsRouter.get("/:id", (request, response) => {
   response.json(getTaxReport(getRouteParam(request.params.id)));
+});
+
+taxReportsRouter.delete("/:id", (request, response) => {
+  softDeleteTaxReport(getRouteParam(request.params.id));
+  response.status(204).send();
 });
 
 taxCarryforwardsRouter.get("/", (request, response, next) => {

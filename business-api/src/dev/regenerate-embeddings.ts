@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 
 import { initializeDatabase, getDatabase, getOrm } from "../db/connection.js";
 import {
@@ -11,9 +11,6 @@ import {
   payrolls,
   salesInvoices,
   tasks,
-  taxCarryforwards,
-  taxReportFacts,
-  taxReportPaymentLinks,
   taxReports,
 } from "../db/schema/index.js";
 import {
@@ -22,6 +19,7 @@ import {
   upsertEmbedding,
 } from "../lib/embeddings.js";
 import { logger } from "../lib/logger.js";
+import { buildTaxReportEmbeddingPayload } from "../services/tax-reports.js";
 
 type RegenerationStats = {
   deleted: number;
@@ -344,70 +342,13 @@ async function regenerateTaxReportEmbeddings(): Promise<number> {
     .all();
 
   for (const row of rows) {
-    const facts = getOrm()
-      .select()
-      .from(taxReportFacts)
-      .where(eq(taxReportFacts.taxReportId, row.id))
-      .all();
-    const carryforwards = getOrm()
-      .select()
-      .from(taxCarryforwards)
-      .where(
-        and(
-          isNull(taxCarryforwards.deletedAt),
-          eq(taxCarryforwards.originTaxReportId, row.id),
-        ),
-      )
-      .all();
-    const paymentLinks = getOrm()
-      .select()
-      .from(taxReportPaymentLinks)
-      .where(
-        and(
-          isNull(taxReportPaymentLinks.deletedAt),
-          eq(taxReportPaymentLinks.taxReportId, row.id),
-        ),
-      )
-      .all();
-
     await upsertEmbedding(
       "tax_report",
       row.id,
-      computeEmbeddingText("tax_report", {
-        taxReport: {
-          countryCode: row.countryCode,
-          taxKind: row.taxKind,
-          formCode: row.formCode,
-          formName: row.formName,
-          formVersion: row.formVersion,
-          fiscalYear: row.fiscalYear,
-          periodLabel: row.periodLabel,
-          periodStart: row.periodStart,
-          periodEnd: row.periodEnd,
-          taxpayerTaxId: row.taxpayerTaxId,
-          authoritySubmissionId: row.authoritySubmissionId,
-          authorityReceiptNumber: row.authorityReceiptNumber,
-          status: row.status,
-          result: row.result,
-          paymentStatus: row.paymentStatus,
-          currency: row.currency,
-          taxableBase: row.taxableBase,
-          taxDue: row.taxDue,
-          taxDeductible: row.taxDeductible,
-          resultAmount: row.resultAmount,
-          retainedAmount: row.retainedAmount,
-          profitOrLoss: row.profitOrLoss,
-          warnings: row.warningsJson
-            ? (JSON.parse(row.warningsJson) as unknown[])
-            : [],
-          extractedData: row.extractedDataJson
-            ? (JSON.parse(row.extractedDataJson) as unknown)
-            : null,
-        },
-        facts,
-        carryforwards,
-        paymentLinks,
-      }),
+      computeEmbeddingText(
+        "tax_report",
+        buildTaxReportEmbeddingPayload(row.id),
+      ),
     );
   }
 

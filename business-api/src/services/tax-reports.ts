@@ -255,14 +255,14 @@ function getTaxReportPaymentLinks(taxReportId: string) {
     .map(mapTaxReportPaymentLink);
 }
 
-function scheduleEmbedding(
-  taxReportId: string,
-  payload: ReturnType<typeof getTaxReport>,
-): void {
+function scheduleEmbedding(taxReportId: string): void {
   void upsertEmbedding(
     "tax_report",
     taxReportId,
-    computeEmbeddingText("tax_report", payload),
+    computeEmbeddingText(
+      "tax_report",
+      buildTaxReportEmbeddingPayload(taxReportId),
+    ),
   ).catch((error) => {
     if (isBenignEmbeddingSyncError(error)) {
       return;
@@ -643,9 +643,9 @@ export function createTaxReport(data: TaxReportCreateRequest) {
   })();
 
   const created = getTaxReport(id);
-  scheduleEmbedding(id, created);
+  scheduleEmbedding(id);
   if (correctionOf) {
-    scheduleEmbedding(correctionOf.id, getTaxReport(correctionOf.id));
+    scheduleEmbedding(correctionOf.id);
   }
 
   return { ...created, duplicate: false };
@@ -730,6 +730,10 @@ export function getTaxReport(idOrSlug: string) {
     carryforwards: getTaxReportCarryforwards(reportRecord.id),
     paymentLinks: getTaxReportPaymentLinks(reportRecord.id),
   };
+}
+
+export function buildTaxReportEmbeddingPayload(idOrSlug: string) {
+  return getTaxReport(idOrSlug);
 }
 
 export function listTaxCarryforwards(filters: TaxCarryforwardListFilters = {}) {

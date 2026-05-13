@@ -131,12 +131,21 @@ describe("tax report service flows", () => {
   it("creates a tax report with facts, carryforwards, document linkage, and stable detail mapping", async () => {
     const company = await createCompanyCard();
     const document = await uploadTaxDocument();
-    const { createTaxReport, getTaxReport, listTaxCarryforwards } =
-      await import("../src/services/tax-reports.js");
+    const {
+      buildTaxReportEmbeddingPayload,
+      createTaxReport,
+      getTaxReport,
+      listTaxCarryforwards,
+    } = await import("../src/services/tax-reports.js");
     const { getDocumentMeta } = await import("../src/services/documents.js");
+    const { computeEmbeddingText } = await import("../src/lib/embeddings.js");
 
     const created = createTaxReport(
       baseTaxReportInput(company.companyId, document.documentId),
+    );
+    const detail = getTaxReport(created.taxReport.taxReportId);
+    const embeddingPayload = buildTaxReportEmbeddingPayload(
+      created.taxReport.taxReportId,
     );
 
     expect(created.duplicate).toBe(false);
@@ -163,14 +172,21 @@ describe("tax report service flows", () => {
         remainingAmount: "180.00",
       }),
     ]);
-    expect(
-      getTaxReport(created.taxReport.taxReportId).document.documentId,
-    ).toBe(document.documentId);
+    expect(detail.document.documentId).toBe(document.documentId);
     expect(getDocumentMeta(document.documentId)).toEqual(
       expect.objectContaining({
         linkedEntityType: "tax_report",
         linkedEntityId: created.taxReport.taxReportId,
       }),
+    );
+    expect(embeddingPayload).toEqual(detail);
+    expect(embeddingPayload.facts[0]).toEqual(
+      expect.objectContaining({
+        taxReportFactId: expect.stringMatching(/^trf_/),
+      }),
+    );
+    expect(computeEmbeddingText("tax_report", embeddingPayload)).toEqual(
+      computeEmbeddingText("tax_report", detail),
     );
     expect(listTaxCarryforwards()).toHaveLength(1);
   });

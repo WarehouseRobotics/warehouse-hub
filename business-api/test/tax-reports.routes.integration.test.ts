@@ -113,7 +113,6 @@ describe("tax report HTTP routes", () => {
 
   beforeEach(async () => {
     await resetTestState();
-    await createCompanyCard();
 
     const { createApp } = await import("../src/app.js");
     const app = createApp();
@@ -199,6 +198,28 @@ describe("tax report HTTP routes", () => {
         carryforwards: [expect.objectContaining({ kind: "vat_credit" })],
       }),
     );
+
+    const deleteResponse = await fetch(
+      `${baseUrl}/api/v1/tax-reports/${created.taxReport.taxReportId}`,
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(deleteResponse.status).toBe(204);
+
+    const deletedListResponse = await fetch(
+      `${baseUrl}/api/v1/tax-reports?countryCode=ES&fiscalYear=2026`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(deletedListResponse.status).toBe(200);
+    expect((await deletedListResponse.json()) as unknown[]).toEqual([]);
   });
 
   it("lists carryforwards with active default and superseded opt-in", async () => {
@@ -266,5 +287,27 @@ describe("tax report HTTP routes", () => {
         expect.objectContaining({ status: "superseded" }),
       ]),
     );
+  });
+
+  it("rejects zero-valued year filters", async () => {
+    const reportResponse = await fetch(
+      `${baseUrl}/api/v1/tax-reports?fiscalYear=0`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(reportResponse.status).toBe(400);
+
+    const carryforwardResponse = await fetch(
+      `${baseUrl}/api/v1/tax-carryforwards?originFiscalYear=0`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(carryforwardResponse.status).toBe(400);
   });
 });
