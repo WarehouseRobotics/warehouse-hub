@@ -222,6 +222,131 @@ describe("tax report HTTP routes", () => {
     expect((await deletedListResponse.json()) as unknown[]).toEqual([]);
   });
 
+  it("ingests tax reports through the multipart HTTP API", async () => {
+    const company = await createCompanyCard();
+    const formData = new FormData();
+    formData.set("kind", "tax_declaration");
+    formData.set("companyCardId", company.companyId);
+    formData.set("countryCode", "ES");
+    formData.set("source", "accountant_upload");
+    formData.set(
+      "file",
+      new File(
+        [
+          Buffer.from(`
+AEAT Modelo 303
+Ejercicio: 2026
+Periodo: Q4
+NIF: B12345678
+Presentacion id: AEAT303Q4
+Casilla 71: 250,00
+`),
+        ],
+        "modelo-303-q4.pdf",
+        { type: "application/pdf" },
+      ),
+    );
+
+    const response = await fetch(`${baseUrl}/api/v1/tax-reports/ingest`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+      body: formData,
+    });
+
+    expect(response.status).toBe(201);
+    expect(
+      (await response.json()) as {
+        taxReport: { formCode: string; result: string };
+        document: { ocrStatus: string; linkedEntityType: string };
+        facts: Array<{ fieldCode: string }>;
+      },
+    ).toEqual(
+      expect.objectContaining({
+        taxReport: expect.objectContaining({
+          formCode: "303",
+          result: "payable",
+        }),
+        document: expect.objectContaining({
+          ocrStatus: "completed",
+          linkedEntityType: "tax_report",
+        }),
+        facts: [expect.objectContaining({ fieldCode: "71" })],
+      }),
+    );
+  });
+
+  it("rejects tax report ingest requests without a file", async () => {
+    const formData = new FormData();
+    formData.set("kind", "tax_declaration");
+    const response = await fetch(`${baseUrl}/api/v1/tax-reports/ingest`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+      body: formData,
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects tax report ingest requests without company scope", async () => {
+    const formData = new FormData();
+    formData.set("kind", "tax_declaration");
+    formData.set("countryCode", "ES");
+    formData.set(
+      "file",
+      new File([Buffer.from("AEAT Modelo 303")], "modelo-303.pdf", {
+        type: "application/pdf",
+      }),
+    );
+
+    const response = await fetch(`${baseUrl}/api/v1/tax-reports/ingest`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+      body: formData,
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()) as { error: { code: string } }).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ code: "validation_error" }),
+      }),
+    );
+  });
+
+  it("rejects malformed tax report ingest overrides as validation errors", async () => {
+    const company = await createCompanyCard();
+    const formData = new FormData();
+    formData.set("kind", "tax_declaration");
+    formData.set("companyCardId", company.companyId);
+    formData.set("overrides", "{not-json");
+    formData.set(
+      "file",
+      new File([Buffer.from("AEAT Modelo 303")], "modelo-303.pdf", {
+        type: "application/pdf",
+      }),
+    );
+
+    const response = await fetch(`${baseUrl}/api/v1/tax-reports/ingest`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+      body: formData,
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()) as { error: { code: string } }).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ code: "validation_error" }),
+      }),
+    );
+  });
+
   it("lists carryforwards with active default and superseded opt-in", async () => {
     const company = await createCompanyCard();
     const firstDocument = await uploadTaxDocument();

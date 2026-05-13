@@ -2,6 +2,7 @@ import multer from "multer";
 import { Router } from "express";
 
 import { parseListFilters } from "../lib/list-filters.js";
+import { parseMultipartJson } from "../lib/multipart-json.js";
 import { documentIngestSchema, documentUploadSchema } from "@warehouse-hub/business-schemas";
 import { getDocumentDownload, getDocumentMeta, listDocuments, softDeleteDocument, uploadDocument } from "../services/documents.js";
 import { ingestDocument } from "../services/document-ingestion.js";
@@ -11,14 +12,6 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 function getRouteParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function parseMultipartJson<T>(value: T | string | undefined): T | undefined {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  return JSON.parse(value) as T;
 }
 
 documentsRouter.post("/", upload.single("file"), (request, response) => {
@@ -71,7 +64,7 @@ documentsRouter.post("/ingest", upload.single("file"), async (request, response,
       companyCardId: request.body.companyCardId,
       source: request.body.source,
       targetSalesInvoiceId: request.body.targetSalesInvoiceId,
-      overrides: parseMultipartJson(request.body.overrides),
+      overrides: parseMultipartJson(request.body.overrides, "overrides"),
     });
 
     response.status(201).json(await ingestDocument(request.file, meta));

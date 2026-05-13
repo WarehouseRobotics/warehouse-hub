@@ -319,6 +319,61 @@ export const taxReportCreateRequestSchema = taxReportInputSchema
   })
   .strict();
 
+export const taxReportIngestKindSchema = z.literal("tax_declaration");
+export const taxReportIngestStatusOverrideSchema = z.enum([
+  "filed",
+  "needs_review",
+  "amended",
+]);
+
+export const taxReportIngestOverridesSchema = z
+  .object({
+    countryCode: z.string().min(2).optional(),
+    jurisdiction: z.union([z.string().min(1), z.null()]).optional(),
+    taxKind: taxKindSchema.optional(),
+    formCode: z.string().min(1).optional(),
+    formName: z.union([z.string().min(1), z.null()]).optional(),
+    formVersion: z.union([z.string().min(1), z.null()]).optional(),
+    fiscalYear: z.coerce.number().int().positive().optional(),
+    periodGranularity: taxPeriodGranularitySchema.optional(),
+    periodLabel: z.string().min(1).optional(),
+    periodStart: z.string().min(10).max(10).optional(),
+    periodEnd: z.string().min(10).max(10).optional(),
+    taxpayerTaxId: z.union([z.string().min(1), z.null()]).optional(),
+    authoritySubmissionId: z.union([z.string().min(1), z.null()]).optional(),
+    authorityReceiptNumber: z.union([z.string().min(1), z.null()]).optional(),
+    filedAt: z.union([z.string().min(1), z.null()]).optional(),
+    dueDate: z.union([z.string().min(10).max(10), z.null()]).optional(),
+    paymentDueDate: z.union([z.string().min(10).max(10), z.null()]).optional(),
+    status: taxReportIngestStatusOverrideSchema.optional(),
+    result: taxReportResultSchema.optional(),
+    paymentStatus: taxReportPaymentStatusSchema.optional(),
+    currency: currencyCodeSchema.optional(),
+    taxableBase: z.union([z.string().min(1), z.null()]).optional(),
+    taxDue: z.union([z.string().min(1), z.null()]).optional(),
+    taxDeductible: z.union([z.string().min(1), z.null()]).optional(),
+    resultAmount: z.union([z.string().min(1), z.null()]).optional(),
+    retainedAmount: z.union([z.string().min(1), z.null()]).optional(),
+    profitOrLoss: z.union([z.string().min(1), z.null()]).optional(),
+    confidence: taxConfidenceSchema.optional(),
+    correctionOfTaxReportId: z.union([z.string().min(1), z.null()]).optional(),
+  })
+  .strict();
+
+export const taxReportIngestSchema = z
+  .object({
+    kind: taxReportIngestKindSchema.default("tax_declaration"),
+    companyCardId: z.string().min(1),
+    countryCode: z.string().min(2).optional(),
+    taxKind: taxKindSchema.optional(),
+    formCode: z.string().min(1).optional(),
+    fiscalYear: z.coerce.number().int().positive().optional(),
+    periodLabel: z.string().min(1).optional(),
+    source: z.string().optional(),
+    overrides: taxReportIngestOverridesSchema.optional(),
+  })
+  .strict();
+
 export type TaxKind = z.infer<typeof taxKindSchema>;
 export type TaxReportStatus = z.infer<typeof taxReportStatusSchema>;
 export type TaxReportResult = z.infer<typeof taxReportResultSchema>;
@@ -349,3 +404,8 @@ export type TaxReportPaymentLink = z.infer<typeof taxReportPaymentLinkSchema>;
 export type TaxReportPaymentLinkInput = z.infer<
   typeof taxReportPaymentLinkInputSchema
 >;
+export type TaxReportIngestKind = z.infer<typeof taxReportIngestKindSchema>;
+export type TaxReportIngestOverrides = z.infer<
+  typeof taxReportIngestOverridesSchema
+>;
+export type TaxReportIngestInput = z.infer<typeof taxReportIngestSchema>;

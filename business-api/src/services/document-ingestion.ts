@@ -589,6 +589,7 @@ export async function ingestDocument(
   const company = ensureCompanyCard(input.companyCardId);
   let document = createStoredDocument(file, {
     kind: input.kind,
+    companyCardId: company.id,
     source: input.source,
   });
   const warnings: string[] = [];

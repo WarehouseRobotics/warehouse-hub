@@ -3,13 +3,23 @@ import { ZodError } from "zod";
 
 import { AppError } from "../lib/errors.js";
 
+function isZodLikeError(error: unknown): error is ZodError {
+  return (
+    error instanceof ZodError ||
+    (Boolean(error) &&
+      typeof error === "object" &&
+      (error as { name?: unknown }).name === "ZodError" &&
+      typeof (error as { flatten?: unknown }).flatten === "function")
+  );
+}
+
 export function errorHandler(
   error: unknown,
   _request: Request,
   response: Response,
   _next: NextFunction,
 ): void {
-  if (error instanceof ZodError) {
+  if (isZodLikeError(error)) {
     response.status(400).json({
       error: {
         code: "validation_error",

@@ -97,6 +97,28 @@ describe("business-api routes", () => {
     expect(Buffer.from(await downloadResponse.arrayBuffer()).toString()).toBe("pdf-data-2");
   });
 
+  it("rejects malformed document ingest overrides as validation errors", async () => {
+    const formData = new FormData();
+    formData.set("kind", "expense_invoice");
+    formData.set("overrides", "{not-json");
+    formData.set("file", new File([Buffer.from("invoice")], "invoice.pdf", { type: "application/pdf" }));
+
+    const response = await fetch(`${baseUrl}/api/v1/documents/ingest`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+      body: formData,
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()) as { error: { code: string } }).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ code: "validation_error" }),
+      }),
+    );
+  });
+
   it("lists documents, expenses, and sales invoices with time filters through the HTTP API", async () => {
     const { createContact } = await import("../src/services/contacts.js");
     const { uploadDocument } = await import("../src/services/documents.js");

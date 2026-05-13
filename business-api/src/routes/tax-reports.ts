@@ -1,8 +1,11 @@
+import multer from "multer";
 import { Router } from "express";
 
 import { AppError } from "../lib/errors.js";
 import { parseListFilters } from "../lib/list-filters.js";
+import { parseMultipartJson } from "../lib/multipart-json.js";
 import { validateBody } from "../middleware/validate.js";
+import { ingestTaxReport } from "../services/tax-report-ingestion.js";
 import {
   createTaxReport,
   getTaxReport,
@@ -10,10 +13,14 @@ import {
   listTaxReports,
   softDeleteTaxReport,
 } from "../services/tax-reports.js";
-import { taxReportCreateRequestSchema } from "@warehouse-hub/business-schemas";
+import {
+  taxReportCreateRequestSchema,
+  taxReportIngestSchema,
+} from "@warehouse-hub/business-schemas";
 
 export const taxReportsRouter = Router();
 export const taxCarryforwardsRouter = Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 function getRouteParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
@@ -101,6 +108,40 @@ taxReportsRouter.post(
   validateBody(taxReportCreateRequestSchema),
   (request, response) => {
     response.status(201).json(createTaxReport(request.body));
+  },
+);
+
+taxReportsRouter.post(
+  "/ingest",
+  upload.single("file"),
+  async (request, response, next) => {
+    try {
+      if (!request.file) {
+        response.status(400).json({
+          error: {
+            code: "validation_error",
+            message: "Missing uploaded file",
+          },
+        });
+        return;
+      }
+
+      const meta = taxReportIngestSchema.parse({
+        kind: request.body.kind,
+        companyCardId: request.body.companyCardId,
+        countryCode: request.body.countryCode,
+        taxKind: request.body.taxKind,
+        formCode: request.body.formCode,
+        fiscalYear: request.body.fiscalYear,
+        periodLabel: request.body.periodLabel,
+        source: request.body.source,
+        overrides: parseMultipartJson(request.body.overrides, "overrides"),
+      });
+
+      response.status(201).json(await ingestTaxReport(request.file, meta));
+    } catch (error) {
+      next(error);
+    }
   },
 );
 

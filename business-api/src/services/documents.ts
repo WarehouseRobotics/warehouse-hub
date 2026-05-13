@@ -47,6 +47,7 @@ function scheduleEmbedding(documentId: string, payload: ReturnType<typeof mapDoc
 
 type CreateStoredDocumentInput = {
   kind: DocumentUploadInput["kind"];
+  companyCardId?: string;
   source?: string;
 };
 
@@ -68,7 +69,7 @@ type ReplaceStoredDocumentInput = {
 };
 
 export function createStoredDocument(file: Express.Multer.File, meta: CreateStoredDocumentInput) {
-  const company = requireCompanyCardRecord();
+  const company = requireCompanyCardRecord(meta.companyCardId);
   const documentId = createPrefixedId("doc_");
   const now = new Date().toISOString();
   const slug = createSlug(`${meta.kind}:${file.originalname}:${documentId}`);
