@@ -2,8 +2,17 @@ import express from "express";
 
 import { errorHandler } from "./middleware/error-handler.js";
 import { requireApiKey } from "./middleware/auth.js";
-import { bankAccountsRouter, bankBalanceSnapshotsRouter, bankTransactionMatchesRouter, bankTransactionsRouter } from "./routes/bank.js";
-import { bookingAssignmentProfilesRouter, bookingAvailabilityExceptionsRouter, bookingsRouter } from "./routes/bookings.js";
+import {
+  bankAccountsRouter,
+  bankBalanceSnapshotsRouter,
+  bankTransactionMatchesRouter,
+  bankTransactionsRouter,
+} from "./routes/bank.js";
+import {
+  bookingAssignmentProfilesRouter,
+  bookingAvailabilityExceptionsRouter,
+  bookingsRouter,
+} from "./routes/bookings.js";
 import { companyCardRouter } from "./routes/company-card.js";
 import { commentsRouter } from "./routes/comments.js";
 import { contactsRouter } from "./routes/contacts.js";
@@ -15,6 +24,10 @@ import { payrollsRouter } from "./routes/payrolls.js";
 import { projectsRouter } from "./routes/projects.js";
 import { salesInvoicesRouter } from "./routes/sales-invoices.js";
 import { tasksRouter } from "./routes/tasks.js";
+import {
+  taxCarryforwardsRouter,
+  taxReportsRouter,
+} from "./routes/tax-reports.js";
 
 export function createApp() {
   const app = express();
@@ -22,7 +35,10 @@ export function createApp() {
   app.use((request, response, next) => {
     response.header("Access-Control-Allow-Origin", "*");
     response.header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key");
-    response.header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+    response.header(
+      "Access-Control-Allow-Methods",
+      "GET,POST,PATCH,DELETE,OPTIONS",
+    );
 
     if (request.method === "OPTIONS") {
       response.status(204).send();
@@ -44,8 +60,14 @@ export function createApp() {
   app.use("/api/v1/bank-balance-snapshots", bankBalanceSnapshotsRouter);
   app.use("/api/v1/bank-transaction-matches", bankTransactionMatchesRouter);
   app.use("/api/v1/bookings", bookingsRouter);
-  app.use("/api/v1/booking-assignment-profiles", bookingAssignmentProfilesRouter);
-  app.use("/api/v1/booking-availability-exceptions", bookingAvailabilityExceptionsRouter);
+  app.use(
+    "/api/v1/booking-assignment-profiles",
+    bookingAssignmentProfilesRouter,
+  );
+  app.use(
+    "/api/v1/booking-availability-exceptions",
+    bookingAvailabilityExceptionsRouter,
+  );
   app.use("/api/v1/company-card", companyCardRouter);
   app.use("/api/v1/comments", commentsRouter);
   app.use("/api/v1/contacts", contactsRouter);
@@ -57,6 +79,8 @@ export function createApp() {
   app.use("/api/v1/sales-invoices", salesInvoicesRouter);
   app.use("/api/v1/projects", projectsRouter);
   app.use("/api/v1/tasks", tasksRouter);
+  app.use("/api/v1/tax-reports", taxReportsRouter);
+  app.use("/api/v1/tax-carryforwards", taxCarryforwardsRouter);
 
   app.use(errorHandler);
 

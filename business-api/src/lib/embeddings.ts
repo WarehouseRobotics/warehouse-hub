@@ -20,6 +20,7 @@ export type EmbeddingEntityType =
   | "expense_invoice"
   | "payroll"
   | "sales_invoice"
+  | "tax_report"
   | "task";
 
 export function hashEmbeddingContent(text: string): string {
@@ -29,7 +30,10 @@ export function hashEmbeddingContent(text: string): string {
 export function createStubEmbedding(text: string, dimensions = 1536): number[] {
   const hash = hashEmbeddingContent(text);
   const values = Array.from({ length: dimensions }, (_, index) => {
-    const pair = hash.slice((index * 2) % hash.length, ((index * 2) % hash.length) + 2);
+    const pair = hash.slice(
+      (index * 2) % hash.length,
+      ((index * 2) % hash.length) + 2,
+    );
     return Number.parseInt(pair.padEnd(2, "0"), 16) / 255;
   });
 
@@ -61,12 +65,18 @@ function normalizeEmbeddingValue(value: unknown): unknown {
   }
 
   if (typeof value === "object") {
-    const normalizedEntries = Object.entries(value).flatMap(([key, nestedValue]) => {
-      const normalizedValue = normalizeEmbeddingValue(nestedValue);
-      return normalizedValue === undefined ? [] : [[toSnakeCase(key), normalizedValue] as const];
-    });
+    const normalizedEntries = Object.entries(value).flatMap(
+      ([key, nestedValue]) => {
+        const normalizedValue = normalizeEmbeddingValue(nestedValue);
+        return normalizedValue === undefined
+          ? []
+          : [[toSnakeCase(key), normalizedValue] as const];
+      },
+    );
 
-    return normalizedEntries.length > 0 ? Object.fromEntries(normalizedEntries) : undefined;
+    return normalizedEntries.length > 0
+      ? Object.fromEntries(normalizedEntries)
+      : undefined;
   }
 
   return value;
@@ -86,7 +96,10 @@ function toYaml(value: unknown, indent = 0): string {
   if (Array.isArray(value)) {
     return value
       .map((item) => {
-        if (Array.isArray(item) || (typeof item === "object" && item !== null)) {
+        if (
+          Array.isArray(item) ||
+          (typeof item === "object" && item !== null)
+        ) {
           return `${prefix}-\n${toYaml(item, indent + 2)}`;
         }
 
@@ -98,7 +111,10 @@ function toYaml(value: unknown, indent = 0): string {
   if (typeof value === "object" && value !== null) {
     return Object.entries(value)
       .map(([key, nestedValue]) => {
-        if (Array.isArray(nestedValue) || (typeof nestedValue === "object" && nestedValue !== null)) {
+        if (
+          Array.isArray(nestedValue) ||
+          (typeof nestedValue === "object" && nestedValue !== null)
+        ) {
           return `${prefix}${key}:\n${toYaml(nestedValue, indent + 2)}`;
         }
 
@@ -110,7 +126,10 @@ function toYaml(value: unknown, indent = 0): string {
   return `${prefix}${formatYamlScalar(value as string | number | boolean)}`;
 }
 
-function createEmbeddingDocument(entityType: EmbeddingEntityType, entity: Record<string, unknown>): Record<string, unknown> {
+function createEmbeddingDocument(
+  entityType: EmbeddingEntityType,
+  entity: Record<string, unknown>,
+): Record<string, unknown> {
   switch (entityType) {
     case "company_card":
       return {
@@ -221,6 +240,14 @@ function createEmbeddingDocument(entityType: EmbeddingEntityType, entity: Record
         notes: entity.notes,
         lineItems: entity.lineItems,
       };
+    case "tax_report":
+      return {
+        entityType,
+        taxReport: entity.taxReport,
+        facts: entity.facts,
+        carryforwards: entity.carryforwards,
+        paymentLinks: entity.paymentLinks,
+      };
     case "task":
       return {
         entityType,
@@ -232,12 +259,21 @@ function createEmbeddingDocument(entityType: EmbeddingEntityType, entity: Record
   }
 }
 
-export function computeEmbeddingText(entityType: EmbeddingEntityType, entity: Record<string, unknown>): string {
-  const normalizedDocument = normalizeEmbeddingValue(createEmbeddingDocument(entityType, entity));
-  return typeof normalizedDocument === "object" && normalizedDocument ? toYaml(normalizedDocument) : "";
+export function computeEmbeddingText(
+  entityType: EmbeddingEntityType,
+  entity: Record<string, unknown>,
+): string {
+  const normalizedDocument = normalizeEmbeddingValue(
+    createEmbeddingDocument(entityType, entity),
+  );
+  return typeof normalizedDocument === "object" && normalizedDocument
+    ? toYaml(normalizedDocument)
+    : "";
 }
 
-export async function createEmbeddingVector(text: string): Promise<{ model: string; vector: number[]; dimensions: number }> {
+export async function createEmbeddingVector(
+  text: string,
+): Promise<{ model: string; vector: number[]; dimensions: number }> {
   try {
     return await createTextEmbedding(text);
   } catch (error) {
@@ -254,7 +290,10 @@ export async function createEmbeddingVector(text: string): Promise<{ model: stri
 }
 
 export function isBenignEmbeddingSyncError(error: unknown): boolean {
-  return error instanceof TypeError && error.message.includes("database connection is not open");
+  return (
+    error instanceof TypeError &&
+    error.message.includes("database connection is not open")
+  );
 }
 
 function assertEmbeddingDimensions(vector: number[]): void {
@@ -274,11 +313,17 @@ function replaceVectorRow(rowid: number, embeddingJson: string): void {
   const sqlite = getDatabase();
   sqlite.prepare("DELETE FROM vec_embeddings WHERE rowid = ?").run(rowid);
   sqlite
-    .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)")
+    .prepare(
+      "INSERT INTO vec_embeddings(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)",
+    )
     .run(rowid, embeddingJson);
 }
 
-export async function upsertEmbedding(entityType: EmbeddingEntityType, entityId: string, text: string): Promise<void> {
+export async function upsertEmbedding(
+  entityType: EmbeddingEntityType,
+  entityId: string,
+  text: string,
+): Promise<void> {
   const contentHash = hashEmbeddingContent(text);
   const db = getOrm();
   const sqlite = getDatabase();
@@ -288,7 +333,12 @@ export async function upsertEmbedding(entityType: EmbeddingEntityType, entityId:
     db
       .select()
       .from(entityEmbeddings)
-      .where(and(eq(entityEmbeddings.entityType, entityType), eq(entityEmbeddings.entityId, entityId)))
+      .where(
+        and(
+          eq(entityEmbeddings.entityType, entityType),
+          eq(entityEmbeddings.entityId, entityId),
+        ),
+      )
       .get();
   let existing = getExisting();
 
@@ -340,11 +390,16 @@ export async function upsertEmbedding(entityType: EmbeddingEntityType, entityId:
 
     if (insertedRow) {
       sqlite
-        .prepare("INSERT INTO vec_embeddings(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)")
+        .prepare(
+          "INSERT INTO vec_embeddings(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)",
+        )
         .run(insertedRow.rowid, embeddingJson);
     }
   } catch (error) {
-    if (!(error instanceof Error) || !String((error as { code?: string }).code).includes("SQLITE_CONSTRAINT")) {
+    if (
+      !(error instanceof Error) ||
+      !String((error as { code?: string }).code).includes("SQLITE_CONSTRAINT")
+    ) {
       throw error;
     }
 
@@ -393,7 +448,10 @@ export async function findSimilar(
     return rows
       .map((row) => ({
         entityId: row.entityId,
-        distance: cosineDistance(queryEmbedding, JSON.parse(row.embedding) as number[]),
+        distance: cosineDistance(
+          queryEmbedding,
+          JSON.parse(row.embedding) as number[],
+        ),
       }))
       .sort((left, right) => left.distance - right.distance)
       .slice(0, limit);
@@ -416,9 +474,9 @@ export async function findSimilar(
       `,
     )
     .all(JSON.stringify(queryEmbedding), limit, entityType) as Array<{
-      entityId: string;
-      distance: number;
-    }>;
+    entityId: string;
+    distance: number;
+  }>;
 
   return rows;
 }

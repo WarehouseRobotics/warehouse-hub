@@ -40,7 +40,12 @@ export const taxReportPaymentStatusSchema = z.enum([
   "unknown",
 ]);
 
-export const taxPeriodGranularitySchema = z.enum(["month", "quarter", "year", "custom"]);
+export const taxPeriodGranularitySchema = z.enum([
+  "month",
+  "quarter",
+  "year",
+  "custom",
+]);
 export const taxConfidenceSchema = z.enum(["low", "medium", "high"]);
 export const currencyCodeSchema = z.string().regex(/^[A-Z]{3}$/);
 
@@ -89,7 +94,11 @@ export const taxCarryforwardStatusSchema = z.enum([
   "needs_review",
 ]);
 
-export const taxReportPaymentLinkStatusSchema = z.enum(["suggested", "confirmed", "rejected"]);
+export const taxReportPaymentLinkStatusSchema = z.enum([
+  "suggested",
+  "confirmed",
+  "rejected",
+]);
 
 export const taxReportSchema = z
   .object({
@@ -198,6 +207,19 @@ export const taxReportFactInputSchema = taxReportFactSchema
   })
   .strict();
 
+export const taxReportFactCreateInputSchema = taxReportFactSchema
+  .omit({
+    taxReportFactId: true,
+    taxReportId: true,
+    countryCode: true,
+    formCode: true,
+    createdAt: true,
+  })
+  .extend({
+    confidence: taxConfidenceSchema.default("medium"),
+  })
+  .strict();
+
 export const taxCarryforwardSchema = z
   .object({
     taxCarryforwardId: z.string().min(1),
@@ -227,6 +249,26 @@ export const taxCarryforwardInputSchema = taxCarryforwardSchema
   .omit({
     taxCarryforwardId: true,
     slug: true,
+    createdAt: true,
+    updatedAt: true,
+    deletedAt: true,
+  })
+  .extend({
+    status: taxCarryforwardStatusSchema.default("active"),
+  })
+  .strict();
+
+export const taxCarryforwardCreateInputSchema = taxCarryforwardSchema
+  .omit({
+    taxCarryforwardId: true,
+    slug: true,
+    companyCardId: true,
+    countryCode: true,
+    jurisdiction: true,
+    taxKind: true,
+    originTaxReportId: true,
+    originFiscalYear: true,
+    originPeriodLabel: true,
     createdAt: true,
     updatedAt: true,
     deletedAt: true,
@@ -270,18 +312,40 @@ export const taxReportPaymentLinkInputSchema = taxReportPaymentLinkSchema
   })
   .strict();
 
+export const taxReportCreateRequestSchema = taxReportInputSchema
+  .extend({
+    facts: z.array(taxReportFactCreateInputSchema).default([]),
+    carryforwards: z.array(taxCarryforwardCreateInputSchema).default([]),
+  })
+  .strict();
+
 export type TaxKind = z.infer<typeof taxKindSchema>;
 export type TaxReportStatus = z.infer<typeof taxReportStatusSchema>;
 export type TaxReportResult = z.infer<typeof taxReportResultSchema>;
-export type TaxReportPaymentStatus = z.infer<typeof taxReportPaymentStatusSchema>;
+export type TaxReportPaymentStatus = z.infer<
+  typeof taxReportPaymentStatusSchema
+>;
 export type TaxPeriodGranularity = z.infer<typeof taxPeriodGranularitySchema>;
 export type TaxConfidence = z.infer<typeof taxConfidenceSchema>;
 export type TaxReport = z.infer<typeof taxReportSchema>;
 export type TaxReportInput = z.infer<typeof taxReportInputSchema>;
-export type TaxReportFingerprintInput = z.infer<typeof taxReportFingerprintInputSchema>;
+export type TaxReportCreateRequest = z.infer<
+  typeof taxReportCreateRequestSchema
+>;
+export type TaxReportFingerprintInput = z.infer<
+  typeof taxReportFingerprintInputSchema
+>;
 export type TaxReportFact = z.infer<typeof taxReportFactSchema>;
 export type TaxReportFactInput = z.infer<typeof taxReportFactInputSchema>;
+export type TaxReportFactCreateInput = z.infer<
+  typeof taxReportFactCreateInputSchema
+>;
 export type TaxCarryforward = z.infer<typeof taxCarryforwardSchema>;
 export type TaxCarryforwardInput = z.infer<typeof taxCarryforwardInputSchema>;
+export type TaxCarryforwardCreateInput = z.infer<
+  typeof taxCarryforwardCreateInputSchema
+>;
 export type TaxReportPaymentLink = z.infer<typeof taxReportPaymentLinkSchema>;
-export type TaxReportPaymentLinkInput = z.infer<typeof taxReportPaymentLinkInputSchema>;
+export type TaxReportPaymentLinkInput = z.infer<
+  typeof taxReportPaymentLinkInputSchema
+>;

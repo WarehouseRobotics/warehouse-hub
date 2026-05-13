@@ -1,4 +1,4 @@
-import { eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { initializeDatabase, getDatabase, getOrm } from "../db/connection.js";
 import {
@@ -11,8 +11,16 @@ import {
   payrolls,
   salesInvoices,
   tasks,
+  taxCarryforwards,
+  taxReportFacts,
+  taxReportPaymentLinks,
+  taxReports,
 } from "../db/schema/index.js";
-import { type EmbeddingEntityType, computeEmbeddingText, upsertEmbedding } from "../lib/embeddings.js";
+import {
+  type EmbeddingEntityType,
+  computeEmbeddingText,
+  upsertEmbedding,
+} from "../lib/embeddings.js";
 import { logger } from "../lib/logger.js";
 
 type RegenerationStats = {
@@ -29,6 +37,7 @@ const SUPPORTED_ENTITY_TYPES: readonly EmbeddingEntityType[] = [
   "expense_invoice",
   "payroll",
   "sales_invoice",
+  "tax_report",
   "task",
 ];
 
@@ -42,8 +51,12 @@ function deleteEmbeddings(entityType: EmbeddingEntityType): number {
     .prepare("SELECT rowid FROM entity_embeddings WHERE entity_type = ?")
     .all(entityType) as Array<{ rowid: number }>;
 
-  const deleteVectorRow = sqlite.prepare("DELETE FROM vec_embeddings WHERE rowid = ?");
-  const deleteEmbeddingRow = sqlite.prepare("DELETE FROM entity_embeddings WHERE entity_type = ?");
+  const deleteVectorRow = sqlite.prepare(
+    "DELETE FROM vec_embeddings WHERE rowid = ?",
+  );
+  const deleteEmbeddingRow = sqlite.prepare(
+    "DELETE FROM entity_embeddings WHERE entity_type = ?",
+  );
 
   const transaction = sqlite.transaction(() => {
     for (const row of rows) {
@@ -57,7 +70,11 @@ function deleteEmbeddings(entityType: EmbeddingEntityType): number {
 }
 
 async function regenerateCompanyCardEmbeddings(): Promise<number> {
-  const rows = getOrm().select().from(companyCard).where(isNull(companyCard.deletedAt)).all();
+  const rows = getOrm()
+    .select()
+    .from(companyCard)
+    .where(isNull(companyCard.deletedAt))
+    .all();
 
   for (const row of rows) {
     await upsertEmbedding(
@@ -78,7 +95,11 @@ async function regenerateCompanyCardEmbeddings(): Promise<number> {
 }
 
 async function regenerateContactEmbeddings(): Promise<number> {
-  const rows = getOrm().select().from(contacts).where(isNull(contacts.deletedAt)).all();
+  const rows = getOrm()
+    .select()
+    .from(contacts)
+    .where(isNull(contacts.deletedAt))
+    .all();
 
   for (const row of rows) {
     await upsertEmbedding(
@@ -99,7 +120,11 @@ async function regenerateContactEmbeddings(): Promise<number> {
 }
 
 async function regenerateDocumentEmbeddings(): Promise<number> {
-  const rows = getOrm().select().from(documents).where(isNull(documents.deletedAt)).all();
+  const rows = getOrm()
+    .select()
+    .from(documents)
+    .where(isNull(documents.deletedAt))
+    .all();
 
   for (const row of rows) {
     await upsertEmbedding(
@@ -119,7 +144,11 @@ async function regenerateDocumentEmbeddings(): Promise<number> {
 }
 
 async function regenerateBookingEmbeddings(): Promise<number> {
-  const rows = getOrm().select().from(bookings).where(isNull(bookings.deletedAt)).all();
+  const rows = getOrm()
+    .select()
+    .from(bookings)
+    .where(isNull(bookings.deletedAt))
+    .all();
 
   for (const row of rows) {
     await upsertEmbedding(
@@ -143,7 +172,11 @@ async function regenerateBookingEmbeddings(): Promise<number> {
 }
 
 async function regenerateDealEmbeddings(): Promise<number> {
-  const rows = getOrm().select().from(deals).where(isNull(deals.deletedAt)).all();
+  const rows = getOrm()
+    .select()
+    .from(deals)
+    .where(isNull(deals.deletedAt))
+    .all();
 
   for (const row of rows) {
     await upsertEmbedding(
@@ -162,10 +195,18 @@ async function regenerateDealEmbeddings(): Promise<number> {
 }
 
 async function regenerateExpenseEmbeddings(): Promise<number> {
-  const rows = getOrm().select().from(expenses).where(isNull(expenses.deletedAt)).all();
+  const rows = getOrm()
+    .select()
+    .from(expenses)
+    .where(isNull(expenses.deletedAt))
+    .all();
 
   for (const row of rows) {
-    const supplier = getOrm().select().from(contacts).where(eq(contacts.id, row.supplierContactId)).get();
+    const supplier = getOrm()
+      .select()
+      .from(contacts)
+      .where(eq(contacts.id, row.supplierContactId))
+      .get();
 
     await upsertEmbedding(
       "expense_invoice",
@@ -194,10 +235,18 @@ async function regenerateExpenseEmbeddings(): Promise<number> {
 }
 
 async function regenerateSalesInvoiceEmbeddings(): Promise<number> {
-  const rows = getOrm().select().from(salesInvoices).where(isNull(salesInvoices.deletedAt)).all();
+  const rows = getOrm()
+    .select()
+    .from(salesInvoices)
+    .where(isNull(salesInvoices.deletedAt))
+    .all();
 
   for (const row of rows) {
-    const customer = getOrm().select().from(contacts).where(eq(contacts.id, row.customerContactId)).get();
+    const customer = getOrm()
+      .select()
+      .from(contacts)
+      .where(eq(contacts.id, row.customerContactId))
+      .get();
 
     await upsertEmbedding(
       "sales_invoice",
@@ -221,10 +270,18 @@ async function regenerateSalesInvoiceEmbeddings(): Promise<number> {
 }
 
 async function regeneratePayrollEmbeddings(): Promise<number> {
-  const rows = getOrm().select().from(payrolls).where(isNull(payrolls.deletedAt)).all();
+  const rows = getOrm()
+    .select()
+    .from(payrolls)
+    .where(isNull(payrolls.deletedAt))
+    .all();
 
   for (const row of rows) {
-    const employee = getOrm().select().from(contacts).where(eq(contacts.id, row.employeeContactId)).get();
+    const employee = getOrm()
+      .select()
+      .from(contacts)
+      .where(eq(contacts.id, row.employeeContactId))
+      .get();
 
     await upsertEmbedding(
       "payroll",
@@ -257,7 +314,11 @@ async function regeneratePayrollEmbeddings(): Promise<number> {
 }
 
 async function regenerateTaskEmbeddings(): Promise<number> {
-  const rows = getOrm().select().from(tasks).where(isNull(tasks.deletedAt)).all();
+  const rows = getOrm()
+    .select()
+    .from(tasks)
+    .where(isNull(tasks.deletedAt))
+    .all();
 
   for (const row of rows) {
     await upsertEmbedding(
@@ -275,17 +336,97 @@ async function regenerateTaskEmbeddings(): Promise<number> {
   return rows.length;
 }
 
-const regenerationHandlers: Record<EmbeddingEntityType, () => Promise<number>> = {
-  company_card: regenerateCompanyCardEmbeddings,
-  contact: regenerateContactEmbeddings,
-  document: regenerateDocumentEmbeddings,
-  booking: regenerateBookingEmbeddings,
-  deal: regenerateDealEmbeddings,
-  expense_invoice: regenerateExpenseEmbeddings,
-  payroll: regeneratePayrollEmbeddings,
-  sales_invoice: regenerateSalesInvoiceEmbeddings,
-  task: regenerateTaskEmbeddings,
-};
+async function regenerateTaxReportEmbeddings(): Promise<number> {
+  const rows = getOrm()
+    .select()
+    .from(taxReports)
+    .where(isNull(taxReports.deletedAt))
+    .all();
+
+  for (const row of rows) {
+    const facts = getOrm()
+      .select()
+      .from(taxReportFacts)
+      .where(eq(taxReportFacts.taxReportId, row.id))
+      .all();
+    const carryforwards = getOrm()
+      .select()
+      .from(taxCarryforwards)
+      .where(
+        and(
+          isNull(taxCarryforwards.deletedAt),
+          eq(taxCarryforwards.originTaxReportId, row.id),
+        ),
+      )
+      .all();
+    const paymentLinks = getOrm()
+      .select()
+      .from(taxReportPaymentLinks)
+      .where(
+        and(
+          isNull(taxReportPaymentLinks.deletedAt),
+          eq(taxReportPaymentLinks.taxReportId, row.id),
+        ),
+      )
+      .all();
+
+    await upsertEmbedding(
+      "tax_report",
+      row.id,
+      computeEmbeddingText("tax_report", {
+        taxReport: {
+          countryCode: row.countryCode,
+          taxKind: row.taxKind,
+          formCode: row.formCode,
+          formName: row.formName,
+          formVersion: row.formVersion,
+          fiscalYear: row.fiscalYear,
+          periodLabel: row.periodLabel,
+          periodStart: row.periodStart,
+          periodEnd: row.periodEnd,
+          taxpayerTaxId: row.taxpayerTaxId,
+          authoritySubmissionId: row.authoritySubmissionId,
+          authorityReceiptNumber: row.authorityReceiptNumber,
+          status: row.status,
+          result: row.result,
+          paymentStatus: row.paymentStatus,
+          currency: row.currency,
+          taxableBase: row.taxableBase,
+          taxDue: row.taxDue,
+          taxDeductible: row.taxDeductible,
+          resultAmount: row.resultAmount,
+          retainedAmount: row.retainedAmount,
+          profitOrLoss: row.profitOrLoss,
+          warnings: row.warningsJson
+            ? (JSON.parse(row.warningsJson) as unknown[])
+            : [],
+          extractedData: row.extractedDataJson
+            ? (JSON.parse(row.extractedDataJson) as unknown)
+            : null,
+        },
+        facts,
+        carryforwards,
+        paymentLinks,
+      }),
+    );
+  }
+
+  return rows.length;
+}
+
+const regenerationHandlers: Record<EmbeddingEntityType, () => Promise<number>> =
+  {
+    company_card: regenerateCompanyCardEmbeddings,
+    contact: regenerateContactEmbeddings,
+    document: regenerateDocumentEmbeddings,
+    booking: regenerateBookingEmbeddings,
+    deal: regenerateDealEmbeddings,
+    expense_invoice: regenerateExpenseEmbeddings,
+    payroll: regeneratePayrollEmbeddings,
+    sales_invoice: regenerateSalesInvoiceEmbeddings,
+    tax_report: regenerateTaxReportEmbeddings,
+    task: regenerateTaskEmbeddings,
+  };
 
 export async function regenerateEmbeddingsForAllEntities(): Promise<{
   ok: true;
