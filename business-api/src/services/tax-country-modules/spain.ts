@@ -15,13 +15,36 @@ import type {
 } from "@warehouse-hub/business-schemas";
 
 const MODELO_303_FORM_NAME = "Modelo 303";
+const MONEY_PATTERN =
+  "-?\\d{1,3}(?:\\.\\d{3})*,\\d{2}|-?\\d+,\\d{2}|-?\\d+\\.\\d{2}";
+const MODELO_303_LAYOUT_FIELD_CODES = [
+  "07",
+  "09",
+  "27",
+  "28",
+  "45",
+  "64",
+  "66",
+  "69",
+  "71",
+  "72",
+  "73",
+  "78",
+  "87",
+  "110",
+];
 const FIELD_LABELS: Record<string, string> = {
   "07": "Base imponible IVA general",
   "09": "Cuota devengada IVA general",
-  "28": "Total cuota devengada",
+  "27": "Total cuota devengada",
+  "28": "Base IVA deducible operaciones interiores corrientes",
   "45": "Total IVA deducible",
+  "64": "Suma de resultados",
+  "66": "Atribuible a la Administracion del Estado",
+  "69": "Resultado de la autoliquidacion",
   "71": "Resultado de la liquidacion",
   "72": "Importe a compensar",
+  "73": "Importe a devolver",
   "78": "Cuotas pendientes de compensacion aplicadas",
   "87": "Cuotas a compensar pendientes",
   "110": "Cuotas a compensar de periodos anteriores",
@@ -80,6 +103,7 @@ function parseDateValue(value: string | undefined): string | undefined {
 function parseFiscalYear(text: string): number | undefined {
   const year = firstMatch(text, [
     /(?:fiscal\s+year|tax\s+year|ejercicio|ano|año)\s*[:=\-]\s*(20\d{2})/im,
+    /(?:fiscal\s+year|tax\s+year|ejercicio|ano|año)\s+(20\d{2})/im,
     /\b(20\d{2})\s*[-/]\s*(?:q[1-4]|[1-4]t)\b/im,
   ]);
   return year ? Number.parseInt(year, 10) : undefined;
@@ -114,7 +138,7 @@ function parsePeriod(
     providedPeriodLabel ??
     firstMatch(text, [
       /period\s+label\s*[:=\-]\s*([0-9]{4}-Q[1-4])/im,
-      /periodo\s*[:=\-]\s*([0-9]{4}-Q[1-4])/im,
+      /per[ií]odo\s*[:=\-]\s*([0-9]{4}-Q[1-4])/im,
     ]);
   if (explicitLabel) {
     const match = explicitLabel.match(/^(20\d{2})-Q([1-4])$/i);
@@ -134,7 +158,7 @@ function parsePeriod(
   }
 
   const quarterMatch = text.match(
-    /(?:period|periodo|trimestre)\s*[:=\-]\s*(?:q([1-4])|([1-4])t|([1-4]))/im,
+    /(?:period|per[ií]odo|trimestre)\s*[:=\-]?\s*(?:q([1-4])|([1-4])t|([1-4]))/im,
   );
   const quarterValue =
     quarterMatch?.[1] ?? quarterMatch?.[2] ?? quarterMatch?.[3];
@@ -153,7 +177,7 @@ function parsePeriod(
   }
 
   const monthMatch = firstMatch(text, [
-    /(?:period|periodo|mes)\s*[:=\-]\s*(0?[1-9]|1[0-2])/im,
+    /(?:period|per[ií]odo|mes)\s*[:=\-]\s*(0?[1-9]|1[0-2])/im,
   ]);
   if (monthMatch && fiscalYear) {
     const boundaries = monthBoundaries(fiscalYear, Number.parseInt(monthMatch, 10));
@@ -182,7 +206,61 @@ function parseCasillas(text: string) {
     fields.set(fieldCode, match[2]);
   }
 
+  for (const fieldCode of MODELO_303_LAYOUT_FIELD_CODES) {
+    if (fields.has(fieldCode)) {
+      continue;
+    }
+
+    // Same-line match only: `[^\S\n]` is whitespace excluding newline. Without
+    // this constraint, an empty casilla would silently inherit the next line's
+    // number when OCR collapses a column.
+    const layoutPattern = new RegExp(
+      `\\b${fieldCode}\\b[^\\S\\n]+(?:[A-Z][^\\S\\n]+)?(${MONEY_PATTERN})\\b`,
+      "im",
+    );
+    const match = text.match(layoutPattern);
+    if (match?.[1]) {
+      fields.set(fieldCode, match[1]);
+    }
+  }
+
   return fields;
+}
+
+// AEAT NIF/CIF: 8 digits + letter, letter + 7 digits + letter/digit,
+// or letter + 8 digits. Permit common separators stripped before validation.
+const SPANISH_TAX_ID_FORMAT = /^[A-Z]?\d{7,8}[A-Z0-9]?$/i;
+
+function parseTaxpayerTaxId(text: string): string | undefined {
+  const candidates = [
+    /Identificaci[oó]n[\s\S]{0,150}?\bNIF\b[^\n]*\n\s*([A-Z0-9._/-]+)/im,
+    /^\s*NIF\s*[:=\-]\s*([A-Z0-9._/-]+)/im,
+    /^\s*CIF\s*[:=\-]\s*([A-Z0-9._/-]+)/im,
+  ];
+  for (const pattern of candidates) {
+    const value = firstMatch(text, [pattern]);
+    if (value && SPANISH_TAX_ID_FORMAT.test(value.replace(/[._/-]/g, ""))) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function hasNoActivityMarker(text: string): boolean {
+  return [
+    /sin\s+actividad\s*[:=\-]\s*(?:x|true|s[ií]|yes|1)\b/im,
+    /no[-\s]?activity\s*[:=\-]\s*(?:x|true|yes|1)\b/im,
+    /(?:^|\n)\s*(?:x|X|☒)\s+sin\s+actividad\b/im,
+    /sin\s+actividad\s*(?:\[[xX]\]|\(x\))/im,
+  ].some((pattern) => pattern.test(text));
+}
+
+function hasPositiveCasilla(
+  casillas: Map<string, string>,
+  fieldCode: string,
+): boolean {
+  const value = optionalMoney(casillas.get(fieldCode));
+  return isPositive(value);
 }
 
 function buildFact(
@@ -222,8 +300,9 @@ function buildFact(
 function inferResult(
   resultAmount: string | null | undefined,
   text: string,
+  casillas: Map<string, string>,
 ): NormalizedTaxReportDraft["result"] {
-  if (/sin\s+actividad|no[-\s]?activity/i.test(text)) {
+  if (hasNoActivityMarker(text)) {
     return "no_activity";
   }
 
@@ -235,7 +314,10 @@ function inferResult(
     return "payable";
   }
 
-  if (/devolver|refund/i.test(text)) {
+  if (
+    hasPositiveCasilla(casillas, "73") ||
+    (isNegative(resultAmount) && /\b(?:a\s+devolver|devolver|refund)\b/i.test(text))
+  ) {
     return "refund_requested";
   }
 
@@ -348,18 +430,26 @@ export const spainTaxCountryModule: TaxCountryModule = {
     );
     const resultAmount =
       optionalMoney(casillas.get("71")) ??
+      optionalMoney(
+        firstMatch(text, [
+          new RegExp(`Importe:\\s*I\\s*(${MONEY_PATTERN})`, "im"),
+        ]),
+      ) ??
       optionalMoney(firstMatch(text, [/result(?:\s+amount)?\s*[:=\-]\s*(-?\d[\d.,]*)/im]));
-    const result = overrides?.result ?? inferResult(resultAmount, text);
+    const result = overrides?.result ?? inferResult(resultAmount, text, casillas);
     const authoritySubmissionId =
       overrides?.authoritySubmissionId ??
       firstMatch(text, [
         /(?:submission|presentacion|presentación)\s*(?:id|number|numero|número)?\s*[:=\-]\s*([A-Z0-9._/-]+)/im,
+        /Expediente\/Referencia[^\n:]*:\s*([A-Z0-9._/-]+)/im,
+        /C[oó]digo\s+Seguro\s+de\s+Verificaci[oó]n\s*:\s*([A-Z0-9._/-]+)/im,
       ]) ??
       null;
     const authorityReceiptNumber =
       overrides?.authorityReceiptNumber ??
       firstMatch(text, [
         /(?:receipt|justificante|nrc)\s*(?:number|numero|número)?\s*[:=\-]\s*([A-Z0-9._/-]+)/im,
+        /N[uú]mero\s+de\s+justificante\s*:\s*([A-Z0-9._/-]+)/im,
       ]) ??
       null;
 
@@ -379,7 +469,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
       optionalMoney(casillas.get("07"));
     const taxDue =
       optionalMoney(firstMatch(text, [/tax\s+due\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
-      optionalMoney(casillas.get("28")) ??
+      optionalMoney(casillas.get("27")) ??
       optionalMoney(casillas.get("09"));
     const taxDeductible =
       optionalMoney(firstMatch(text, [/tax\s+deductible\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
@@ -396,14 +486,17 @@ export const spainTaxCountryModule: TaxCountryModule = {
       periodEnd: parsedPeriod.periodEnd,
       taxpayerTaxId:
         overrides?.taxpayerTaxId ??
-        firstMatch(text, [/(?:taxpayer|nif|cif)\s*(?:tax\s*)?(?:id)?\s*[:=\-]\s*([A-Z0-9._/-]+)/im]) ??
+        parseTaxpayerTaxId(text) ??
         input.companyTaxId ??
         null,
       authoritySubmissionId,
       authorityReceiptNumber,
       filedAt:
         overrides?.filedAt ??
-        firstMatch(text, [/(?:filed\s+at|fecha\s+presentacion|fecha\s+presentación)\s*[:=\-]\s*([^\n]+)/im]) ??
+        firstMatch(text, [
+          /(?:filed\s+at|fecha\s+presentacion|fecha\s+presentación)\s*[:=\-]\s*([^\n]+)/im,
+          /Presentaci[oó]n\s+realizada\s+el\s*:\s*([^\n]+)/im,
+        ]) ??
         null,
       dueDate:
         overrides?.dueDate ??
@@ -483,38 +576,60 @@ export const spainTaxCountryModule: TaxCountryModule = {
   },
 
   buildCarryforwards(input: NormalizedTaxReportDraft) {
+    if (!["compensate", "refund_requested"].includes(input.result)) {
+      return [];
+    }
+
     const extracted = input.extractedData as
       | { casillas?: Record<string, string> }
       | null
       | undefined;
     const casillas = extracted?.casillas ?? {};
-    const compensationCasilla = casillas["87"] ?? casillas["72"];
-    const creditSource = compensationCasilla
-      ? normalizeMoneyString(compensationCasilla)
-      : input.result === "compensate"
-        ? input.resultAmount
-        : null;
+    const status: TaxCarryforwardCreateInput["status"] =
+      input.status === "needs_review" ? "needs_review" : "active";
+    const carryforwards: TaxCarryforwardCreateInput[] = [];
 
-    if (!creditSource) {
-      return [];
-    }
-
-    const remainingAmount = absoluteMoney(creditSource);
-    if (new Decimal(remainingAmount).eq(0)) {
-      return [];
-    }
-
-    return [
-      {
+    // Casilla 87: prior-period VAT credits remaining after this return.
+    // Persists across return types (compensate or refund) because unused
+    // prior credits stay on the books regardless of the current period's
+    // refund/compensation choice.
+    const priorRemaining = optionalMoney(casillas["87"]);
+    if (isPositive(priorRemaining) && priorRemaining) {
+      const amount = absoluteMoney(priorRemaining);
+      carryforwards.push({
         kind: "vat_credit",
         currency: input.currency,
-        originalAmount: remainingAmount,
+        originalAmount: amount,
         usedAmount: "0.00",
-        remainingAmount,
+        remainingAmount: amount,
         expiresAt: null,
-        status: input.status === "needs_review" ? "needs_review" : "active",
-        notes: `${MODELO_303_FORM_NAME} compensation balance`,
-      } satisfies TaxCarryforwardCreateInput,
-    ];
+        status,
+        notes: `${MODELO_303_FORM_NAME} prior-period VAT credit remaining (casilla 87)`,
+      });
+    }
+
+    // Casilla 72: new credit from this period's negative result being
+    // carried forward (compensate only — refund_requested moves the credit
+    // to the refund channel instead). Requires explicit casilla 72 to
+    // avoid double-counting when casilla 87 already represents the same
+    // balance and casilla 72 is absent.
+    if (input.result === "compensate") {
+      const newCredit = optionalMoney(casillas["72"]);
+      if (isPositive(newCredit) && newCredit) {
+        const amount = absoluteMoney(newCredit);
+        carryforwards.push({
+          kind: "vat_credit",
+          currency: input.currency,
+          originalAmount: amount,
+          usedAmount: "0.00",
+          remainingAmount: amount,
+          expiresAt: null,
+          status,
+          notes: `${MODELO_303_FORM_NAME} current-period VAT credit to compensate (casilla 72)`,
+        });
+      }
+    }
+
+    return carryforwards;
   },
 };

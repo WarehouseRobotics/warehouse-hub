@@ -4,6 +4,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { AppError } from "../src/lib/errors.js";
+import { realAeatModelo303Text } from "./helpers/spain-fixtures.js";
 
 const testDataDir = path.resolve(process.cwd(), "test-data");
 
@@ -131,6 +132,79 @@ describe("tax report ingestion service", () => {
     ]);
     expect(getDocumentMeta(ingested.document.documentId).ocrText).toContain(
       "Modelo 303",
+    );
+  });
+
+  it("persists Modelo 303 AEAT-layout facts and VAT credit carryforwards", async () => {
+    const company = await createCompanyCard();
+    const { ingestTaxReport } =
+      await import("../src/services/tax-report-ingestion.js");
+
+    const ingested = await ingestTaxReport(
+      uploadFile(realAeatModelo303Text, "modelo_303_T3_2025.pdf"),
+      {
+        kind: "tax_declaration",
+        companyCardId: company.companyId,
+        countryCode: "ES",
+        source: "accountant_upload",
+      },
+    );
+
+    expect(ingested.taxReport).toEqual(
+      expect.objectContaining({
+        countryCode: "ES",
+        formCode: "303",
+        fiscalYear: 2025,
+        periodLabel: "2025-Q3",
+        taxpayerTaxId: "B02672152",
+        authorityReceiptNumber: "3036662516571",
+        result: "compensate",
+        resultAmount: "-169.41",
+        paymentStatus: "not_required",
+      }),
+    );
+    expect(ingested.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldCode: "71",
+          fieldSystem: "casilla",
+          normalizedValue: "-169.41",
+        }),
+        expect.objectContaining({
+          fieldCode: "72",
+          fieldSystem: "casilla",
+          normalizedValue: "169.41",
+        }),
+        expect.objectContaining({
+          fieldCode: "87",
+          fieldSystem: "casilla",
+          normalizedValue: "7648.17",
+        }),
+        expect.objectContaining({
+          fieldCode: "110",
+          fieldSystem: "casilla",
+          normalizedValue: "7648.17",
+        }),
+      ]),
+    );
+    expect(ingested.carryforwards).toHaveLength(2);
+    expect(ingested.carryforwards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "vat_credit",
+          originalAmount: "7648.17",
+          remainingAmount: "7648.17",
+          status: "active",
+          notes: expect.stringContaining("casilla 87"),
+        }),
+        expect.objectContaining({
+          kind: "vat_credit",
+          originalAmount: "169.41",
+          remainingAmount: "169.41",
+          status: "active",
+          notes: expect.stringContaining("casilla 72"),
+        }),
+      ]),
     );
   });
 
