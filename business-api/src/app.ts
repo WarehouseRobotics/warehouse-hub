@@ -1,7 +1,8 @@
 import express from "express";
 
 import { errorHandler } from "./middleware/error-handler.js";
-import { requireApiKey } from "./middleware/auth.js";
+import { auditMiddleware } from "./middleware/audit.js";
+import { requireAuth, requireScope } from "./middleware/auth.js";
 import {
   bankAccountsRouter,
   bankBalanceSnapshotsRouter,
@@ -34,7 +35,10 @@ export function createApp() {
 
   app.use((request, response, next) => {
     response.header("Access-Control-Allow-Origin", "*");
-    response.header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key");
+    response.header(
+      "Access-Control-Allow-Headers",
+      "Authorization, Content-Type, X-Api-Key, X-Request-Id",
+    );
     response.header(
       "Access-Control-Allow-Methods",
       "GET,POST,PATCH,DELETE,OPTIONS",
@@ -54,7 +58,13 @@ export function createApp() {
     response.json({ ok: true });
   });
 
-  app.use("/api/v1", requireApiKey);
+  app.use("/api/v1", requireAuth);
+  app.use("/api/v1", (request, response, next) => {
+    const requiredScope =
+      request.method === "GET" || request.method === "HEAD" ? "read" : "write";
+    requireScope(requiredScope)(request, response, next);
+  });
+  app.use("/api/v1", auditMiddleware);
   app.use("/api/v1/bank-accounts", bankAccountsRouter);
   app.use("/api/v1/bank-transactions", bankTransactionsRouter);
   app.use("/api/v1/bank-balance-snapshots", bankBalanceSnapshotsRouter);
