@@ -693,6 +693,13 @@ describe("auth service layer", () => {
     await expect(
       acceptInvitation(revokedToken ?? "", { displayName: "Revoked" }),
     ).rejects.toThrow(/invalid or expired/i);
+    expect(
+      getOrm()
+        .select()
+        .from(magicLinkTokens)
+        .where(eq(magicLinkTokens.id, revoked.magicLinkTokenId))
+        .get()?.consumedAt,
+    ).toBeNull();
     expect(listPendingInvitations().map((item) => item.invitationId)).toEqual([
       active.invitationId,
     ]);
@@ -770,6 +777,71 @@ describe("auth service layer", () => {
       .where(eq(userInvitations.id, invitation.invitationId))
       .get();
     expect(storedInvitation?.acceptedAt).toEqual(expect.any(String));
+  });
+
+  it("rescinds duplicate pending invitations and accepts only the latest link", async () => {
+    vi.stubEnv("RESEND_API_KEY", "");
+    const { getOrm } = await import("../src/db/connection.js");
+    const { magicLinkTokens, userInvitations } =
+      await import("../src/db/schema/index.js");
+    const { createUser } = await import("../src/services/users.js");
+    const {
+      acceptInvitation,
+      createInvitation,
+      listPendingInvitations,
+    } = await import("../src/services/user-invitations.js");
+
+    const inviter = await createUser({
+      email: "admin@example.com",
+      displayName: "Admin User",
+      role: "admin",
+    });
+    const firstInvitation = await createInvitation({
+      email: "duplicate@example.com",
+      invitedByUserId: inviter.userId,
+      role: "member",
+    });
+    const secondInvitation = await createInvitation({
+      email: " Duplicate@Example.com ",
+      invitedByUserId: inviter.userId,
+      role: "admin",
+    });
+
+    const firstRow = getOrm()
+      .select()
+      .from(userInvitations)
+      .where(eq(userInvitations.id, firstInvitation.invitationId))
+      .get();
+    const firstMagicLinkRow = getOrm()
+      .select()
+      .from(magicLinkTokens)
+      .where(eq(magicLinkTokens.id, firstInvitation.magicLinkTokenId))
+      .get();
+    expect(firstRow?.revokedAt).toEqual(expect.any(String));
+    expect(firstMagicLinkRow?.consumedAt).toEqual(expect.any(String));
+    expect(listPendingInvitations().map((item) => item.invitationId)).toEqual([
+      secondInvitation.invitationId,
+    ]);
+
+    const firstToken = new URL(firstInvitation.acceptUrl).pathname
+      .split("/")
+      .at(-1);
+    const secondToken = new URL(secondInvitation.acceptUrl).pathname
+      .split("/")
+      .at(-1);
+    await expect(
+      acceptInvitation(firstToken ?? "", { displayName: "Stale Link" }),
+    ).rejects.toThrow(/invalid or expired/i);
+    await expect(
+      acceptInvitation(secondToken ?? "", { displayName: "Latest Link" }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        user: expect.objectContaining({
+          email: "duplicate@example.com",
+          role: "admin",
+        }),
+      }),
+    );
   });
 
   it("builds auth email URLs and skips delivery when Resend is unconfigured", async () => {

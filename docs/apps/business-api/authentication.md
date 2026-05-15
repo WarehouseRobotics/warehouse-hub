@@ -170,6 +170,7 @@ Replaces the legacy `requireApiKey` in [src/middleware/auth.ts](../../../busines
 ```ts
 type RequestContext = {
   userId: string | null;
+  user: User | null;
   role: "owner" | "admin" | "member" | null;
   scopes: Array<"read" | "write" | "admin">;
   actorType: "user" | "agent" | "system";

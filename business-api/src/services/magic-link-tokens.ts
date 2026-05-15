@@ -110,7 +110,7 @@ export function createMagicLink(input: MagicLinkInput): CreatedMagicLinkToken {
   };
 }
 
-export function consumeMagicLink(
+export function requireActiveMagicLink(
   rawToken: string,
   purpose: MagicLinkTokenPurpose,
 ): MagicLinkToken {
@@ -134,12 +134,22 @@ export function consumeMagicLink(
     throwInvalidMagicLinkToken();
   }
 
+  return mapMagicLinkToken(record);
+}
+
+export function consumeMagicLink(
+  rawToken: string,
+  purpose: MagicLinkTokenPurpose,
+): MagicLinkToken {
+  const magicLink = requireActiveMagicLink(rawToken, purpose);
+  const now = new Date().toISOString();
+
   const result = getOrm()
     .update(magicLinkTokens)
     .set({ consumedAt: now })
     .where(
       and(
-        eq(magicLinkTokens.id, record.id),
+        eq(magicLinkTokens.id, magicLink.magicLinkTokenId),
         isNull(magicLinkTokens.consumedAt),
       ),
     )
@@ -149,10 +159,10 @@ export function consumeMagicLink(
     throwInvalidMagicLinkToken();
   }
 
-  return mapMagicLinkToken({
-    ...record,
+  return {
+    ...magicLink,
     consumedAt: now,
-  });
+  };
 }
 
 export function expireMagicLinks(

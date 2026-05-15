@@ -42,7 +42,7 @@ publicUsersRouter.post(
   validateBody(acceptInvitationSchema),
   asyncRoute(async (request, response) => {
     const accepted = await acceptInvitation(
-      request.params.token,
+      request.params.token as string,
       {
         displayName: request.body.displayName,
         password: request.body.password,
@@ -85,7 +85,7 @@ usersRouter.post(
 
 usersRouter.delete("/invitations/:id", (request, response, next) => {
   try {
-    const invitation = revokeInvitation(request.params.id);
+    const invitation = revokeInvitation(request.params.id as string);
     response.locals.audit = {
       action: "user.invitation.revoke",
       objectType: "user_invitation",
@@ -106,7 +106,7 @@ usersRouter.patch(
   validateBody(updateUserSchema),
   asyncRoute(async (request, response) => {
     const user = await updateUser(
-      request.params.id,
+      request.params.id as string,
       request.body,
     );
     response.locals.audit = {
@@ -123,7 +123,7 @@ usersRouter.patch(
 
 usersRouter.delete("/:id", (request, response, next) => {
   try {
-    const userId = request.params.id;
+    const userId = request.params.id as string;
     softDeleteUser(userId);
     response.locals.audit = {
       action: "user.delete",

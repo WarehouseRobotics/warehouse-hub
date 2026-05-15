@@ -14,6 +14,7 @@ import {
 } from "../services/magic-link-tokens.js";
 import { revokeSession } from "../services/user-sessions.js";
 import {
+  getUser,
   markUserLoggedIn,
   verifyUserPassword,
   type User,

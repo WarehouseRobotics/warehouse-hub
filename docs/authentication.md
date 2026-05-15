@@ -170,7 +170,7 @@ Routes opt in by setting `res.locals.audit` before responding. The audit middlew
 ```yaml
 components:
   business-api:
-    middleware/auth.ts:        Resolves credential → req.context = {userId, role, scopes, actorType, source}.
+    middleware/auth.ts:        Resolves credential → req.context = {userId, user, role, scopes, actorType, source}.
     middleware/audit.ts:       Writes audit_log row from req.context + res.locals.audit.
     services/users.ts:         User CRUD + bcrypt password hashing.
     services/user-sessions.ts: Cookie sessions (sess_*).

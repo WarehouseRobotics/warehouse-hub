@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { getDatabase, getOrm } from "../db/connection.js";
 import {
@@ -9,7 +9,11 @@ import {
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
 import { hashPassword } from "../lib/passwords.js";
-import { createMagicLink, consumeMagicLink } from "./magic-link-tokens.js";
+import {
+  createMagicLink,
+  consumeMagicLink,
+  requireActiveMagicLink,
+} from "./magic-link-tokens.js";
 import { getUserRecordByIdOrEmail, requireUserRecord } from "./shared.js";
 import { createSession, type CreatedUserSession } from "./user-sessions.js";
 import { createUserWithPasswordHash, type User } from "./users.js";
@@ -114,6 +118,51 @@ function getInvitationById(invitationId: string) {
     .get();
 }
 
+function revokePendingInvitationsForEmail(email: string): void {
+  const pendingInvitations = getOrm()
+    .select()
+    .from(userInvitations)
+    .where(
+      and(
+        eq(userInvitations.email, email),
+        isNull(userInvitations.acceptedAt),
+        isNull(userInvitations.revokedAt),
+      ),
+    )
+    .all();
+
+  if (pendingInvitations.length === 0) {
+    return;
+  }
+
+  const revokedAt = new Date().toISOString();
+  getOrm()
+    .update(userInvitations)
+    .set({ revokedAt })
+    .where(
+      and(
+        eq(userInvitations.email, email),
+        isNull(userInvitations.acceptedAt),
+        isNull(userInvitations.revokedAt),
+      ),
+    )
+    .run();
+
+  getOrm()
+    .update(magicLinkTokens)
+    .set({ consumedAt: revokedAt })
+    .where(
+      and(
+        inArray(
+          magicLinkTokens.id,
+          pendingInvitations.map((invitation) => invitation.magicLinkTokenId),
+        ),
+        isNull(magicLinkTokens.consumedAt),
+      ),
+    )
+    .run();
+}
+
 export async function createInvitation(input: {
   email: string;
   invitedByUserId: string;
@@ -129,23 +178,29 @@ export async function createInvitation(input: {
     });
   }
 
-  const magicLink = createMagicLink({
-    email,
-    purpose: "invite_accept",
-  });
-  const createdAt = new Date().toISOString();
-  const record = {
-    id: createPrefixedId("inv_"),
-    email,
-    invitedByUserId: invitedBy.id,
-    role: input.role,
-    magicLinkTokenId: magicLink.magicLinkTokenId,
-    acceptedAt: null,
-    revokedAt: null,
-    createdAt,
-  };
+  const createTransaction = getDatabase().transaction(() => {
+    revokePendingInvitationsForEmail(email);
+    const magicLink = createMagicLink({
+      email,
+      purpose: "invite_accept",
+    });
+    const createdAt = new Date().toISOString();
+    const record = {
+      id: createPrefixedId("inv_"),
+      email,
+      invitedByUserId: invitedBy.id,
+      role: input.role,
+      magicLinkTokenId: magicLink.magicLinkTokenId,
+      acceptedAt: null,
+      revokedAt: null,
+      createdAt,
+    };
 
-  getOrm().insert(userInvitations).values(record).run();
+    getOrm().insert(userInvitations).values(record).run();
+
+    return { magicLink, record };
+  });
+  const { magicLink, record } = createTransaction();
 
   await userInviteEmail({
     to: email,
@@ -175,7 +230,7 @@ export async function acceptInvitation(
       : await hashPassword(input.password);
 
   const acceptTransaction = getDatabase().transaction(() => {
-    const magicLink = consumeMagicLink(token, "invite_accept");
+    const magicLink = requireActiveMagicLink(token, "invite_accept");
     const invitation = getInvitationByMagicLinkTokenId(
       magicLink.magicLinkTokenId,
     );
@@ -185,6 +240,8 @@ export async function acceptInvitation(
     if (getUserRecordByIdOrEmail(invitation.email)) {
       throwUserAlreadyExists(invitation.email);
     }
+
+    consumeMagicLink(token, "invite_accept");
 
     const user = createUserWithPasswordHash({
       email: invitation.email,

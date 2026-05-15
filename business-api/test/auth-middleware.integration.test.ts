@@ -129,6 +129,25 @@ describe("auth middleware", () => {
     expect(response.status).toBe(401);
   });
 
+  it("falls back to a valid legacy X-Api-Key when a bearer PAT is invalid", async () => {
+    await resetTestModules();
+    const { createApp } = await import("../src/app.js");
+    const baseUrl = await listen(createApp());
+
+    const fallbackResponse = await fetch(`${baseUrl}/api/v1/company-card`, {
+      headers: {
+        authorization: "Bearer wpat_not-a-real-token",
+        "x-api-key": "test-api-key",
+      },
+    });
+    expect(fallbackResponse.status).toBe(404);
+
+    const invalidPatResponse = await fetch(`${baseUrl}/api/v1/company-card`, {
+      headers: { authorization: "Bearer wpat_not-a-real-token" },
+    });
+    expect(invalidPatResponse.status).toBe(401);
+  });
+
   it("resolves session cookies into admin-scoped user context", async () => {
     const baseUrl = await createMiddlewareApp(({ app, requireScope }) => {
       app.get("/context", requireScope("admin"), (request, response) => {
