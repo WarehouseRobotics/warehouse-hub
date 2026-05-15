@@ -77,10 +77,13 @@ async function createMiddlewareApp(
   const { requireAuth, requireRole, requireScope } = await import(
     "../src/middleware/auth.js"
   );
-  const { auditMiddleware } = await import("../src/middleware/audit.js");
+  const { auditMiddleware, requestIdMiddleware } = await import(
+    "../src/middleware/audit.js"
+  );
   const { errorHandler } = await import("../src/middleware/error-handler.js");
   const app = express();
   app.use(express.json());
+  app.use(requestIdMiddleware);
   app.use(requireAuth);
   app.use(auditMiddleware);
   routes({ app, requireScope, requireRole });
@@ -134,7 +137,7 @@ describe("auth middleware", () => {
     });
     const { createUser } = await import("../src/services/users.js");
     const { createSession } = await import("../src/services/user-sessions.js");
-    const user = createUser({
+    const user = await createUser({
       email: "owner@example.com",
       displayName: "Owner",
       password: "secret",
@@ -171,7 +174,7 @@ describe("auth middleware", () => {
     const { createToken } = await import(
       "../src/services/personal-access-tokens.js"
     );
-    const user = createUser({
+    const user = await createUser({
       email: "agent-owner@example.com",
       displayName: "Agent Owner",
       role: "admin",
@@ -203,6 +206,44 @@ describe("auth middleware", () => {
     expect(postResponse.status).toBe(200);
   });
 
+  it("falls back to PAT auth when a stale session cookie is also present", async () => {
+    const baseUrl = await createMiddlewareApp(({ app, requireScope }) => {
+      app.get("/context", requireScope("read"), (request, response) => {
+        response.json(request.context);
+      });
+    });
+    const { createToken } = await import(
+      "../src/services/personal-access-tokens.js"
+    );
+    const { createSession } = await import("../src/services/user-sessions.js");
+    const { createUser } = await import("../src/services/users.js");
+    const user = await createUser({
+      email: "fallback@example.com",
+      displayName: "Fallback User",
+      role: "admin",
+    });
+    const expiredSession = createSession(user.userId, { ttlDays: -1 });
+    const token = createToken(user.userId, {
+      name: "Fallback token",
+      actorType: "agent",
+      scopes: ["read"],
+    });
+
+    const response = await fetch(`${baseUrl}/context`, {
+      headers: {
+        authorization: `Bearer ${token.plaintext}`,
+        cookie: `wh_session=${expiredSession.sessionToken}`,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      userId: user.userId,
+      tokenId: token.tokenId,
+      source: "pat",
+    });
+  });
+
   it("allows read-only PATs to read but rejects mutating scope checks", async () => {
     const baseUrl = await createMiddlewareApp(({ app, requireScope }) => {
       app.get("/resource", requireScope("read"), (_request, response) => {
@@ -216,7 +257,7 @@ describe("auth middleware", () => {
     const { createToken } = await import(
       "../src/services/personal-access-tokens.js"
     );
-    const user = createUser({
+    const user = await createUser({
       email: "reader@example.com",
       displayName: "Reader",
       role: "member",
@@ -249,7 +290,7 @@ describe("auth middleware", () => {
     const { createToken } = await import(
       "../src/services/personal-access-tokens.js"
     );
-    const user = createUser({
+    const user = await createUser({
       email: "member@example.com",
       displayName: "Member",
       role: "member",
@@ -265,6 +306,74 @@ describe("auth middleware", () => {
     });
 
     expect(response.status).toBe(403);
+  });
+});
+
+describe("app request ID and CORS middleware", () => {
+  it("sets request IDs on health, public auth errors, and protected errors", async () => {
+    await resetTestModules();
+    const { createApp } = await import("../src/app.js");
+    const baseUrl = await listen(createApp());
+
+    const healthResponse = await fetch(`${baseUrl}/health`, {
+      headers: { "x-request-id": "req_health" },
+    });
+    const authResponse = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-request-id": "req_auth",
+      },
+      body: JSON.stringify({}),
+    });
+    const protectedResponse = await fetch(`${baseUrl}/api/v1/company-card`, {
+      headers: { "x-request-id": "req_protected" },
+    });
+
+    expect(healthResponse.headers.get("x-request-id")).toBe("req_health");
+    expect(authResponse.headers.get("x-request-id")).toBe("req_auth");
+    expect(protectedResponse.headers.get("x-request-id")).toBe(
+      "req_protected",
+    );
+  });
+
+  it("echoes configured CORS origins with credentials and omits disallowed origins", async () => {
+    await resetTestModules({
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,https://dashboard.example",
+    });
+    const { createApp } = await import("../src/app.js");
+    const baseUrl = await listen(createApp());
+
+    const allowedResponse = await fetch(`${baseUrl}/health`, {
+      headers: { origin: "https://dashboard.example" },
+    });
+    const disallowedResponse = await fetch(`${baseUrl}/health`, {
+      headers: { origin: "https://other.example" },
+    });
+    const optionsResponse = await fetch(`${baseUrl}/api/v1/company-card`, {
+      method: "OPTIONS",
+      headers: { origin: "http://localhost:5173" },
+    });
+
+    expect(allowedResponse.headers.get("access-control-allow-origin")).toBe(
+      "https://dashboard.example",
+    );
+    expect(allowedResponse.headers.get("access-control-allow-credentials")).toBe(
+      "true",
+    );
+    expect(disallowedResponse.headers.get("access-control-allow-origin")).toBe(
+      null,
+    );
+    expect(
+      disallowedResponse.headers.get("access-control-allow-credentials"),
+    ).toBe(null);
+    expect(optionsResponse.status).toBe(204);
+    expect(optionsResponse.headers.get("access-control-allow-origin")).toBe(
+      "http://localhost:5173",
+    );
+    expect(optionsResponse.headers.get("access-control-allow-credentials")).toBe(
+      "true",
+    );
   });
 });
 

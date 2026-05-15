@@ -52,19 +52,18 @@ function asyncRoute(
 publicUsersRouter.post(
   "/invitations/:token/accept",
   validateBody(acceptInvitationSchema),
-  (request, response, next) => {
-    try {
-      const accepted = acceptInvitation(getRouteParam(request.params.token), {
+  asyncRoute(async (request, response) => {
+    const accepted = await acceptInvitation(
+      getRouteParam(request.params.token),
+      {
         displayName: request.body.displayName,
         password: request.body.password,
         userAgent: request.header("user-agent") ?? null,
-      });
+      },
+    );
 
-      sendCreatedSessionResponse(response, accepted.user, accepted.session);
-    } catch (error) {
-      next(error);
-    }
-  },
+    sendCreatedSessionResponse(response, accepted.user, accepted.session);
+  }),
 );
 
 usersRouter.use(requireRole("admin"));
@@ -114,9 +113,14 @@ usersRouter.delete("/invitations/:id", (request, response, next) => {
   }
 });
 
-usersRouter.patch("/:id", validateBody(updateUserSchema), (request, response, next) => {
-  try {
-    const user = updateUser(getRouteParam(request.params.id), request.body);
+usersRouter.patch(
+  "/:id",
+  validateBody(updateUserSchema),
+  asyncRoute(async (request, response) => {
+    const user = await updateUser(
+      getRouteParam(request.params.id),
+      request.body,
+    );
     response.locals.audit = {
       action: "user.update",
       objectType: "user",
@@ -126,10 +130,8 @@ usersRouter.patch("/:id", validateBody(updateUserSchema), (request, response, ne
       },
     };
     response.json(user);
-  } catch (error) {
-    next(error);
-  }
-});
+  }),
+);
 
 usersRouter.delete("/:id", (request, response, next) => {
   try {

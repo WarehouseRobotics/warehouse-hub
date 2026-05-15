@@ -5,7 +5,7 @@ import { getOrm } from "../db/connection.js";
 import { users, workspaces } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
-import { hashPassword } from "../lib/passwords.js";
+import { hashPasswordSync } from "../lib/passwords.js";
 
 export type Workspace = {
   id: string;
@@ -57,7 +57,10 @@ function ensureBootstrapOwner(workspaceId: string): void {
   }
 
   const createdAt = new Date().toISOString();
-  const passwordHash = config.BOOTSTRAP_OWNER_PASSWORD ? hashPassword(config.BOOTSTRAP_OWNER_PASSWORD) : null;
+  // Startup/bootstrap only: keep database initialization synchronous.
+  const passwordHash = config.BOOTSTRAP_OWNER_PASSWORD
+    ? hashPasswordSync(config.BOOTSTRAP_OWNER_PASSWORD)
+    : null;
 
   getOrm()
     .insert(users)

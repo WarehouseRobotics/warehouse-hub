@@ -110,36 +110,46 @@ export function requireAuth(
   next: NextFunction,
 ): void {
   try {
+    let credentialError: unknown;
+
     const sessionToken = getCookieValue(request, "wh_session");
     if (sessionToken) {
-      const session = requireActiveSession(sessionToken);
-      request.context = {
-        userId: session.userId,
-        role: session.user?.role ?? null,
-        scopes: ["admin"],
-        actorType: "user",
-        sessionId: session.sessionId,
-        tokenId: null,
-        source: "session",
-      };
-      next();
-      return;
+      try {
+        const session = requireActiveSession(sessionToken);
+        request.context = {
+          userId: session.userId,
+          role: session.user?.role ?? null,
+          scopes: ["admin"],
+          actorType: "user",
+          sessionId: session.sessionId,
+          tokenId: null,
+          source: "session",
+        };
+        next();
+        return;
+      } catch (error) {
+        credentialError = error;
+      }
     }
 
     const pat = getPresentedPat(request);
     if (pat) {
-      const token = requireActiveToken(pat);
-      request.context = {
-        userId: token.userId,
-        role: token.user?.role ?? null,
-        scopes: token.scopes,
-        actorType: token.actorType,
-        sessionId: null,
-        tokenId: token.tokenId,
-        source: "pat",
-      };
-      next();
-      return;
+      try {
+        const token = requireActiveToken(pat);
+        request.context = {
+          userId: token.userId,
+          role: token.user?.role ?? null,
+          scopes: token.scopes,
+          actorType: token.actorType,
+          sessionId: null,
+          tokenId: token.tokenId,
+          source: "pat",
+        };
+        next();
+        return;
+      } catch (error) {
+        credentialError = error;
+      }
     }
 
     const legacyApiKey = getPresentedLegacyApiKey(request);
@@ -159,6 +169,10 @@ export function requireAuth(
       };
       next();
       return;
+    }
+
+    if (credentialError) {
+      throw credentialError;
     }
 
     throwUnauthorized();

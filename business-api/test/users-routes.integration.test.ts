@@ -102,17 +102,17 @@ describe("users routes", () => {
     const { createSession } = await import("../src/services/user-sessions.js");
     const { createUser } = await import("../src/services/users.js");
     const { listAuditLogEntries } = await import("../src/services/audit-log.js");
-    const owner = createUser({
+    const owner = await createUser({
       email: "owner@example.com",
       displayName: "Owner",
       role: "owner",
     });
-    const admin = createUser({
+    const admin = await createUser({
       email: "admin@example.com",
       displayName: "Admin",
       role: "admin",
     });
-    const member = createUser({
+    const member = await createUser({
       email: "member@example.com",
       displayName: "Member",
       role: "member",
@@ -243,12 +243,12 @@ describe("users routes", () => {
       "../src/services/personal-access-tokens.js"
     );
     const { createUser } = await import("../src/services/users.js");
-    const admin = createUser({
+    const admin = await createUser({
       email: "admin@example.com",
       displayName: "Admin",
       role: "admin",
     });
-    const member = createUser({
+    const member = await createUser({
       email: "member@example.com",
       displayName: "Member",
       role: "member",
@@ -297,7 +297,7 @@ describe("users routes", () => {
       "../src/services/user-invitations.js"
     );
     const { createUser } = await import("../src/services/users.js");
-    const owner = createUser({
+    const owner = await createUser({
       email: "owner@example.com",
       displayName: "Owner",
       role: "owner",
@@ -408,7 +408,7 @@ describe("users routes", () => {
     const baseUrl = await createUsersApp();
     const { createSession } = await import("../src/services/user-sessions.js");
     const { createUser } = await import("../src/services/users.js");
-    const owner = createUser({
+    const owner = await createUser({
       email: "owner@example.com",
       displayName: "Owner",
       role: "owner",

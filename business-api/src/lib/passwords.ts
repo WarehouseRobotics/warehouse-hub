@@ -10,10 +10,17 @@ function getBcrypt(): typeof bcrypt {
   return require("bcrypt") as typeof bcrypt;
 }
 
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
+  return getBcrypt().hash(password, PASSWORD_HASH_ROUNDS);
+}
+
+export function hashPasswordSync(password: string): string {
   return getBcrypt().hashSync(password, PASSWORD_HASH_ROUNDS);
 }
 
-export function comparePassword(password: string, passwordHash: string): boolean {
-  return getBcrypt().compareSync(password, passwordHash);
+export async function comparePassword(
+  password: string,
+  passwordHash: string,
+): Promise<boolean> {
+  return getBcrypt().compare(password, passwordHash);
 }

@@ -53,7 +53,7 @@ async function sendEmail(input: ResendEmailInput): Promise<void> {
     logger.warn("Email delivery skipped because RESEND_API_KEY is unset", {
       to: input.to,
       subject: input.subject,
-      html: input.html,
+      delivery: "skipped",
     });
     return;
   }

@@ -48,19 +48,19 @@ describe("auth service layer", () => {
       verifyUserPassword,
     } = await import("../src/services/users.js");
 
-    const owner = createUser({
+    const owner = await createUser({
       email: "Owner@Example.com",
       displayName: "Owner",
       password: "owner-password",
       role: "owner",
     });
-    const member = createUser({
+    const member = await createUser({
       email: " Member@Example.com ",
       displayName: "Member",
       password: "member-password",
       role: "member",
     });
-    const passwordless = createUser({
+    const passwordless = await createUser({
       email: "magic@example.com",
       displayName: "Magic Link",
       role: "member",
@@ -74,14 +74,14 @@ describe("auth service layer", () => {
     });
     expect(getUser("MEMBER@example.com")).toEqual(member);
     expect(passwordless).toMatchObject({ email: "magic@example.com" });
-    expect(() =>
+    await expect(
       createUser({
         email: "second-owner@example.com",
         displayName: "Second Owner",
         password: "owner-password",
         role: "owner",
       }),
-    ).toThrow(/active owner/i);
+    ).rejects.toThrow(/active owner/i);
 
     const memberRow = getOrm()
       .select()
@@ -100,36 +100,40 @@ describe("auth service layer", () => {
     ).toBe(true);
     expect(passwordlessRow?.passwordHash).toBeNull();
 
-    expect(verifyUserPassword("member@example.com", "member-password")).toEqual(
+    await expect(
+      verifyUserPassword("member@example.com", "member-password"),
+    ).resolves.toEqual(
       expect.objectContaining({
         userId: member.userId,
         lastLoginAt: expect.any(String),
       }),
     );
-    expect(() =>
+    await expect(
       verifyUserPassword("member@example.com", "wrong-password"),
-    ).toThrow(/invalid email or password/i);
-    expect(() => verifyUserPassword("magic@example.com", "anything")).toThrow(
+    ).rejects.toThrow(/invalid email or password/i);
+    await expect(
+      verifyUserPassword("magic@example.com", "anything"),
+    ).rejects.toThrow(
       /invalid email or password/i,
     );
 
-    expect(
+    await expect(
       updateUser(member.userId, {
         displayName: "Ops Member",
         role: "admin",
         password: null,
       }),
-    ).toEqual(
+    ).resolves.toEqual(
       expect.objectContaining({
         userId: member.userId,
         displayName: "Ops Member",
         role: "admin",
       }),
     );
-    expect(() => updateUser(owner.userId, { role: "admin" })).toThrow(
+    await expect(updateUser(owner.userId, { role: "admin" })).rejects.toThrow(
       /owner user role cannot be changed/i,
     );
-    expect(() => updateUser(member.userId, { role: "owner" })).toThrow(
+    await expect(updateUser(member.userId, { role: "owner" })).rejects.toThrow(
       /active owner/i,
     );
     const clearedPasswordRow = getOrm()
@@ -161,7 +165,7 @@ describe("auth service layer", () => {
       revokeSession,
     } = await import("../src/services/user-sessions.js");
 
-    const user = createUser({
+    const user = await createUser({
       email: "session@example.com",
       displayName: "Session User",
       password: "password",
@@ -204,6 +208,49 @@ describe("auth service layer", () => {
       Date.parse(session.expiresAt),
     );
 
+    const longSession = createSession(user.userId, { ttlDays: 60 });
+    const longSessionRow = getOrm()
+      .select()
+      .from(userSessions)
+      .where(eq(userSessions.id, longSession.sessionId))
+      .get();
+    const absoluteExpiry = new Date(
+      Date.parse(longSessionRow!.createdAt) + 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    expect(longSession.expiresAt).toBe(absoluteExpiry);
+
+    const nearAbsoluteSession = createSession(user.userId);
+    const nearAbsoluteCreatedAt = new Date(
+      Date.now() - 29 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    getOrm()
+      .update(userSessions)
+      .set({
+        createdAt: nearAbsoluteCreatedAt,
+        expiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .where(eq(userSessions.id, nearAbsoluteSession.sessionId))
+      .run();
+    const renewedNearAbsolute = requireActiveSession(
+      nearAbsoluteSession.sessionToken,
+    );
+    expect(Date.parse(renewedNearAbsolute.expiresAt)).toBeLessThanOrEqual(
+      Date.parse(nearAbsoluteCreatedAt) + 30 * 24 * 60 * 60 * 1000,
+    );
+
+    const absoluteExpiredSession = createSession(user.userId);
+    getOrm()
+      .update(userSessions)
+      .set({
+        createdAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .where(eq(userSessions.id, absoluteExpiredSession.sessionId))
+      .run();
+    expect(() =>
+      requireActiveSession(absoluteExpiredSession.sessionToken),
+    ).toThrow(/invalid or expired/i);
+
     const expired = createSession(user.userId, { ttlDays: -1 });
     expect(() => requireActiveSession(expired.sessionToken)).toThrow(
       /invalid or expired/i,
@@ -238,7 +285,7 @@ describe("auth service layer", () => {
     const { createToken, listTokensForUser, requireActiveToken, revokeToken } =
       await import("../src/services/personal-access-tokens.js");
 
-    const user = createUser({
+    const user = await createUser({
       email: "token@example.com",
       displayName: "Token User",
       password: "password",
@@ -329,7 +376,7 @@ describe("auth service layer", () => {
     const { listAuditLogEntries, writeAuditLogEntry } =
       await import("../src/services/audit-log.js");
 
-    const user = createUser({
+    const user = await createUser({
       email: "audit@example.com",
       displayName: "Audit User",
       password: "password",
@@ -540,7 +587,7 @@ describe("auth service layer", () => {
       revokeInvitation,
     } = await import("../src/services/user-invitations.js");
 
-    const inviter = createUser({
+    const inviter = await createUser({
       email: "admin@example.com",
       displayName: "Admin User",
       password: "admin-password",
@@ -569,7 +616,7 @@ describe("auth service layer", () => {
     const token = new URL(invitation.acceptUrl).pathname.split("/").at(-1);
     expect(token).toEqual(expect.stringMatching(/^mlt_/));
 
-    const accepted = acceptInvitation(token ?? "", {
+    const accepted = await acceptInvitation(token ?? "", {
       displayName: "Teammate",
       password: "member-password",
       userAgent: "Vitest",
@@ -603,9 +650,9 @@ describe("auth service layer", () => {
       await bcrypt.compare("member-password", userRow?.passwordHash ?? ""),
     ).toBe(true);
 
-    expect(() =>
+    await expect(
       acceptInvitation(token ?? "", { displayName: "Second Try" }),
-    ).toThrow(/invalid or expired/i);
+    ).rejects.toThrow(/invalid or expired/i);
     expect(listPendingInvitations()).toEqual([]);
 
     softDeleteUser(accepted.user.userId);
@@ -615,7 +662,7 @@ describe("auth service layer", () => {
       role: "member",
     });
     const reToken = new URL(reInvitation.acceptUrl).pathname.split("/").at(-1);
-    const reAccepted = acceptInvitation(reToken ?? "", {
+    const reAccepted = await acceptInvitation(reToken ?? "", {
       displayName: "Teammate Again",
     });
     expect(reAccepted.user).toEqual(
@@ -643,9 +690,9 @@ describe("auth service layer", () => {
         revokedAt: expect.any(String),
       }),
     );
-    expect(() =>
+    await expect(
       acceptInvitation(revokedToken ?? "", { displayName: "Revoked" }),
-    ).toThrow(/invalid or expired/i);
+    ).rejects.toThrow(/invalid or expired/i);
     expect(listPendingInvitations().map((item) => item.invitationId)).toEqual([
       active.invitationId,
     ]);
@@ -661,12 +708,12 @@ describe("auth service layer", () => {
       .set({ expiresAt: new Date(Date.now() - 1_000).toISOString() })
       .where(eq(magicLinkTokens.id, expired.magicLinkTokenId))
       .run();
-    expect(() =>
+    await expect(
       acceptInvitation(expiredToken ?? "", { displayName: "Expired" }),
-    ).toThrow(/invalid or expired/i);
-    expect(() =>
+    ).rejects.toThrow(/invalid or expired/i);
+    await expect(
       acceptInvitation("not-a-token", { displayName: "Invalid" }),
-    ).toThrow(/invalid or expired/i);
+    ).rejects.toThrow(/invalid or expired/i);
 
     const race = await createInvitation({
       email: "race@example.com",
@@ -674,14 +721,33 @@ describe("auth service layer", () => {
       role: "member",
     });
     const raceToken = new URL(race.acceptUrl).pathname.split("/").at(-1);
-    createUser({
+    const raceWinner = await createUser({
       email: "race@example.com",
       displayName: "Race Winner",
       role: "member",
     });
-    expect(() =>
+    await expect(
       acceptInvitation(raceToken ?? "", { displayName: "Race Loser" }),
-    ).toThrow(/user already exists/i);
+    ).rejects.toThrow(/user already exists/i);
+    expect(
+      getOrm()
+        .select()
+        .from(magicLinkTokens)
+        .where(eq(magicLinkTokens.id, race.magicLinkTokenId))
+        .get()?.consumedAt,
+    ).toBeNull();
+
+    softDeleteUser(raceWinner.userId);
+    await expect(
+      acceptInvitation(raceToken ?? "", { displayName: "Race Retry" }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        user: expect.objectContaining({
+          email: "race@example.com",
+          displayName: "Race Retry",
+        }),
+      }),
+    );
 
     await expect(
       createInvitation({
@@ -709,8 +775,12 @@ describe("auth service layer", () => {
   it("builds auth email URLs and skips delivery when Resend is unconfigured", async () => {
     vi.stubEnv("RESEND_API_KEY", "");
     const { logger } = await import("../src/lib/logger.js");
-    const { buildMagicLinkLoginUrl, buildUserInviteUrl, magicLinkLoginEmail } =
-      await import("../src/services/email.js");
+    const {
+      buildMagicLinkLoginUrl,
+      buildUserInviteUrl,
+      magicLinkLoginEmail,
+      userInviteEmail,
+    } = await import("../src/services/email.js");
     const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => logger);
 
     expect(buildMagicLinkLoginUrl("mlt_login")).toBe(
@@ -725,26 +795,45 @@ describe("auth service layer", () => {
       token: "mlt_login",
       expiresAt: "2026-05-15T12:00:00.000Z<script>",
     });
+    await userInviteEmail({
+      to: "invite@example.com",
+      inviterName: "Admin",
+      workspaceName: "Warehouse Hub",
+      token: "mlt_invite",
+      expiresAt: "2026-05-15T12:00:00.000Z",
+    });
 
     expect(resendSendMock).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
-      "Email delivery skipped because RESEND_API_KEY is unset",
-      expect.objectContaining({
-        to: "login@example.com",
-        subject: "Your Warehouse Hub sign-in link",
-        html: expect.stringContaining(
-          "http://localhost:5173/auth/consume?token=mlt_login",
-        ),
-      }),
+    const warnCalls = warnSpy.mock.calls as unknown as Array<
+      [string, Record<string, unknown>]
+    >;
+    expect(warnCalls).toEqual(
+      expect.arrayContaining([
+        [
+          "Email delivery skipped because RESEND_API_KEY is unset",
+          expect.objectContaining({
+            to: "login@example.com",
+            subject: "Your Warehouse Hub sign-in link",
+            delivery: "skipped",
+          }),
+        ],
+        [
+          "Email delivery skipped because RESEND_API_KEY is unset",
+          expect.objectContaining({
+            to: "invite@example.com",
+            subject: "Invitation to Warehouse Hub",
+            delivery: "skipped",
+          }),
+        ],
+      ]),
     );
-    expect(warnSpy).toHaveBeenCalledWith(
-      "Email delivery skipped because RESEND_API_KEY is unset",
-      expect.objectContaining({
-        html: expect.stringContaining(
-          "2026-05-15T12:00:00.000Z&lt;script&gt;",
-        ),
-      }),
-    );
+    for (const [, metadata] of warnCalls) {
+      expect(metadata).not.toHaveProperty("html");
+      expect(JSON.stringify(metadata)).not.toContain("mlt_login");
+      expect(JSON.stringify(metadata)).not.toContain("mlt_invite");
+      expect(JSON.stringify(metadata)).not.toContain("/auth/consume");
+      expect(JSON.stringify(metadata)).not.toContain("/accept-invite");
+    }
   });
 
   it("sends auth emails through Resend and surfaces delivery errors", async () => {

@@ -92,7 +92,7 @@ describe("tokens routes", () => {
     const { listAuditLogEntries } = await import("../src/services/audit-log.js");
     const { createSession } = await import("../src/services/user-sessions.js");
     const { createUser } = await import("../src/services/users.js");
-    const user = createUser({
+    const user = await createUser({
       email: "member@example.com",
       displayName: "Member",
       role: "member",
@@ -188,12 +188,12 @@ describe("tokens routes", () => {
     );
     const { createSession } = await import("../src/services/user-sessions.js");
     const { createUser } = await import("../src/services/users.js");
-    const firstUser = createUser({
+    const firstUser = await createUser({
       email: "first@example.com",
       displayName: "First",
       role: "member",
     });
-    const secondUser = createUser({
+    const secondUser = await createUser({
       email: "second@example.com",
       displayName: "Second",
       role: "member",
@@ -225,7 +225,7 @@ describe("tokens routes", () => {
       "../src/services/personal-access-tokens.js"
     );
     const { createUser } = await import("../src/services/users.js");
-    const user = createUser({
+    const user = await createUser({
       email: "readonly@example.com",
       displayName: "Read Only",
       role: "member",
@@ -269,7 +269,7 @@ describe("workspace routes", () => {
     const baseUrl = await createRoutesApp();
     const { createSession } = await import("../src/services/user-sessions.js");
     const { createUser } = await import("../src/services/users.js");
-    const user = createUser({
+    const user = await createUser({
       email: "member@example.com",
       displayName: "Member",
       role: "member",
@@ -294,7 +294,7 @@ describe("workspace routes", () => {
     const { listAuditLogEntries } = await import("../src/services/audit-log.js");
     const { createSession } = await import("../src/services/user-sessions.js");
     const { createUser } = await import("../src/services/users.js");
-    const admin = createUser({
+    const admin = await createUser({
       email: "admin@example.com",
       displayName: "Admin",
       role: "admin",
@@ -333,7 +333,7 @@ describe("workspace routes", () => {
     const baseUrl = await createRoutesApp();
     const { createSession } = await import("../src/services/user-sessions.js");
     const { createUser } = await import("../src/services/users.js");
-    const member = createUser({
+    const member = await createUser({
       email: "member@example.com",
       displayName: "Member",
       role: "member",

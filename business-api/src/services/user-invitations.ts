@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 
-import { getOrm } from "../db/connection.js";
+import { getDatabase, getOrm } from "../db/connection.js";
 import {
   magicLinkTokens,
   userInvitations,
@@ -8,10 +8,11 @@ import {
 } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { hashPassword } from "../lib/passwords.js";
 import { createMagicLink, consumeMagicLink } from "./magic-link-tokens.js";
 import { getUserRecordByIdOrEmail, requireUserRecord } from "./shared.js";
 import { createSession, type CreatedUserSession } from "./user-sessions.js";
-import { createUser, type User } from "./users.js";
+import { createUserWithPasswordHash, type User } from "./users.js";
 import { buildUserInviteUrl, userInviteEmail } from "./email.js";
 import { getWorkspace } from "./workspaces.js";
 
@@ -160,48 +161,57 @@ export async function createInvitation(input: {
   };
 }
 
-export function acceptInvitation(
+export async function acceptInvitation(
   token: string,
   input: {
     displayName: string;
     password?: string | null;
     userAgent?: string | null;
   },
-): AcceptedUserInvitation {
-  const magicLink = consumeMagicLink(token, "invite_accept");
-  const invitation = getInvitationByMagicLinkTokenId(
-    magicLink.magicLinkTokenId,
-  );
-  if (!invitation || invitation.revokedAt || invitation.acceptedAt) {
-    throwInvalidInvitation();
-  }
-  if (getUserRecordByIdOrEmail(invitation.email)) {
-    throwUserAlreadyExists(invitation.email);
-  }
+): Promise<AcceptedUserInvitation> {
+  const passwordHash =
+    input.password === undefined || input.password === null
+      ? null
+      : await hashPassword(input.password);
 
-  const user = createUser({
-    email: invitation.email,
-    displayName: input.displayName,
-    password: input.password,
-    role: invitation.role,
+  const acceptTransaction = getDatabase().transaction(() => {
+    const magicLink = consumeMagicLink(token, "invite_accept");
+    const invitation = getInvitationByMagicLinkTokenId(
+      magicLink.magicLinkTokenId,
+    );
+    if (!invitation || invitation.revokedAt || invitation.acceptedAt) {
+      throwInvalidInvitation();
+    }
+    if (getUserRecordByIdOrEmail(invitation.email)) {
+      throwUserAlreadyExists(invitation.email);
+    }
+
+    const user = createUserWithPasswordHash({
+      email: invitation.email,
+      displayName: input.displayName,
+      passwordHash,
+      role: invitation.role,
+    });
+    const acceptedAt = new Date().toISOString();
+    getOrm()
+      .update(userInvitations)
+      .set({ acceptedAt })
+      .where(eq(userInvitations.id, invitation.id))
+      .run();
+
+    return {
+      invitation: mapUserInvitation({
+        ...invitation,
+        acceptedAt,
+      }),
+      user,
+      session: createSession(user.userId, {
+        userAgent: input.userAgent ?? null,
+      }),
+    };
   });
-  const acceptedAt = new Date().toISOString();
-  getOrm()
-    .update(userInvitations)
-    .set({ acceptedAt })
-    .where(eq(userInvitations.id, invitation.id))
-    .run();
 
-  return {
-    invitation: mapUserInvitation({
-      ...invitation,
-      acceptedAt,
-    }),
-    user,
-    session: createSession(user.userId, {
-      userAgent: input.userAgent ?? null,
-    }),
-  };
+  return acceptTransaction();
 }
 
 export function revokeInvitation(invitationId: string): UserInvitation {

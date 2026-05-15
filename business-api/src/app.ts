@@ -1,8 +1,9 @@
 import express from "express";
 
 import { errorHandler } from "./middleware/error-handler.js";
-import { auditMiddleware } from "./middleware/audit.js";
+import { auditMiddleware, requestIdMiddleware } from "./middleware/audit.js";
 import { requireAuth, requireScope } from "./middleware/auth.js";
+import { config } from "./config.js";
 import {
   bankAccountsRouter,
   bankBalanceSnapshotsRouter,
@@ -37,12 +38,21 @@ import { workspaceRouter } from "./routes/workspace.js";
 export function createApp() {
   const app = express();
 
+  app.use(requestIdMiddleware);
+
   app.use((request, response, next) => {
-    response.header("Access-Control-Allow-Origin", "*");
+    const origin = request.header("origin");
+    if (origin && config.corsAllowedOrigins.includes(origin)) {
+      response.header("Access-Control-Allow-Origin", origin);
+      response.header("Access-Control-Allow-Credentials", "true");
+      response.header("Vary", "Origin");
+    }
+
     response.header(
       "Access-Control-Allow-Headers",
       "Authorization, Content-Type, X-Api-Key, X-Request-Id",
     );
+    response.header("Access-Control-Expose-Headers", "X-Request-Id");
     response.header(
       "Access-Control-Allow-Methods",
       "GET,POST,PATCH,DELETE,OPTIONS",

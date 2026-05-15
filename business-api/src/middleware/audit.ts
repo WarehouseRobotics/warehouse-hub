@@ -16,7 +16,7 @@ function getRequestId(request: Request): string {
   return header?.trim() || createPrefixedId("req_");
 }
 
-export function auditMiddleware(
+export function requestIdMiddleware(
   request: Request,
   response: Response,
   next: NextFunction,
@@ -24,7 +24,14 @@ export function auditMiddleware(
   const requestId = getRequestId(request);
   request.requestId = requestId;
   response.setHeader("X-Request-Id", requestId);
+  next();
+}
 
+export function auditMiddleware(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): void {
   response.on("finish", () => {
     const audit = response.locals.audit;
     if (request.method === "GET" || response.statusCode >= 400 || !audit) {
@@ -39,13 +46,13 @@ export function auditMiddleware(
         action: audit.action,
         objectType: audit.objectType,
         objectId: audit.objectId,
-        requestId,
+        requestId: request.requestId ?? getRequestId(request),
         metadata: audit.metadata,
       });
     } catch (error) {
       logger.error("Failed to write audit log entry", {
         error,
-        requestId,
+        requestId: request.requestId,
         action: audit.action,
         objectType: audit.objectType,
         objectId: audit.objectId,

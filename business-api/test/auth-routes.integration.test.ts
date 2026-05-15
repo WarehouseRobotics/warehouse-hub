@@ -100,7 +100,7 @@ describe("auth routes", () => {
   it("logs in with a password, sets a session cookie, and returns /auth/me", async () => {
     const baseUrl = await createAuthApp();
     const { createUser } = await import("../src/services/users.js");
-    const user = createUser({
+    const user = await createUser({
       email: "Owner@Example.com",
       displayName: "Owner",
       password: "owner-password",
@@ -159,7 +159,7 @@ describe("auth routes", () => {
   it("rejects wrong passwords and disabled password login", async () => {
     let baseUrl = await createAuthApp();
     const { createUser } = await import("../src/services/users.js");
-    createUser({
+    await createUser({
       email: "owner@example.com",
       displayName: "Owner",
       password: "owner-password",
@@ -188,7 +188,7 @@ describe("auth routes", () => {
     const { createUser: createDisabledUser } = await import(
       "../src/services/users.js"
     );
-    createDisabledUser({
+    await createDisabledUser({
       email: "disabled@example.com",
       displayName: "Disabled",
       password: "owner-password",
@@ -211,12 +211,14 @@ describe("auth routes", () => {
     expect(disabledBody.error.code).toBe("password_login_disabled");
   });
 
-  it("always returns 204 for magic-link requests and only creates tokens for known users", async () => {
+  it("always returns 204 for magic-link requests and only emails known users", async () => {
     const baseUrl = await createAuthApp();
     const { getOrm } = await import("../src/db/connection.js");
     const { magicLinkTokens } = await import("../src/db/schema/index.js");
+    const { logger } = await import("../src/lib/logger.js");
     const { createUser } = await import("../src/services/users.js");
-    createUser({
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    await createUser({
       email: "magic@example.com",
       displayName: "Magic User",
       role: "member",
@@ -241,7 +243,28 @@ describe("auth routes", () => {
 
     expect(knownResponse.status).toBe(204);
     expect(unknownResponse.status).toBe(204);
-    expect(getOrm().select().from(magicLinkTokens).all()).toHaveLength(1);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(getOrm().select().from(magicLinkTokens).all()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          email: "magic@example.com",
+          purpose: "login",
+        }),
+        expect.objectContaining({
+          email: "magic-link-request-sink@warehouse-hub.invalid",
+          purpose: "login",
+        }),
+      ]),
+    );
+    expect(getOrm().select().from(magicLinkTokens).all()).toHaveLength(2);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Email delivery skipped because RESEND_API_KEY is unset",
+      expect.objectContaining({
+        to: "magic@example.com",
+        subject: "Your Warehouse Hub sign-in link",
+      }),
+    );
   });
 
   it("consumes magic links into sessions and rejects reuse or invalid tokens", async () => {
@@ -250,7 +273,7 @@ describe("auth routes", () => {
       "../src/services/magic-link-tokens.js"
     );
     const { createUser } = await import("../src/services/users.js");
-    const user = createUser({
+    const user = await createUser({
       email: "magic@example.com",
       displayName: "Magic User",
       role: "member",
@@ -315,7 +338,7 @@ describe("auth routes", () => {
     const baseUrl = await createAuthApp();
     const { createSession } = await import("../src/services/user-sessions.js");
     const { createUser } = await import("../src/services/users.js");
-    const user = createUser({
+    const user = await createUser({
       email: "logout@example.com",
       displayName: "Logout User",
       role: "member",
@@ -343,7 +366,7 @@ describe("auth routes", () => {
       "../src/services/personal-access-tokens.js"
     );
     const { createUser } = await import("../src/services/users.js");
-    const user = createUser({
+    const user = await createUser({
       email: "agent-owner@example.com",
       displayName: "Agent Owner",
       role: "admin",

@@ -37,12 +37,14 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function mapPasswordHash(password: string | null | undefined): string | null {
+async function mapPasswordHash(
+  password: string | null | undefined,
+): Promise<string | null> {
   if (password === undefined || password === null) {
     return null;
   }
 
-  return hashPassword(password);
+  return await hashPassword(password);
 }
 
 function mapUser(record: typeof users.$inferSelect): User {
@@ -154,7 +156,9 @@ function translateUserConstraintError(
   });
 }
 
-export function createUser(input: UserInput): User {
+export function createUserWithPasswordHash(
+  input: Omit<UserInput, "password"> & { passwordHash: string | null },
+): User {
   const now = new Date().toISOString();
   const id = createPrefixedId("usr_");
   const workspaceId = input.workspaceId ?? getWorkspace().id;
@@ -170,7 +174,7 @@ export function createUser(input: UserInput): User {
         workspaceId,
         email,
         displayName: input.displayName,
-        passwordHash: mapPasswordHash(input.password),
+        passwordHash: input.passwordHash,
         role: input.role,
         createdAt: now,
         lastLoginAt: null,
@@ -188,6 +192,21 @@ export function createUser(input: UserInput): User {
   return getUser(id);
 }
 
+export async function createUser(input: UserInput): Promise<User> {
+  const workspaceId = input.workspaceId ?? getWorkspace().id;
+  const email = normalizeEmail(input.email);
+  assertCanCreateUser({ workspaceId, email, role: input.role });
+  const passwordHash = await mapPasswordHash(input.password);
+
+  return createUserWithPasswordHash({
+    workspaceId,
+    email,
+    displayName: input.displayName,
+    passwordHash,
+    role: input.role,
+  });
+}
+
 export function listUsers(): User[] {
   return getOrm()
     .select()
@@ -202,7 +221,10 @@ export function getUser(idOrEmail: string): User {
   return mapUser(requireUserRecord(idOrEmail));
 }
 
-export function updateUser(idOrEmail: string, patch: UserPatch): User {
+export async function updateUser(
+  idOrEmail: string,
+  patch: UserPatch,
+): Promise<User> {
   const existing = requireUserRecord(idOrEmail);
   const role = patch.role ?? existing.role;
   if (existing.role === "owner" && role !== "owner") {
@@ -222,7 +244,7 @@ export function updateUser(idOrEmail: string, patch: UserPatch): User {
   const passwordHash =
     patch.password === undefined
       ? existing.passwordHash
-      : mapPasswordHash(patch.password);
+      : await mapPasswordHash(patch.password);
 
   try {
     getOrm()
@@ -263,7 +285,10 @@ export function softDeleteUser(idOrEmail: string): void {
     .run();
 }
 
-export function verifyUserPassword(email: string, password: string): User {
+export async function verifyUserPassword(
+  email: string,
+  password: string,
+): Promise<User> {
   const normalizedEmail = normalizeEmail(email);
   const existing = getOrm()
     .select()
@@ -273,7 +298,7 @@ export function verifyUserPassword(email: string, password: string): User {
 
   if (
     !existing?.passwordHash ||
-    !comparePassword(password, existing.passwordHash)
+    !(await comparePassword(password, existing.passwordHash))
   ) {
     throw new AppError("Invalid email or password", {
       statusCode: 401,

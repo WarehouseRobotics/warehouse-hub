@@ -43,6 +43,10 @@ function addTtlDays(date: Date, ttlDays: number): Date {
   return new Date(date.getTime() + ttlDays * 24 * 60 * 60 * 1000);
 }
 
+function minDate(first: Date, second: Date): Date {
+  return first.getTime() <= second.getTime() ? first : second;
+}
+
 function throwInvalidSession(): never {
   throw new AppError("Session is invalid or expired", {
     statusCode: 401,
@@ -72,12 +76,16 @@ export function createSession(
     createdAt,
     options.ttlDays ?? config.SESSION_TTL_DAYS,
   );
+  const absoluteExpiresAt = addTtlDays(
+    createdAt,
+    config.SESSION_MAX_LIFETIME_DAYS,
+  );
   const sessionToken = createRawSessionToken();
   const record = {
     id: createPrefixedId("sess_"),
     userId: user.id,
     tokenHash: hashToken(sessionToken),
-    expiresAt: expiresAt.toISOString(),
+    expiresAt: minDate(expiresAt, absoluteExpiresAt).toISOString(),
     lastUsedAt: null,
     revokedAt: null,
     createdAt: createdAt.toISOString(),
@@ -111,8 +119,19 @@ export function requireActiveSession(rawToken: string): UserSession {
     throwInvalidSession();
   }
 
+  const absoluteExpiresAt = addTtlDays(
+    new Date(record.createdAt),
+    config.SESSION_MAX_LIFETIME_DAYS,
+  );
+  if (absoluteExpiresAt.getTime() <= now.getTime()) {
+    throwInvalidSession();
+  }
+
   const lastUsedAt = now.toISOString();
-  const expiresAt = addTtlDays(now, config.SESSION_TTL_DAYS).toISOString();
+  const expiresAt = minDate(
+    addTtlDays(now, config.SESSION_TTL_DAYS),
+    absoluteExpiresAt,
+  ).toISOString();
   getOrm()
     .update(userSessions)
     .set({ lastUsedAt, expiresAt })

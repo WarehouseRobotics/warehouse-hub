@@ -7,10 +7,7 @@ import { AppError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
-import {
-  buildMagicLinkLoginUrl,
-  magicLinkLoginEmail,
-} from "../services/email.js";
+import { magicLinkLoginEmail } from "../services/email.js";
 import {
   consumeMagicLink,
   createMagicLink,
@@ -31,6 +28,9 @@ import {
 } from "./session-response.js";
 
 export const authRouter = Router();
+
+const MAGIC_LINK_REQUEST_SINK_EMAIL =
+  "magic-link-request-sink@warehouse-hub.invalid";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -68,53 +68,57 @@ function asyncRoute(
 authRouter.post(
   "/login",
   validateBody(loginSchema),
-  (request, response, next) => {
-    try {
-      if (!config.HUB_PASSWORD_LOGIN) {
-        throw new AppError("Password login is disabled", {
-          statusCode: 403,
-          code: "password_login_disabled",
-        });
-      }
-
-      const user = verifyUserPassword(request.body.email, request.body.password);
-      sendSessionResponse(response, user, {
-        userAgent: request.header("user-agent") ?? null,
+  asyncRoute(async (request, response) => {
+    if (!config.HUB_PASSWORD_LOGIN) {
+      throw new AppError("Password login is disabled", {
+        statusCode: 403,
+        code: "password_login_disabled",
       });
-    } catch (error) {
-      next(error);
     }
-  },
+
+    const user = await verifyUserPassword(
+      request.body.email,
+      request.body.password,
+    );
+    sendSessionResponse(response, user, {
+      userAgent: request.header("user-agent") ?? null,
+    });
+  }),
 );
 
 authRouter.post(
   "/magic-link/request",
   validateBody(magicLinkRequestSchema),
   asyncRoute(async (request, response) => {
+    let user: User | null = null;
     try {
-      const user = getUser(request.body.email);
-      const magicLink = createMagicLink({
-        email: user.email,
-        purpose: request.body.purpose,
-      });
-
-      try {
-        await magicLinkLoginEmail({
-          to: user.email,
-          token: magicLink.token,
-          expiresAt: magicLink.expiresAt,
-        });
-      } catch (error) {
-        logger.warn("Magic link email delivery failed", {
-          email: user.email,
-          loginUrl: buildMagicLinkLoginUrl(magicLink.token),
-          error,
-        });
-      }
+      user = getUser(request.body.email);
     } catch (error) {
       if (!isNotFoundError(error)) {
         throw error;
       }
+    }
+
+    const magicLink = createMagicLink({
+      email: user?.email ?? MAGIC_LINK_REQUEST_SINK_EMAIL,
+      purpose: request.body.purpose,
+    });
+
+    const knownUser = user;
+    if (knownUser) {
+      setImmediate(() => {
+        void magicLinkLoginEmail({
+          to: knownUser.email,
+          token: magicLink.token,
+          expiresAt: magicLink.expiresAt,
+        }).catch((error: unknown) => {
+          logger.warn("Magic link email delivery failed", {
+            email: knownUser.email,
+            magicLinkTokenId: magicLink.magicLinkTokenId,
+            error,
+          });
+        });
+      });
     }
 
     response.status(204).send();
@@ -124,26 +128,22 @@ authRouter.post(
 authRouter.post(
   "/magic-link/consume",
   validateBody(magicLinkConsumeSchema),
-  (request, response, next) => {
+  asyncRoute(async (request, response) => {
+    const magicLink = consumeMagicLink(request.body.token, "login");
+    let user: User;
     try {
-      const magicLink = consumeMagicLink(request.body.token, "login");
-      let user: User;
-      try {
-        user = markUserLoggedIn(magicLink.email);
-      } catch (error) {
-        if (isNotFoundError(error)) {
-          throwInvalidMagicLinkToken();
-        }
-        throw error;
-      }
-
-      sendSessionResponse(response, user, {
-        userAgent: request.header("user-agent") ?? null,
-      });
+      user = markUserLoggedIn(magicLink.email);
     } catch (error) {
-      next(error);
+      if (isNotFoundError(error)) {
+        throwInvalidMagicLinkToken();
+      }
+      throw error;
     }
-  },
+
+    sendSessionResponse(response, user, {
+      userAgent: request.header("user-agent") ?? null,
+    });
+  }),
 );
 
 authRouter.post("/logout", requireAuth, (request, response, next) => {

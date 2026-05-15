@@ -181,7 +181,7 @@ type RequestContext = {
 
 Resolution order:
 
-1. `Cookie: wh_session=sess_*` → `requireActiveSession()` → context with `source: "session"`, `scopes: ["admin"]` (UI is the trust boundary).
+1. `Cookie: wh_session=sess_*` → `requireActiveSession()` → context with `source: "session"`, `scopes: ["admin"]` (UI is the trust boundary). If this cookie is stale or revoked, middleware continues to PAT and legacy API-key checks before returning the session error.
 2. `Authorization: Bearer wpat_*` or `X-Api-Key: wpat_*` → `requireActiveToken()` → context with `source: "pat"`, scopes/actorType from the token row. `lastUsedAt` updated async.
 3. `Authorization: Bearer <legacy API_KEY>` → context with `source: "legacy"`, `actorType: "system"`, `scopes: ["admin"]`.
 4. None of the above → `401 unauthorized`.
@@ -197,7 +197,9 @@ requireRole("admin");          // for /users, /tokens, /workspace PATCH
 
 ### `audit` middleware
 
-Post-route. On any non-GET response with status `< 400` and `res.locals.audit` set, writes one `audit_log` row. Routes opt in:
+Request ID generation is mounted before public and protected routes, so health checks, auth flows, protected routes, and error responses all get `request.requestId` and an `X-Request-Id` response header.
+
+The audit writer remains post-route. On any non-GET response with status `< 400` and `res.locals.audit` set, writes one `audit_log` row. Routes opt in:
 
 ```ts
 expensesRouter.post("/", validateBody(expenseInputSchema), (req, res) => {
@@ -251,7 +253,7 @@ Sets `Set-Cookie: wh_session=sess_...; HttpOnly; Secure; SameSite=Lax; Path=/`. 
 { "email": "user@example.com", "purpose": "login" }
 ```
 
-Always returns `204` regardless of whether the email maps to a user. No enumeration.
+Always returns `204` regardless of whether the email maps to a user and performs comparable token-creation work for known and unknown emails. No enumeration.
 
 `POST /auth/magic-link/consume`
 
@@ -375,7 +377,7 @@ On first boot, `services/workspaces.ts` performs idempotent seeding:
 - `magicLinkLoginEmail({ to, url, expiresAt })`
 - `userInviteEmail({ to, inviterName, workspaceName, url, expiresAt })`
 
-The URL points at `${DASHBOARD_BASE_URL}/auth/consume?token=...` (login) or `${DASHBOARD_BASE_URL}/accept-invite/${token}` (invite). When `RESEND_API_KEY` is unset the service is a no-op that logs the would-be email at WARN level — useful for local dev without a Resend account.
+The URL points at `${DASHBOARD_BASE_URL}/auth/consume?token=...` (login) or `${DASHBOARD_BASE_URL}/accept-invite/${token}` (invite). When `RESEND_API_KEY` is unset the service is a no-op that logs safe delivery metadata at WARN level, without rendering the email body or raw magic-link token.
 
 ## Config
 
@@ -389,9 +391,16 @@ BOOTSTRAP_OWNER_PASSWORD:       optional; pairs with above
 AUTH_PASSWORD_LOGIN_ENABLED:    default true
 AUTH_MAGIC_LINK_ENABLED:        default true
 SESSION_TTL_DAYS:               default 14
+SESSION_MAX_LIFETIME_DAYS:      default 30; absolute cap from session creation
 DASHBOARD_BASE_URL:             required for magic-link emails
+CORS_ALLOWED_ORIGINS:           optional comma-separated list; defaults to DASHBOARD_BASE_URL origin
 RESEND_API_KEY:                 optional; email is a no-op when absent
 ```
+
+Cookie-session CORS is credentialed. For requests whose `Origin` matches
+`CORS_ALLOWED_ORIGINS`, the API echoes that origin and sends
+`Access-Control-Allow-Credentials: true`; other origins are not granted a CORS
+origin.
 
 `API_KEY` continues to be honoured during the v1 deprecation window (logged at WARN per request) so existing OpenClaw and CLI deployments do not break on upgrade.
 

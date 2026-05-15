@@ -65,7 +65,7 @@ credentials:
     format: "wh_session=sess_<24-byte base64url>"
     issued_by: POST /auth/login or POST /auth/magic-link/consume
     storage: HttpOnly, Secure, SameSite=Lax cookie
-    ttl: 14 days, sliding (extended on each successful request)
+    ttl: 14 days sliding, capped at 30 days from creation by default
     use: Dashboard browser sessions only
     scope: implicit "admin" — the UI is the trust boundary
   personal_access_token:
@@ -83,6 +83,11 @@ credentials:
     scope: implicit admin user (account owner)
 ```
 
+If a request presents both a stale session cookie and another credential, the
+Business API tries PAT and legacy API-key auth before returning the session
+failure. This keeps browser-cookie leftovers from blocking CLI or agent calls
+that send an explicit bearer token.
+
 Plaintext PATs are returned exactly once at creation, never stored. A leaked PAT is dead the instant the owner clicks "Revoke" in Settings → API Tokens (single SQL update; the next request lookup misses).
 
 ## How a human signs in
@@ -92,7 +97,7 @@ Two methods are first-class in v1, controlled by independent feature flags so a 
 - **Email + password.** Classic flow. `bcrypt` for hashing. Off when `AUTH_PASSWORD_LOGIN_ENABLED=false` (magic-link-only mode).
 - **Email magic link.** User enters email; the API issues a 15-minute single-use `mlt_*` token and emails it via [Resend](https://resend.com); user clicks the link, the dashboard `/auth/consume` page POSTs the token, and a session is issued. Off when `AUTH_MAGIC_LINK_ENABLED=false`.
 
-Magic-link request always returns `204` regardless of whether the email maps to a real user — this prevents account enumeration.
+Magic-link request always returns `204` regardless of whether the email maps to a real user and performs comparable token-creation work for both known and unknown emails — this prevents account enumeration.
 
 If neither method is enabled, the deployment is locked to `BOOTSTRAP_OWNER_*` plus PATs only.
 

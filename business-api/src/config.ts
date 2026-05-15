@@ -18,8 +18,10 @@ const envSchema = z.object({
   BOOTSTRAP_OWNER_EMAIL: z.string().email().optional(),
   BOOTSTRAP_OWNER_PASSWORD: z.string().optional(),
   DASHBOARD_BASE_URL: z.string().url().default("http://localhost:5173"),
+  CORS_ALLOWED_ORIGINS: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
+  SESSION_MAX_LIFETIME_DAYS: z.coerce.number().int().positive().default(30),
   HUB_AUTH_MODE: z.enum(["api-key", "pam"]).default("api-key"),
   HUB_PASSWORD_LOGIN: z
     .enum(["0", "1"])
@@ -46,8 +48,20 @@ const envSchema = z.object({
 const parsed = envSchema.parse(process.env);
 const projectRoot = path.resolve(import.meta.dirname, "..");
 
+function parseAllowedOrigins(): string[] {
+  const dashboardOrigin = new URL(parsed.DASHBOARD_BASE_URL).origin;
+  const configuredOrigins = parsed.CORS_ALLOWED_ORIGINS?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return Array.from(
+    new Set(configuredOrigins?.length ? configuredOrigins : [dashboardOrigin]),
+  );
+}
+
 export const config = {
   ...parsed,
+  corsAllowedOrigins: parseAllowedOrigins(),
   projectRoot,
   databasePath: path.resolve(projectRoot, parsed.DATABASE_PATH),
   uploadDir: path.resolve(projectRoot, parsed.UPLOAD_DIR),
