@@ -1,6 +1,3 @@
-import { createRequire } from "node:module";
-
-import type bcrypt from "bcrypt";
 import { eq, isNull } from "drizzle-orm";
 
 import { config } from "../config.js";
@@ -8,9 +5,7 @@ import { getOrm } from "../db/connection.js";
 import { users, workspaces } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
-
-const BOOTSTRAP_PASSWORD_HASH_ROUNDS = 12;
-const require = createRequire(import.meta.url);
+import { hashPassword } from "../lib/passwords.js";
 
 export type Workspace = {
   id: string;
@@ -38,13 +33,12 @@ function displayNameFromEmail(email: string): string {
   return email.split("@")[0] || email;
 }
 
-function hashBootstrapPassword(password: string): string {
-  const bcryptModule = require("bcrypt") as typeof bcrypt;
-  return bcryptModule.hashSync(password, BOOTSTRAP_PASSWORD_HASH_ROUNDS);
-}
-
 function getAnyWorkspaceRecord() {
   return getOrm().select().from(workspaces).get();
+}
+
+function getWorkspaceRecordBySlug(slug: string) {
+  return getOrm().select().from(workspaces).where(eq(workspaces.slug, slug)).get();
 }
 
 function getActiveWorkspaceRecord() {
@@ -63,7 +57,7 @@ function ensureBootstrapOwner(workspaceId: string): void {
   }
 
   const createdAt = new Date().toISOString();
-  const passwordHash = config.BOOTSTRAP_OWNER_PASSWORD ? hashBootstrapPassword(config.BOOTSTRAP_OWNER_PASSWORD) : null;
+  const passwordHash = config.BOOTSTRAP_OWNER_PASSWORD ? hashPassword(config.BOOTSTRAP_OWNER_PASSWORD) : null;
 
   getOrm()
     .insert(users)
@@ -97,10 +91,23 @@ export function bootstrapWorkspace(): Workspace {
     deletedAt: null,
   };
 
-  getOrm().insert(workspaces).values(workspaceRecord).run();
-  ensureBootstrapOwner(workspaceRecord.id);
+  getOrm()
+    .insert(workspaces)
+    .values(workspaceRecord)
+    .onConflictDoNothing({ target: workspaces.slug })
+    .run();
 
-  return mapWorkspace(workspaceRecord);
+  const persisted = getWorkspaceRecordBySlug(workspaceRecord.slug);
+  if (!persisted) {
+    throw new AppError("Workspace bootstrap failed", {
+      statusCode: 500,
+      code: "workspace_bootstrap_failed",
+    });
+  }
+
+  ensureBootstrapOwner(persisted.id);
+
+  return mapWorkspace(persisted);
 }
 
 export function getWorkspace(): Workspace {

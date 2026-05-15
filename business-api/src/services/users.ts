@@ -1,17 +1,12 @@
-import { createRequire } from "node:module";
-
-import type bcrypt from "bcrypt";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
 import { users, type UserRole } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
+import { comparePassword, hashPassword } from "../lib/passwords.js";
 import { getWorkspace } from "./workspaces.js";
 import { requireUserRecord } from "./shared.js";
-
-const PASSWORD_HASH_ROUNDS = 12;
-const require = createRequire(import.meta.url);
 
 export type User = {
   userId: string;
@@ -38,16 +33,8 @@ export type UserPatch = {
   role?: UserRole;
 };
 
-function getBcrypt(): typeof bcrypt {
-  return require("bcrypt") as typeof bcrypt;
-}
-
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
-}
-
-function hashPassword(password: string): string {
-  return getBcrypt().hashSync(password, PASSWORD_HASH_ROUNDS);
 }
 
 function mapPasswordHash(password: string | null | undefined): string | null {
@@ -286,7 +273,7 @@ export function verifyUserPassword(email: string, password: string): User {
 
   if (
     !existing?.passwordHash ||
-    !getBcrypt().compareSync(password, existing.passwordHash)
+    !comparePassword(password, existing.passwordHash)
   ) {
     throw new AppError("Invalid email or password", {
       statusCode: 401,
