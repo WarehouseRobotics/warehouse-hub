@@ -1,9 +1,9 @@
-import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
 
 import { config } from "../config.js";
 import { AppError } from "../lib/errors.js";
+import { asyncRoute } from "../lib/express.js";
 import { logger } from "../lib/logger.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
@@ -14,7 +14,6 @@ import {
 } from "../services/magic-link-tokens.js";
 import { revokeSession } from "../services/user-sessions.js";
 import {
-  getUser,
   markUserLoggedIn,
   verifyUserPassword,
   type User,
@@ -55,14 +54,6 @@ function throwInvalidMagicLinkToken(): never {
     statusCode: 401,
     code: "invalid_magic_link_token",
   });
-}
-
-function asyncRoute(
-  handler: (request: Request, response: Response) => Promise<void>,
-) {
-  return (request: Request, response: Response, next: NextFunction): void => {
-    handler(request, response).catch(next);
-  };
 }
 
 authRouter.post(
@@ -161,12 +152,11 @@ authRouter.post("/logout", requireAuth, (request, response, next) => {
 
 authRouter.get("/me", requireAuth, (request, response, next) => {
   try {
-    const user = request.context?.userId
-      ? mapPublicUser(getUser(request.context.userId))
+    const user = request.context?.user
+      ? mapPublicUser(request.context.user)
       : null;
     response.json({
       user,
-      role: user?.role ?? null,
       workspace: mapPublicWorkspace(getWorkspace()),
     });
   } catch (error) {

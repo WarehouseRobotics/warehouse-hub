@@ -1,8 +1,8 @@
-import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
 
-import { requireRole } from "../middleware/auth.js";
+import { asyncRoute } from "../lib/express.js";
+import { requireCurrentUserId, requireRole } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   acceptInvitation,
@@ -37,24 +37,12 @@ const updateUserSchema = z
     message: "At least one field must be provided",
   });
 
-function getRouteParam(value: string | string[]): string {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function asyncRoute(
-  handler: (request: Request, response: Response) => Promise<void>,
-) {
-  return (request: Request, response: Response, next: NextFunction): void => {
-    handler(request, response).catch(next);
-  };
-}
-
 publicUsersRouter.post(
   "/invitations/:token/accept",
   validateBody(acceptInvitationSchema),
   asyncRoute(async (request, response) => {
     const accepted = await acceptInvitation(
-      getRouteParam(request.params.token),
+      request.params.token,
       {
         displayName: request.body.displayName,
         password: request.body.password,
@@ -78,7 +66,7 @@ usersRouter.post(
   asyncRoute(async (request, response) => {
     const invitation = await createInvitation({
       email: request.body.email,
-      invitedByUserId: request.context!.userId!,
+      invitedByUserId: requireCurrentUserId(request),
       role: request.body.role,
     });
 
@@ -97,7 +85,7 @@ usersRouter.post(
 
 usersRouter.delete("/invitations/:id", (request, response, next) => {
   try {
-    const invitation = revokeInvitation(getRouteParam(request.params.id));
+    const invitation = revokeInvitation(request.params.id);
     response.locals.audit = {
       action: "user.invitation.revoke",
       objectType: "user_invitation",
@@ -118,7 +106,7 @@ usersRouter.patch(
   validateBody(updateUserSchema),
   asyncRoute(async (request, response) => {
     const user = await updateUser(
-      getRouteParam(request.params.id),
+      request.params.id,
       request.body,
     );
     response.locals.audit = {
@@ -135,7 +123,7 @@ usersRouter.patch(
 
 usersRouter.delete("/:id", (request, response, next) => {
   try {
-    const userId = getRouteParam(request.params.id);
+    const userId = request.params.id;
     softDeleteUser(userId);
     response.locals.audit = {
       action: "user.delete",

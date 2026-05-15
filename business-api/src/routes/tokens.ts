@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
 
-import { AppError } from "../lib/errors.js";
+import { requireCurrentUserId } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   createToken,
@@ -20,22 +20,6 @@ const createTokenSchema = z.object({
   scopes: z.array(authScopeSchema).nonempty(),
   expiresAt: z.string().datetime().nullable().optional(),
 });
-
-function getRouteParam(value: string | string[]): string {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function requireCurrentUserId(request: Request): string {
-  const userId = request.context?.userId;
-  if (!userId) {
-    throw new AppError("Current-user token routes require user auth", {
-      statusCode: 403,
-      code: "forbidden",
-    });
-  }
-
-  return userId;
-}
 
 tokensRouter.get("/", (request, response, next) => {
   try {
@@ -69,7 +53,7 @@ tokensRouter.post(
 
 tokensRouter.delete("/:id", (request, response, next) => {
   try {
-    const tokenId = getRouteParam(request.params.id);
+    const tokenId = request.params.id;
     revokeToken(tokenId, requireCurrentUserId(request));
     response.locals.audit = {
       action: "personal_access_token.revoke",

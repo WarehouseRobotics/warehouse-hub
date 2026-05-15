@@ -39,6 +39,8 @@ export function auditMiddleware(
     }
 
     try {
+      // Audit writes are best-effort in v1; mutation responses stay successful
+      // and failures are surfaced through structured logs for alerting.
       writeAuditLogEntry({
         actorUserId: request.context?.userId ?? null,
         actorTokenId: request.context?.tokenId ?? null,

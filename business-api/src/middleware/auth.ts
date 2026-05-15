@@ -8,9 +8,11 @@ import {
   type AuthScope,
 } from "../services/personal-access-tokens.js";
 import { requireActiveSession } from "../services/user-sessions.js";
+import type { User } from "../services/users.js";
 
 export type RequestContext = {
   userId: string | null;
+  user: User | null;
   role: UserRole | null;
   scopes: AuthScope[];
   actorType: "user" | "agent" | "system";
@@ -75,7 +77,17 @@ function getPresentedPat(request: Request): string | undefined {
 }
 
 function getPresentedLegacyApiKey(request: Request): string | undefined {
-  return getBearerToken(request) ?? request.header("x-api-key") ?? undefined;
+  const bearerToken = getBearerToken(request);
+  if (bearerToken && !bearerToken.startsWith("wpat_")) {
+    return bearerToken;
+  }
+
+  const apiKey = request.header("x-api-key");
+  if (apiKey && !apiKey.startsWith("wpat_")) {
+    return apiKey;
+  }
+
+  return undefined;
 }
 
 function hasScope(context: RequestContext, requiredScope: AuthScope): boolean {
@@ -118,6 +130,7 @@ export function requireAuth(
         const session = requireActiveSession(sessionToken);
         request.context = {
           userId: session.userId,
+          user: session.user ?? null,
           role: session.user?.role ?? null,
           scopes: ["admin"],
           actorType: "user",
@@ -138,6 +151,7 @@ export function requireAuth(
         const token = requireActiveToken(pat);
         request.context = {
           userId: token.userId,
+          user: token.user ?? null,
           role: token.user?.role ?? null,
           scopes: token.scopes,
           actorType: token.actorType,
@@ -160,6 +174,7 @@ export function requireAuth(
     ) {
       request.context = {
         userId: null,
+        user: null,
         role: null,
         scopes: ["admin"],
         actorType: "system",
@@ -179,6 +194,18 @@ export function requireAuth(
   } catch (error) {
     next(error);
   }
+}
+
+export function requireCurrentUserId(request: Request): string {
+  const userId = request.context?.userId;
+  if (!userId) {
+    throw new AppError("Current-user routes require user auth", {
+      statusCode: 403,
+      code: "forbidden",
+    });
+  }
+
+  return userId;
 }
 
 export function requireScope(requiredScope: AuthScope) {
