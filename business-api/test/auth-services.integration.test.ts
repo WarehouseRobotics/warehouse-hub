@@ -1,6 +1,16 @@
 import bcrypt from "bcrypt";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const resendSendMock = vi.hoisted(() => vi.fn());
+
+vi.mock("resend", () => ({
+  Resend: vi.fn().mockImplementation(() => ({
+    emails: {
+      send: resendSendMock,
+    },
+  })),
+}));
 
 import {
   resetTestState,
@@ -9,6 +19,16 @@ import {
 
 describe("auth service layer", () => {
   beforeEach(async () => {
+    const { Resend } = await import("resend");
+    resendSendMock.mockReset();
+    vi.mocked(Resend).mockImplementation(
+      () =>
+        ({
+          emails: {
+            send: resendSendMock,
+          },
+        }) as never,
+    );
     await resetTestState();
   });
 
@@ -286,5 +306,428 @@ describe("auth service layer", () => {
     expect(() => requireActiveToken(token.plaintext)).toThrow(
       /invalid or expired/i,
     );
+  });
+
+  it("writes and queries audit log entries", async () => {
+    const { createUser } = await import("../src/services/users.js");
+    const { createToken } =
+      await import("../src/services/personal-access-tokens.js");
+    const { listAuditLogEntries, writeAuditLogEntry } =
+      await import("../src/services/audit-log.js");
+
+    const user = createUser({
+      email: "audit@example.com",
+      displayName: "Audit User",
+      password: "password",
+      role: "admin",
+    });
+    const token = createToken(user.userId, {
+      name: "Audit Agent",
+      actorType: "agent",
+      scopes: ["write"],
+    });
+
+    const first = writeAuditLogEntry({
+      at: "2026-05-15T09:00:00.000Z",
+      actorUserId: user.userId,
+      actorType: "user",
+      action: "expense.create",
+      objectType: "expense",
+      objectId: "exp_001",
+      requestId: "req_001",
+      metadata: { source: "dashboard", amount: 120 },
+    });
+    const second = writeAuditLogEntry({
+      at: "2026-05-15T10:00:00.000Z",
+      actorUserId: user.userId,
+      actorTokenId: token.tokenId,
+      actorType: "agent",
+      action: "task.update",
+      objectType: "task",
+      objectId: "tsk_001",
+      requestId: "req_002",
+      metadata: { fields: ["status"] },
+    });
+    const third = writeAuditLogEntry({
+      at: "2026-05-15T11:00:00.000Z",
+      actorType: "system",
+      action: "workspace.bootstrap",
+      objectType: "workspace",
+      objectId: "ws_default",
+      requestId: "req_003",
+      metadata: { seeded: true },
+    });
+
+    expect(first).toEqual(
+      expect.objectContaining({
+        auditEntryId: expect.stringMatching(/^aud_/),
+        metadata: { source: "dashboard", amount: 120 },
+      }),
+    );
+    expect(second.metadata).toEqual({ fields: ["status"] });
+    expect(third.actorUserId).toBeNull();
+    expect(third.actorTokenId).toBeNull();
+
+    expect(listAuditLogEntries().map((entry) => entry.auditEntryId)).toEqual([
+      third.auditEntryId,
+      second.auditEntryId,
+      first.auditEntryId,
+    ]);
+    expect(
+      listAuditLogEntries({ actorUserId: user.userId }).map(
+        (entry) => entry.auditEntryId,
+      ),
+    ).toEqual([second.auditEntryId, first.auditEntryId]);
+    expect(
+      listAuditLogEntries({ actorTokenId: token.tokenId }).map(
+        (entry) => entry.auditEntryId,
+      ),
+    ).toEqual([second.auditEntryId]);
+    expect(
+      listAuditLogEntries({ actorType: "system" }).map(
+        (entry) => entry.auditEntryId,
+      ),
+    ).toEqual([third.auditEntryId]);
+    expect(
+      listAuditLogEntries({ objectType: "expense", objectId: "exp_001" }).map(
+        (entry) => entry.auditEntryId,
+      ),
+    ).toEqual([first.auditEntryId]);
+    expect(
+      listAuditLogEntries({ action: "task.update" }).map(
+        (entry) => entry.auditEntryId,
+      ),
+    ).toEqual([second.auditEntryId]);
+    expect(
+      listAuditLogEntries({ requestId: "req_003" }).map(
+        (entry) => entry.auditEntryId,
+      ),
+    ).toEqual([third.auditEntryId]);
+    expect(
+      listAuditLogEntries({
+        after: "2026-05-15T09:30:00.000Z",
+        before: "2026-05-15T10:30:00.000Z",
+      }).map((entry) => entry.auditEntryId),
+    ).toEqual([second.auditEntryId]);
+    expect(listAuditLogEntries({ limit: 1 })).toHaveLength(1);
+    expect(listAuditLogEntries({ limit: 0 })).toHaveLength(1);
+  });
+
+  it("creates, consumes, rejects, and expires magic-link tokens", async () => {
+    const { getOrm } = await import("../src/db/connection.js");
+    const { magicLinkTokens } = await import("../src/db/schema/index.js");
+    const { createMagicLink, consumeMagicLink, expireMagicLinks } =
+      await import("../src/services/magic-link-tokens.js");
+
+    const magicLink = createMagicLink({
+      email: " Login@Example.com ",
+      purpose: "login",
+    });
+
+    expect(magicLink).toEqual(
+      expect.objectContaining({
+        magicLinkTokenId: expect.stringMatching(/^mlt_/),
+        token: expect.stringMatching(/^mlt_/),
+        email: "login@example.com",
+        purpose: "login",
+        consumedAt: null,
+      }),
+    );
+    expect("tokenHash" in magicLink).toBe(false);
+
+    const tokenRow = getOrm()
+      .select()
+      .from(magicLinkTokens)
+      .where(eq(magicLinkTokens.id, magicLink.magicLinkTokenId))
+      .get();
+    expect(tokenRow?.tokenHash).not.toBe(magicLink.token);
+    expect(tokenRow?.tokenHash).toHaveLength(64);
+
+    const consumed = consumeMagicLink(magicLink.token, "login");
+    expect(consumed).toEqual(
+      expect.objectContaining({
+        magicLinkTokenId: magicLink.magicLinkTokenId,
+        consumedAt: expect.any(String),
+      }),
+    );
+    expect(
+      getOrm()
+        .select()
+        .from(magicLinkTokens)
+        .where(eq(magicLinkTokens.id, magicLink.magicLinkTokenId))
+        .get()?.consumedAt,
+    ).toEqual(consumed.consumedAt);
+
+    expect(() => consumeMagicLink(magicLink.token, "login")).toThrow(
+      /invalid or expired/i,
+    );
+    expect(() => consumeMagicLink("not-a-token", "login")).toThrow(
+      /invalid or expired/i,
+    );
+    expect(() => consumeMagicLink("mlt_unknown", "login")).toThrow(
+      /invalid or expired/i,
+    );
+
+    const wrongPurpose = createMagicLink({
+      email: "invite@example.com",
+      purpose: "invite_accept",
+    });
+    expect(() => consumeMagicLink(wrongPurpose.token, "login")).toThrow(
+      /invalid or expired/i,
+    );
+
+    const expired = createMagicLink({
+      email: "expired@example.com",
+      purpose: "login",
+      expiresAt: new Date(Date.now() - 1_000).toISOString(),
+    });
+    expect(() => consumeMagicLink(expired.token, "login")).toThrow(
+      /invalid or expired/i,
+    );
+
+    const oldActive = createMagicLink({
+      email: "old@example.com",
+      purpose: "login",
+      expiresAt: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const stillActive = createMagicLink({
+      email: "active@example.com",
+      purpose: "login",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(expireMagicLinks({ purpose: "login" })).toBeGreaterThanOrEqual(2);
+
+    const expiredRow = getOrm()
+      .select()
+      .from(magicLinkTokens)
+      .where(eq(magicLinkTokens.id, oldActive.magicLinkTokenId))
+      .get();
+    const activeRow = getOrm()
+      .select()
+      .from(magicLinkTokens)
+      .where(eq(magicLinkTokens.id, stillActive.magicLinkTokenId))
+      .get();
+    expect(expiredRow?.consumedAt).toEqual(expect.any(String));
+    expect(activeRow?.consumedAt).toBeNull();
+  });
+
+  it("creates, accepts, lists, and revokes user invitations", async () => {
+    vi.stubEnv("RESEND_API_KEY", "");
+    const { getOrm } = await import("../src/db/connection.js");
+    const { magicLinkTokens, userInvitations, users } =
+      await import("../src/db/schema/index.js");
+    const { createUser } = await import("../src/services/users.js");
+    const {
+      acceptInvitation,
+      createInvitation,
+      listPendingInvitations,
+      revokeInvitation,
+    } = await import("../src/services/user-invitations.js");
+
+    const inviter = createUser({
+      email: "admin@example.com",
+      displayName: "Admin User",
+      password: "admin-password",
+      role: "admin",
+    });
+    const invitation = await createInvitation({
+      email: " Teammate@Example.com ",
+      invitedByUserId: inviter.userId,
+      role: "member",
+    });
+
+    expect(invitation).toEqual(
+      expect.objectContaining({
+        invitationId: expect.stringMatching(/^inv_/),
+        email: "teammate@example.com",
+        invitedByUserId: inviter.userId,
+        role: "member",
+        magicLinkTokenId: expect.stringMatching(/^mlt_/),
+        acceptUrl: expect.stringContaining("/accept-invite/mlt_"),
+      }),
+    );
+    expect(listPendingInvitations().map((item) => item.invitationId)).toEqual([
+      invitation.invitationId,
+    ]);
+
+    const token = new URL(invitation.acceptUrl).pathname.split("/").at(-1);
+    expect(token).toEqual(expect.stringMatching(/^mlt_/));
+
+    const accepted = acceptInvitation(token ?? "", {
+      displayName: "Teammate",
+      password: "member-password",
+      userAgent: "Vitest",
+    });
+    expect(accepted).toEqual(
+      expect.objectContaining({
+        invitation: expect.objectContaining({
+          invitationId: invitation.invitationId,
+          acceptedAt: expect.any(String),
+        }),
+        user: expect.objectContaining({
+          email: "teammate@example.com",
+          displayName: "Teammate",
+          role: "member",
+        }),
+        session: expect.objectContaining({
+          sessionToken: expect.stringMatching(/^sess_/),
+          userAgent: "Vitest",
+        }),
+      }),
+    );
+
+    const userRow = getOrm()
+      .select()
+      .from(users)
+      .where(eq(users.id, accepted.user.userId))
+      .get();
+    expect(userRow?.passwordHash).not.toBe("member-password");
+    expect(userRow?.passwordHash?.startsWith("$2")).toBe(true);
+    expect(
+      await bcrypt.compare("member-password", userRow?.passwordHash ?? ""),
+    ).toBe(true);
+
+    expect(() =>
+      acceptInvitation(token ?? "", { displayName: "Second Try" }),
+    ).toThrow(/invalid or expired/i);
+    expect(listPendingInvitations()).toEqual([]);
+
+    const active = await createInvitation({
+      email: "active-invite@example.com",
+      invitedByUserId: inviter.userId,
+      role: "admin",
+    });
+    const revoked = await createInvitation({
+      email: "revoked-invite@example.com",
+      invitedByUserId: inviter.userId,
+      role: "member",
+    });
+    const revokedToken = new URL(revoked.acceptUrl).pathname.split("/").at(-1);
+    expect(revokeInvitation(revoked.invitationId)).toEqual(
+      expect.objectContaining({
+        invitationId: revoked.invitationId,
+        revokedAt: expect.any(String),
+      }),
+    );
+    expect(() =>
+      acceptInvitation(revokedToken ?? "", { displayName: "Revoked" }),
+    ).toThrow(/invalid or expired/i);
+    expect(listPendingInvitations().map((item) => item.invitationId)).toEqual([
+      active.invitationId,
+    ]);
+
+    const expired = await createInvitation({
+      email: "expired-invite@example.com",
+      invitedByUserId: inviter.userId,
+      role: "member",
+    });
+    const expiredToken = new URL(expired.acceptUrl).pathname.split("/").at(-1);
+    getOrm()
+      .update(magicLinkTokens)
+      .set({ expiresAt: new Date(Date.now() - 1_000).toISOString() })
+      .where(eq(magicLinkTokens.id, expired.magicLinkTokenId))
+      .run();
+    expect(() =>
+      acceptInvitation(expiredToken ?? "", { displayName: "Expired" }),
+    ).toThrow(/invalid or expired/i);
+    expect(() =>
+      acceptInvitation("not-a-token", { displayName: "Invalid" }),
+    ).toThrow(/invalid or expired/i);
+
+    await expect(
+      createInvitation({
+        email: "owner-invite@example.com",
+        invitedByUserId: inviter.userId,
+        role: "owner" as never,
+      }),
+    ).rejects.toThrow(/role is invalid/i);
+    await expect(
+      createInvitation({
+        email: "missing-inviter@example.com",
+        invitedByUserId: "usr_missing",
+        role: "member",
+      }),
+    ).rejects.toThrow(/user not found/i);
+
+    const storedInvitation = getOrm()
+      .select()
+      .from(userInvitations)
+      .where(eq(userInvitations.id, invitation.invitationId))
+      .get();
+    expect(storedInvitation?.acceptedAt).toEqual(expect.any(String));
+  });
+
+  it("builds auth email URLs and skips delivery when Resend is unconfigured", async () => {
+    vi.stubEnv("RESEND_API_KEY", "");
+    const { logger } = await import("../src/lib/logger.js");
+    const { buildMagicLinkLoginUrl, buildUserInviteUrl, magicLinkLoginEmail } =
+      await import("../src/services/email.js");
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+
+    expect(buildMagicLinkLoginUrl("mlt_login")).toBe(
+      "http://localhost:5173/auth/consume?token=mlt_login",
+    );
+    expect(buildUserInviteUrl("mlt_invite")).toBe(
+      "http://localhost:5173/accept-invite/mlt_invite",
+    );
+
+    await magicLinkLoginEmail({
+      to: "login@example.com",
+      token: "mlt_login",
+      expiresAt: "2026-05-15T12:00:00.000Z",
+    });
+
+    expect(resendSendMock).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Email delivery skipped because RESEND_API_KEY is unset",
+      expect.objectContaining({
+        to: "login@example.com",
+        subject: "Your Warehouse Hub sign-in link",
+        html: expect.stringContaining(
+          "http://localhost:5173/auth/consume?token=mlt_login",
+        ),
+      }),
+    );
+  });
+
+  it("sends auth emails through Resend and surfaces delivery errors", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    resendSendMock.mockResolvedValueOnce({
+      data: { id: "email_123" },
+      error: null,
+    });
+    resendSendMock.mockResolvedValueOnce({
+      data: null,
+      error: { message: "domain not verified" },
+    });
+    const { userInviteEmail, magicLinkLoginEmail } =
+      await import("../src/services/email.js");
+
+    await userInviteEmail({
+      to: "invite@example.com",
+      inviterName: "Admin <Owner>",
+      workspaceName: "Warehouse & Co",
+      token: "mlt_invite",
+      expiresAt: "2026-05-15T12:00:00.000Z",
+    });
+
+    expect(resendSendMock).toHaveBeenCalledWith({
+      from: "Warehouse Hub <onboarding@wrobo.io>",
+      to: "invite@example.com",
+      subject: "Invitation to Warehouse & Co",
+      html: [
+        "<p>Admin &lt;Owner&gt; invited you to Warehouse &amp; Co.</p>",
+        '<p><a href="http://localhost:5173/accept-invite/mlt_invite">Accept invitation</a></p>',
+        "<p>This invitation expires at 2026-05-15T12:00:00.000Z.</p>",
+      ].join(""),
+    });
+
+    await expect(
+      magicLinkLoginEmail({
+        to: "login@example.com",
+        token: "mlt_login",
+        expiresAt: "2026-05-15T12:00:00.000Z",
+      }),
+    ).rejects.toThrow(/domain not verified/i);
   });
 });

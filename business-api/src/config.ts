@@ -17,6 +17,8 @@ const envSchema = z.object({
   WORKSPACE_SLUG: z.string().default("default"),
   BOOTSTRAP_OWNER_EMAIL: z.string().email().optional(),
   BOOTSTRAP_OWNER_PASSWORD: z.string().optional(),
+  DASHBOARD_BASE_URL: z.string().url().default("http://localhost:5173"),
+  RESEND_API_KEY: z.string().optional(),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
   HUB_AUTH_MODE: z.enum(["api-key", "pam"]).default("api-key"),
   HUB_PASSWORD_LOGIN: z
