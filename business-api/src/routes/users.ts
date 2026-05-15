@@ -25,7 +25,7 @@ const createInvitationSchema = z.object({
 
 const acceptInvitationSchema = z.object({
   displayName: z.string().trim().min(1),
-  password: z.string().min(1).nullable().optional(),
+  password: z.string().min(8).nullable().optional(),
 });
 
 const updateUserSchema = z
