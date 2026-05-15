@@ -14,6 +14,7 @@ import {
   projects,
   salesInvoices,
   tasks,
+  users,
 } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import type { CommentableType } from "@warehouse-hub/business-schemas";
@@ -25,16 +26,26 @@ function notFound(message: string): never {
 export function getCompanyCardRecordByIdOrSlug(idOrSlug?: string) {
   const conditions = [isNull(companyCard.deletedAt)];
   if (idOrSlug) {
-    conditions.push(or(eq(companyCard.id, idOrSlug), eq(companyCard.slug, idOrSlug))!);
+    conditions.push(
+      or(eq(companyCard.id, idOrSlug), eq(companyCard.slug, idOrSlug))!,
+    );
   }
 
-  return getOrm().select().from(companyCard).where(and(...conditions)).get();
+  return getOrm()
+    .select()
+    .from(companyCard)
+    .where(and(...conditions))
+    .get();
 }
 
 export function requireCompanyCardRecord(idOrSlug?: string) {
   const record = getCompanyCardRecordByIdOrSlug(idOrSlug);
   if (!record) {
-    notFound(idOrSlug ? `Company card not found: ${idOrSlug}` : "Company card has not been created yet");
+    notFound(
+      idOrSlug
+        ? `Company card not found: ${idOrSlug}`
+        : "Company card has not been created yet",
+    );
   }
 
   return record;
@@ -44,7 +55,12 @@ export function getContactRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(contacts)
-    .where(and(isNull(contacts.deletedAt), or(eq(contacts.id, idOrSlug), eq(contacts.slug, idOrSlug))))
+    .where(
+      and(
+        isNull(contacts.deletedAt),
+        or(eq(contacts.id, idOrSlug), eq(contacts.slug, idOrSlug)),
+      ),
+    )
     .get();
 }
 
@@ -61,7 +77,12 @@ export function getDocumentRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(documents)
-    .where(and(isNull(documents.deletedAt), or(eq(documents.id, idOrSlug), eq(documents.slug, idOrSlug))))
+    .where(
+      and(
+        isNull(documents.deletedAt),
+        or(eq(documents.id, idOrSlug), eq(documents.slug, idOrSlug)),
+      ),
+    )
     .get();
 }
 
@@ -78,7 +99,12 @@ export function getBankAccountRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(bankAccounts)
-    .where(and(isNull(bankAccounts.deletedAt), or(eq(bankAccounts.id, idOrSlug), eq(bankAccounts.slug, idOrSlug))))
+    .where(
+      and(
+        isNull(bankAccounts.deletedAt),
+        or(eq(bankAccounts.id, idOrSlug), eq(bankAccounts.slug, idOrSlug)),
+      ),
+    )
     .get();
 }
 
@@ -96,7 +122,13 @@ export function getBankTransactionRecordByIdOrSlug(idOrSlug: string) {
     .select()
     .from(bankTransactions)
     .where(
-      and(isNull(bankTransactions.deletedAt), or(eq(bankTransactions.id, idOrSlug), eq(bankTransactions.slug, idOrSlug))),
+      and(
+        isNull(bankTransactions.deletedAt),
+        or(
+          eq(bankTransactions.id, idOrSlug),
+          eq(bankTransactions.slug, idOrSlug),
+        ),
+      ),
     )
     .get();
 }
@@ -114,7 +146,12 @@ export function getExpenseRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(expenses)
-    .where(and(isNull(expenses.deletedAt), or(eq(expenses.id, idOrSlug), eq(expenses.slug, idOrSlug))))
+    .where(
+      and(
+        isNull(expenses.deletedAt),
+        or(eq(expenses.id, idOrSlug), eq(expenses.slug, idOrSlug)),
+      ),
+    )
     .get();
 }
 
@@ -131,7 +168,12 @@ export function getPayrollRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(payrolls)
-    .where(and(isNull(payrolls.deletedAt), or(eq(payrolls.id, idOrSlug), eq(payrolls.slug, idOrSlug))))
+    .where(
+      and(
+        isNull(payrolls.deletedAt),
+        or(eq(payrolls.id, idOrSlug), eq(payrolls.slug, idOrSlug)),
+      ),
+    )
     .get();
 }
 
@@ -148,7 +190,12 @@ export function getDealRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(deals)
-    .where(and(isNull(deals.deletedAt), or(eq(deals.id, idOrSlug), eq(deals.slug, idOrSlug))))
+    .where(
+      and(
+        isNull(deals.deletedAt),
+        or(eq(deals.id, idOrSlug), eq(deals.slug, idOrSlug)),
+      ),
+    )
     .get();
 }
 
@@ -165,7 +212,12 @@ export function getBookingRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(bookings)
-    .where(and(isNull(bookings.deletedAt), or(eq(bookings.id, idOrSlug), eq(bookings.slug, idOrSlug))))
+    .where(
+      and(
+        isNull(bookings.deletedAt),
+        or(eq(bookings.id, idOrSlug), eq(bookings.slug, idOrSlug)),
+      ),
+    )
     .get();
 }
 
@@ -204,7 +256,12 @@ export function getProjectRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(projects)
-    .where(and(isNull(projects.deletedAt), or(eq(projects.id, idOrSlug), eq(projects.slug, idOrSlug))))
+    .where(
+      and(
+        isNull(projects.deletedAt),
+        or(eq(projects.id, idOrSlug), eq(projects.slug, idOrSlug)),
+      ),
+    )
     .get();
 }
 
@@ -221,7 +278,12 @@ export function getTaskRecordByIdOrSlug(idOrSlug: string) {
   return getOrm()
     .select()
     .from(tasks)
-    .where(and(isNull(tasks.deletedAt), or(eq(tasks.id, idOrSlug), eq(tasks.slug, idOrSlug))))
+    .where(
+      and(
+        isNull(tasks.deletedAt),
+        or(eq(tasks.id, idOrSlug), eq(tasks.slug, idOrSlug)),
+      ),
+    )
     .get();
 }
 
@@ -234,7 +296,33 @@ export function requireTaskRecord(idOrSlug: string) {
   return record;
 }
 
-export function resolveCommentableRecord(type: CommentableType, idOrSlug: string): { id: string; slug: string } {
+export function getUserRecordByIdOrEmail(idOrEmail: string) {
+  const normalizedEmail = idOrEmail.trim().toLowerCase();
+  return getOrm()
+    .select()
+    .from(users)
+    .where(
+      and(
+        isNull(users.deletedAt),
+        or(eq(users.id, idOrEmail), eq(users.email, normalizedEmail)),
+      ),
+    )
+    .get();
+}
+
+export function requireUserRecord(idOrEmail: string) {
+  const record = getUserRecordByIdOrEmail(idOrEmail);
+  if (!record) {
+    notFound(`User not found: ${idOrEmail}`);
+  }
+
+  return record;
+}
+
+export function resolveCommentableRecord(
+  type: CommentableType,
+  idOrSlug: string,
+): { id: string; slug: string } {
   switch (type) {
     case "company_card": {
       const record = requireCompanyCardRecord(idOrSlug);

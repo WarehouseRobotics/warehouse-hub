@@ -5,7 +5,9 @@ import { z } from "zod";
 loadEnv();
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
   PORT: z.coerce.number().int().positive().default(3100),
   DATABASE_PATH: z.string().default("./data/business-api.sqlite"),
   UPLOAD_DIR: z.string().default("./uploads"),
@@ -15,6 +17,7 @@ const envSchema = z.object({
   WORKSPACE_SLUG: z.string().default("default"),
   BOOTSTRAP_OWNER_EMAIL: z.string().email().optional(),
   BOOTSTRAP_OWNER_PASSWORD: z.string().optional(),
+  SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
   HUB_AUTH_MODE: z.enum(["api-key", "pam"]).default("api-key"),
   HUB_PASSWORD_LOGIN: z
     .enum(["0", "1"])
