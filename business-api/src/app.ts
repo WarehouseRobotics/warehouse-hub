@@ -9,6 +9,7 @@ import {
   bankTransactionMatchesRouter,
   bankTransactionsRouter,
 } from "./routes/bank.js";
+import { authRouter } from "./routes/auth.js";
 import {
   bookingAssignmentProfilesRouter,
   bookingAvailabilityExceptionsRouter,
@@ -29,6 +30,9 @@ import {
   taxCarryforwardsRouter,
   taxReportsRouter,
 } from "./routes/tax-reports.js";
+import { tokensRouter } from "./routes/tokens.js";
+import { publicUsersRouter, usersRouter } from "./routes/users.js";
+import { workspaceRouter } from "./routes/workspace.js";
 
 export function createApp() {
   const app = express();
@@ -57,6 +61,9 @@ export function createApp() {
   app.get("/health", (_request, response) => {
     response.json({ ok: true });
   });
+
+  app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/users", publicUsersRouter);
 
   app.use("/api/v1", requireAuth);
   app.use("/api/v1", (request, response, next) => {
@@ -91,6 +98,9 @@ export function createApp() {
   app.use("/api/v1/tasks", tasksRouter);
   app.use("/api/v1/tax-reports", taxReportsRouter);
   app.use("/api/v1/tax-carryforwards", taxCarryforwardsRouter);
+  app.use("/api/v1/tokens", tokensRouter);
+  app.use("/api/v1/users", usersRouter);
+  app.use("/api/v1/workspace", workspaceRouter);
 
   app.use(errorHandler);
 

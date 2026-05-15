@@ -293,3 +293,18 @@ export function verifyUserPassword(email: string, password: string): User {
     lastLoginAt,
   };
 }
+
+export function markUserLoggedIn(idOrEmail: string): User {
+  const existing = requireUserRecord(idOrEmail);
+  const lastLoginAt = new Date().toISOString();
+  getOrm()
+    .update(users)
+    .set({ lastLoginAt })
+    .where(eq(users.id, existing.id))
+    .run();
+
+  return {
+    ...mapUser(existing),
+    lastLoginAt,
+  };
+}
