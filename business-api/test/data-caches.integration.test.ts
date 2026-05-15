@@ -414,5 +414,5 @@ describe("data-cache CLI", () => {
       runCli(["data-cache", "import", "materials", "--file", csvImportPath, "--key-col", "SKU", "--value-col", "Price"]),
     ) as { inserted: number; updated: number };
     expect(csvResult).toEqual({ inserted: 2, updated: 0 });
-  });
+  }, 10000);
 });

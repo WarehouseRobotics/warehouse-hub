@@ -11,6 +11,15 @@ const envSchema = z.object({
   UPLOAD_DIR: z.string().default("./uploads"),
   TMP_DIR: z.string().default("./data/tmp"),
   API_KEY: z.string().optional(),
+  WORKSPACE_NAME: z.string().default("Default Workspace"),
+  WORKSPACE_SLUG: z.string().default("default"),
+  BOOTSTRAP_OWNER_EMAIL: z.string().email().optional(),
+  BOOTSTRAP_OWNER_PASSWORD: z.string().optional(),
+  HUB_AUTH_MODE: z.enum(["api-key", "pam"]).default("api-key"),
+  HUB_PASSWORD_LOGIN: z
+    .enum(["0", "1"])
+    .default("1")
+    .transform((value) => value === "1"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   LLMS_CONFIG_PATH: z.string().optional(),
   EMBEDDING_API_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),

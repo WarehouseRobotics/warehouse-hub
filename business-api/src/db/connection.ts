@@ -8,6 +8,7 @@ import * as sqliteVec from "sqlite-vec";
 import { config } from "../config.js";
 import { getConfiguredEmbeddingDimensions } from "../lib/llm-config.js";
 import { logger } from "../lib/logger.js";
+import { bootstrapWorkspace } from "../services/workspaces.js";
 import { applyMigrations } from "./migrate.js";
 import * as schema from "./schema/index.js";
 
@@ -120,6 +121,7 @@ export function initializeDatabase(): { appliedMigrations: string[] } {
   const database = getDatabase();
   const appliedMigrations = applyMigrations(database, resolveMigrationsDir());
   ensureSchemaCompatibility(database);
+  bootstrapWorkspace();
 
   return { appliedMigrations };
 }
