@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { and, asc, eq, isNull, lte } from "drizzle-orm";
+import { and, eq, isNull, lte } from "drizzle-orm";
 
 import { getOrm } from "../db/connection.js";
 import {
@@ -128,14 +128,13 @@ export function consumeMagicLink(
         isNull(magicLinkTokens.consumedAt),
       ),
     )
-    .orderBy(asc(magicLinkTokens.createdAt), asc(magicLinkTokens.id))
     .get();
 
   if (!record || record.expiresAt <= now) {
     throwInvalidMagicLinkToken();
   }
 
-  getOrm()
+  const result = getOrm()
     .update(magicLinkTokens)
     .set({ consumedAt: now })
     .where(
@@ -145,6 +144,10 @@ export function consumeMagicLink(
       ),
     )
     .run();
+
+  if (result.changes !== 1) {
+    throwInvalidMagicLinkToken();
+  }
 
   return mapMagicLinkToken({
     ...record,

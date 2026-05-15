@@ -59,6 +59,13 @@ function throwInvalidInvitation(): never {
   });
 }
 
+function throwUserAlreadyExists(email: string): never {
+  throw new AppError(`User already exists: ${email}`, {
+    statusCode: 409,
+    code: "conflict",
+  });
+}
+
 function requireMagicLinkRecord(magicLinkTokenId: string) {
   const record = getOrm()
     .select()
@@ -167,6 +174,9 @@ export function acceptInvitation(
   );
   if (!invitation || invitation.revokedAt || invitation.acceptedAt) {
     throwInvalidInvitation();
+  }
+  if (getUserRecordByIdOrEmail(invitation.email)) {
+    throwUserAlreadyExists(invitation.email);
   }
 
   const user = createUser({

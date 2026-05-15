@@ -74,14 +74,15 @@ async function sendEmail(input: ResendEmailInput): Promise<void> {
 export async function magicLinkLoginEmail(
   input: MagicLinkLoginEmailInput,
 ): Promise<void> {
-  const url = buildMagicLinkLoginUrl(input.token);
+  const url = escapeHtml(buildMagicLinkLoginUrl(input.token));
+  const expiresAt = escapeHtml(input.expiresAt);
   await sendEmail({
     to: input.to,
     subject: "Your Warehouse Hub sign-in link",
     html: [
       "<p>Use this link to sign in to Warehouse Hub.</p>",
       `<p><a href="${url}">Sign in</a></p>`,
-      `<p>This link expires at ${input.expiresAt}.</p>`,
+      `<p>This link expires at ${expiresAt}.</p>`,
     ].join(""),
   });
 }
@@ -89,16 +90,17 @@ export async function magicLinkLoginEmail(
 export async function userInviteEmail(
   input: UserInviteEmailInput,
 ): Promise<void> {
-  const url = buildUserInviteUrl(input.token);
+  const url = escapeHtml(buildUserInviteUrl(input.token));
   const inviterName = escapeHtml(input.inviterName);
   const workspaceName = escapeHtml(input.workspaceName);
+  const expiresAt = escapeHtml(input.expiresAt);
   await sendEmail({
     to: input.to,
     subject: `Invitation to ${input.workspaceName}`,
     html: [
       `<p>${inviterName} invited you to ${workspaceName}.</p>`,
       `<p><a href="${url}">Accept invitation</a></p>`,
-      `<p>This invitation expires at ${input.expiresAt}.</p>`,
+      `<p>This invitation expires at ${expiresAt}.</p>`,
     ].join(""),
   });
 }

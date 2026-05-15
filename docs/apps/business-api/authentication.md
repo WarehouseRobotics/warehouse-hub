@@ -45,7 +45,7 @@ type Workspace = {
 type User = {
   id: string;          // usr_*
   workspaceId: string; // FK
-  email: string;       // unique
+  email: string;       // unique among active users in the workspace
   displayName: string;
   passwordHash: string | null;   // null for magic-link-only users
   role: "owner" | "admin" | "member";
@@ -55,7 +55,7 @@ type User = {
 };
 ```
 
-The owner is immutable. `softDeleteUser(ownerId)` throws.
+The owner is immutable. `softDeleteUser(ownerId)` throws, and the database enforces at most one active owner per workspace.
 
 ### `user_sessions`
 

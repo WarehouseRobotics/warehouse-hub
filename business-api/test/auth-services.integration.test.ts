@@ -74,6 +74,14 @@ describe("auth service layer", () => {
     });
     expect(getUser("MEMBER@example.com")).toEqual(member);
     expect(passwordless).toMatchObject({ email: "magic@example.com" });
+    expect(() =>
+      createUser({
+        email: "second-owner@example.com",
+        displayName: "Second Owner",
+        password: "owner-password",
+        role: "owner",
+      }),
+    ).toThrow(/active owner/i);
 
     const memberRow = getOrm()
       .select()
@@ -117,6 +125,12 @@ describe("auth service layer", () => {
         displayName: "Ops Member",
         role: "admin",
       }),
+    );
+    expect(() => updateUser(owner.userId, { role: "admin" })).toThrow(
+      /owner user role cannot be changed/i,
+    );
+    expect(() => updateUser(member.userId, { role: "owner" })).toThrow(
+      /active owner/i,
     );
     const clearedPasswordRow = getOrm()
       .select()
@@ -516,7 +530,9 @@ describe("auth service layer", () => {
     const { getOrm } = await import("../src/db/connection.js");
     const { magicLinkTokens, userInvitations, users } =
       await import("../src/db/schema/index.js");
-    const { createUser } = await import("../src/services/users.js");
+    const { createUser, softDeleteUser } = await import(
+      "../src/services/users.js"
+    );
     const {
       acceptInvitation,
       createInvitation,
@@ -592,6 +608,24 @@ describe("auth service layer", () => {
     ).toThrow(/invalid or expired/i);
     expect(listPendingInvitations()).toEqual([]);
 
+    softDeleteUser(accepted.user.userId);
+    const reInvitation = await createInvitation({
+      email: " Teammate@Example.com ",
+      invitedByUserId: inviter.userId,
+      role: "member",
+    });
+    const reToken = new URL(reInvitation.acceptUrl).pathname.split("/").at(-1);
+    const reAccepted = acceptInvitation(reToken ?? "", {
+      displayName: "Teammate Again",
+    });
+    expect(reAccepted.user).toEqual(
+      expect.objectContaining({
+        email: "teammate@example.com",
+        displayName: "Teammate Again",
+      }),
+    );
+    expect(reAccepted.user.userId).not.toBe(accepted.user.userId);
+
     const active = await createInvitation({
       email: "active-invite@example.com",
       invitedByUserId: inviter.userId,
@@ -634,6 +668,21 @@ describe("auth service layer", () => {
       acceptInvitation("not-a-token", { displayName: "Invalid" }),
     ).toThrow(/invalid or expired/i);
 
+    const race = await createInvitation({
+      email: "race@example.com",
+      invitedByUserId: inviter.userId,
+      role: "member",
+    });
+    const raceToken = new URL(race.acceptUrl).pathname.split("/").at(-1);
+    createUser({
+      email: "race@example.com",
+      displayName: "Race Winner",
+      role: "member",
+    });
+    expect(() =>
+      acceptInvitation(raceToken ?? "", { displayName: "Race Loser" }),
+    ).toThrow(/user already exists/i);
+
     await expect(
       createInvitation({
         email: "owner-invite@example.com",
@@ -674,7 +723,7 @@ describe("auth service layer", () => {
     await magicLinkLoginEmail({
       to: "login@example.com",
       token: "mlt_login",
-      expiresAt: "2026-05-15T12:00:00.000Z",
+      expiresAt: "2026-05-15T12:00:00.000Z<script>",
     });
 
     expect(resendSendMock).not.toHaveBeenCalled();
@@ -685,6 +734,14 @@ describe("auth service layer", () => {
         subject: "Your Warehouse Hub sign-in link",
         html: expect.stringContaining(
           "http://localhost:5173/auth/consume?token=mlt_login",
+        ),
+      }),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Email delivery skipped because RESEND_API_KEY is unset",
+      expect.objectContaining({
+        html: expect.stringContaining(
+          "2026-05-15T12:00:00.000Z&lt;script&gt;",
         ),
       }),
     );
@@ -708,7 +765,7 @@ describe("auth service layer", () => {
       inviterName: "Admin <Owner>",
       workspaceName: "Warehouse & Co",
       token: "mlt_invite",
-      expiresAt: "2026-05-15T12:00:00.000Z",
+      expiresAt: '2026-05-15T12:00:00.000Z"><img src=x>',
     });
 
     expect(resendSendMock).toHaveBeenCalledWith({
@@ -718,7 +775,7 @@ describe("auth service layer", () => {
       html: [
         "<p>Admin &lt;Owner&gt; invited you to Warehouse &amp; Co.</p>",
         '<p><a href="http://localhost:5173/accept-invite/mlt_invite">Accept invitation</a></p>',
-        "<p>This invitation expires at 2026-05-15T12:00:00.000Z.</p>",
+        "<p>This invitation expires at 2026-05-15T12:00:00.000Z&quot;&gt;&lt;img src=x&gt;.</p>",
       ].join(""),
     });
 

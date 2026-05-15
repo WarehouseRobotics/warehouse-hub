@@ -22,6 +22,15 @@ export const users = sqliteTable(
   },
   (table) => ({
     workspaceIdIdx: index("users_workspace_id_idx").on(table.workspaceId),
-    emailUniqueIdx: uniqueIndex("users_email_unique_idx").on(table.email),
+    workspaceEmailActiveUniqueIdx: uniqueIndex(
+      "users_workspace_email_active_unique_idx",
+    )
+      .on(table.workspaceId, table.email)
+      .where(sql`${table.deletedAt} IS NULL`),
+    workspaceOwnerActiveUniqueIdx: uniqueIndex(
+      "users_workspace_owner_active_unique_idx",
+    )
+      .on(table.workspaceId)
+      .where(sql`${table.role} = 'owner' AND ${table.deletedAt} IS NULL`),
   }),
 );

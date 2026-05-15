@@ -71,25 +71,132 @@ function mapUser(record: typeof users.$inferSelect): User {
   };
 }
 
+function isSqliteUniqueConstraintError(error: unknown): error is Error {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("UNIQUE constraint failed") ||
+    String((error as { code?: string }).code).includes(
+      "SQLITE_CONSTRAINT_UNIQUE",
+    )
+  );
+}
+
+function getActiveUserByEmail(workspaceId: string, email: string) {
+  return getOrm()
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.workspaceId, workspaceId),
+        eq(users.email, email),
+        isNull(users.deletedAt),
+      ),
+    )
+    .get();
+}
+
+function getActiveOwner(workspaceId: string) {
+  return getOrm()
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.workspaceId, workspaceId),
+        eq(users.role, "owner"),
+        isNull(users.deletedAt),
+      ),
+    )
+    .get();
+}
+
+function throwUserAlreadyExists(email: string): never {
+  throw new AppError(`User already exists: ${email}`, {
+    statusCode: 409,
+    code: "conflict",
+  });
+}
+
+function throwOwnerAlreadyExists(workspaceId: string): never {
+  throw new AppError("Workspace already has an active owner", {
+    statusCode: 409,
+    code: "owner_conflict",
+    details: { workspaceId },
+  });
+}
+
+function assertCanCreateUser(input: {
+  workspaceId: string;
+  email: string;
+  role: UserRole;
+}): void {
+  if (getActiveUserByEmail(input.workspaceId, input.email)) {
+    throwUserAlreadyExists(input.email);
+  }
+
+  if (input.role === "owner" && getActiveOwner(input.workspaceId)) {
+    throwOwnerAlreadyExists(input.workspaceId);
+  }
+}
+
+function translateUserConstraintError(
+  error: unknown,
+  input: {
+    workspaceId: string;
+    email: string;
+    role: UserRole;
+  },
+): never {
+  if (!isSqliteUniqueConstraintError(error)) {
+    throw error;
+  }
+
+  if (getActiveUserByEmail(input.workspaceId, input.email)) {
+    throwUserAlreadyExists(input.email);
+  }
+
+  if (input.role === "owner" && getActiveOwner(input.workspaceId)) {
+    throwOwnerAlreadyExists(input.workspaceId);
+  }
+
+  throw new AppError("User violates an active uniqueness constraint", {
+    statusCode: 409,
+    code: "conflict",
+  });
+}
+
 export function createUser(input: UserInput): User {
   const now = new Date().toISOString();
   const id = createPrefixedId("usr_");
   const workspaceId = input.workspaceId ?? getWorkspace().id;
+  const email = normalizeEmail(input.email);
 
-  getOrm()
-    .insert(users)
-    .values({
-      id,
+  assertCanCreateUser({ workspaceId, email, role: input.role });
+
+  try {
+    getOrm()
+      .insert(users)
+      .values({
+        id,
+        workspaceId,
+        email,
+        displayName: input.displayName,
+        passwordHash: mapPasswordHash(input.password),
+        role: input.role,
+        createdAt: now,
+        lastLoginAt: null,
+        deletedAt: null,
+      })
+      .run();
+  } catch (error) {
+    translateUserConstraintError(error, {
       workspaceId,
-      email: normalizeEmail(input.email),
-      displayName: input.displayName,
-      passwordHash: mapPasswordHash(input.password),
+      email,
       role: input.role,
-      createdAt: now,
-      lastLoginAt: null,
-      deletedAt: null,
-    })
-    .run();
+    });
+  }
 
   return getUser(id);
 }
@@ -110,20 +217,43 @@ export function getUser(idOrEmail: string): User {
 
 export function updateUser(idOrEmail: string, patch: UserPatch): User {
   const existing = requireUserRecord(idOrEmail);
+  const role = patch.role ?? existing.role;
+  if (existing.role === "owner" && role !== "owner") {
+    throw new AppError("Owner user role cannot be changed", {
+      statusCode: 400,
+      code: "owner_role_change_forbidden",
+    });
+  }
+  if (
+    existing.role !== "owner" &&
+    role === "owner" &&
+    getActiveOwner(existing.workspaceId)
+  ) {
+    throwOwnerAlreadyExists(existing.workspaceId);
+  }
+
   const passwordHash =
     patch.password === undefined
       ? existing.passwordHash
       : mapPasswordHash(patch.password);
 
-  getOrm()
-    .update(users)
-    .set({
-      displayName: patch.displayName ?? existing.displayName,
-      passwordHash,
-      role: patch.role ?? existing.role,
-    })
-    .where(eq(users.id, existing.id))
-    .run();
+  try {
+    getOrm()
+      .update(users)
+      .set({
+        displayName: patch.displayName ?? existing.displayName,
+        passwordHash,
+        role,
+      })
+      .where(eq(users.id, existing.id))
+      .run();
+  } catch (error) {
+    translateUserConstraintError(error, {
+      workspaceId: existing.workspaceId,
+      email: existing.email,
+      role,
+    });
+  }
 
   return getUser(existing.id);
 }
