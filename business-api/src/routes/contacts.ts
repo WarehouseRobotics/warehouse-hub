@@ -10,6 +10,7 @@ import {
   softDeleteContact,
   updateContact,
 } from "../services/contacts.js";
+import { requireScope } from "../middleware/auth.js";
 
 export const contactsRouter = Router();
 
@@ -17,7 +18,7 @@ function parseContactType(value: unknown): ContactType | undefined {
   return value === "person" || value === "company" ? value : undefined;
 }
 
-contactsRouter.get("/", (request, response) => {
+contactsRouter.get("/", requireScope("read"), (request, response) => {
   response.json(
     listContacts({
       query: typeof request.query.query === "string" ? request.query.query : undefined,
@@ -29,26 +30,50 @@ contactsRouter.get("/", (request, response) => {
   );
 });
 
-contactsRouter.post("/", validateBody(contactInputSchema), (request, response) => {
-  response.status(201).json(createContact(request.body));
+contactsRouter.post("/", requireScope("write"), validateBody(contactInputSchema), (request, response) => {
+  const contact = createContact(request.body);
+  response.locals.audit = {
+    action: "contact.create",
+    objectType: "contact",
+    objectId: contact.contactId,
+  };
+  response.status(201).json(contact);
 });
 
-contactsRouter.post("/resolve", validateBody(contactResolveInputSchema), (request, response) => {
-  response.json(resolveContact(request.body));
+contactsRouter.post("/resolve", requireScope("write"), validateBody(contactResolveInputSchema), (request, response) => {
+  const contact = resolveContact(request.body);
+  response.locals.audit = {
+    action: "contact.resolve",
+    objectType: "contact",
+    objectId: contact.contactId,
+  };
+  response.json(contact);
 });
 
-contactsRouter.get("/:id", (request, response) => {
+contactsRouter.get("/:id", requireScope("read"), (request, response) => {
   const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
   response.json(getContact(id));
 });
 
-contactsRouter.patch("/:id", validateBody(contactPatchSchema), (request, response) => {
+contactsRouter.patch("/:id", requireScope("write"), validateBody(contactPatchSchema), (request, response) => {
   const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
-  response.json(updateContact(id, request.body));
+  const contact = updateContact(id, request.body);
+  response.locals.audit = {
+    action: "contact.update",
+    objectType: "contact",
+    objectId: contact.contactId,
+  };
+  response.json(contact);
 });
 
-contactsRouter.delete("/:id", (request, response) => {
+contactsRouter.delete("/:id", requireScope("write"), (request, response) => {
   const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
+  const contact = getContact(id);
   softDeleteContact(id);
+  response.locals.audit = {
+    action: "contact.delete",
+    objectType: "contact",
+    objectId: contact.contactId,
+  };
   response.status(204).send();
 });

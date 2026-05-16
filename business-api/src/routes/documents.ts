@@ -3,6 +3,7 @@ import { Router } from "express";
 
 import { parseListFilters } from "../lib/list-filters.js";
 import { parseMultipartJson } from "../lib/multipart-json.js";
+import { requireScope } from "../middleware/auth.js";
 import { documentIngestSchema, documentUploadSchema } from "@warehouse-hub/business-schemas";
 import { getDocumentDownload, getDocumentMeta, listDocuments, softDeleteDocument, uploadDocument } from "../services/documents.js";
 import { ingestDocument } from "../services/document-ingestion.js";
@@ -14,7 +15,7 @@ function getRouteParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
 
-documentsRouter.post("/", upload.single("file"), (request, response) => {
+documentsRouter.post("/", requireScope("write"), upload.single("file"), (request, response) => {
   if (!request.file) {
     response.status(400).json({
       error: {
@@ -26,10 +27,16 @@ documentsRouter.post("/", upload.single("file"), (request, response) => {
   }
 
   const meta = documentUploadSchema.parse(request.body);
-  response.status(201).json(uploadDocument(request.file, meta));
+  const document = uploadDocument(request.file, meta);
+  response.locals.audit = {
+    action: "document.upload",
+    objectType: "document",
+    objectId: document.documentId,
+  };
+  response.status(201).json(document);
 });
 
-documentsRouter.get("/", async (request, response, next) => {
+documentsRouter.get("/", requireScope("read"), async (request, response, next) => {
   try {
     response.json(
       await listDocuments(
@@ -47,7 +54,7 @@ documentsRouter.get("/", async (request, response, next) => {
   }
 });
 
-documentsRouter.post("/ingest", upload.single("file"), async (request, response, next) => {
+documentsRouter.post("/ingest", requireScope("write"), upload.single("file"), async (request, response, next) => {
   try {
     if (!request.file) {
       response.status(400).json({
@@ -67,23 +74,39 @@ documentsRouter.post("/ingest", upload.single("file"), async (request, response,
       overrides: parseMultipartJson(request.body.overrides, "overrides"),
     });
 
-    response.status(201).json(await ingestDocument(request.file, meta));
+    const result = await ingestDocument(request.file, meta);
+    response.locals.audit = {
+      action: "document.ingest",
+      objectType: "document",
+      objectId: result.document.documentId,
+      metadata: {
+        linkedEntityType: result.linkedEntity?.type ?? null,
+      },
+    };
+    response.status(201).json(result);
   } catch (error) {
     next(error);
   }
 });
 
-documentsRouter.get("/:id", (request, response) => {
+documentsRouter.get("/:id", requireScope("read"), (request, response) => {
   response.json(getDocumentMeta(getRouteParam(request.params.id)));
 });
 
-documentsRouter.get("/:id/download", (request, response) => {
+documentsRouter.get("/:id/download", requireScope("read"), (request, response) => {
   const document = getDocumentDownload(getRouteParam(request.params.id));
   response.type(document.mimeType);
   response.download(document.path, document.filename);
 });
 
-documentsRouter.delete("/:id", (request, response) => {
-  softDeleteDocument(getRouteParam(request.params.id));
+documentsRouter.delete("/:id", requireScope("write"), (request, response) => {
+  const id = getRouteParam(request.params.id);
+  const document = getDocumentMeta(id);
+  softDeleteDocument(id);
+  response.locals.audit = {
+    action: "document.delete",
+    objectType: "document",
+    objectId: document.documentId,
+  };
   response.status(204).send();
 });

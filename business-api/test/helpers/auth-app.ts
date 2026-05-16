@@ -30,6 +30,8 @@ export function resetProcessEnv(
   delete process.env.WORKSPACE_SLUG;
   delete process.env.BOOTSTRAP_OWNER_EMAIL;
   delete process.env.BOOTSTRAP_OWNER_PASSWORD;
+  delete process.env.AUTH_PASSWORD_LOGIN_ENABLED;
+  delete process.env.AUTH_MAGIC_LINK_ENABLED;
 
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) {

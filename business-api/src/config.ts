@@ -4,6 +4,10 @@ import { z } from "zod";
 
 loadEnv();
 
+const booleanishSchema = z
+  .enum(["0", "1", "false", "true"])
+  .transform((value) => value === "1" || value === "true");
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -23,10 +27,9 @@ const envSchema = z.object({
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
   SESSION_MAX_LIFETIME_DAYS: z.coerce.number().int().positive().default(30),
   HUB_AUTH_MODE: z.enum(["api-key", "pam"]).default("api-key"),
-  HUB_PASSWORD_LOGIN: z
-    .enum(["0", "1"])
-    .default("1")
-    .transform((value) => value === "1"),
+  HUB_PASSWORD_LOGIN: booleanishSchema.default("1"),
+  AUTH_PASSWORD_LOGIN_ENABLED: booleanishSchema.optional(),
+  AUTH_MAGIC_LINK_ENABLED: booleanishSchema.default("true"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   LLMS_CONFIG_PATH: z.string().optional(),
   EMBEDDING_API_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
@@ -47,6 +50,8 @@ const envSchema = z.object({
 
 const parsed = envSchema.parse(process.env);
 const projectRoot = path.resolve(import.meta.dirname, "..");
+const authPasswordLoginEnabled =
+  parsed.AUTH_PASSWORD_LOGIN_ENABLED ?? parsed.HUB_PASSWORD_LOGIN;
 
 function parseAllowedOrigins(): string[] {
   const dashboardOrigin = new URL(parsed.DASHBOARD_BASE_URL).origin;
@@ -61,6 +66,7 @@ function parseAllowedOrigins(): string[] {
 
 export const config = {
   ...parsed,
+  AUTH_PASSWORD_LOGIN_ENABLED: authPasswordLoginEnabled,
   corsAllowedOrigins: parseAllowedOrigins(),
   projectRoot,
   databasePath: path.resolve(projectRoot, parsed.DATABASE_PATH),

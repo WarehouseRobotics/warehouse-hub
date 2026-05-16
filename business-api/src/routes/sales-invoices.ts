@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { parseListFilters } from "../lib/list-filters.js";
+import { requireScope } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { salesInvoiceGenerateSchema, salesInvoicePatchSchema } from "@warehouse-hub/business-schemas";
 import {
@@ -17,7 +18,7 @@ function getRouteParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
 
-salesInvoicesRouter.get("/", async (request, response, next) => {
+salesInvoicesRouter.get("/", requireScope("read"), async (request, response, next) => {
   try {
     response.json(
       await listSalesInvoices({
@@ -38,19 +39,38 @@ salesInvoicesRouter.get("/", async (request, response, next) => {
   }
 });
 
-salesInvoicesRouter.post("/", validateBody(salesInvoiceGenerateSchema), (request, response) => {
-  response.status(201).json(generateSalesInvoice(request.body));
+salesInvoicesRouter.post("/", requireScope("write"), validateBody(salesInvoiceGenerateSchema), (request, response) => {
+  const invoice = generateSalesInvoice(request.body);
+  response.locals.audit = {
+    action: "sales_invoice.create",
+    objectType: "sales_invoice",
+    objectId: invoice.salesInvoiceId,
+  };
+  response.status(201).json(invoice);
 });
 
-salesInvoicesRouter.get("/:id", (request, response) => {
+salesInvoicesRouter.get("/:id", requireScope("read"), (request, response) => {
   response.json(getSalesInvoice(getRouteParam(request.params.id)));
 });
 
-salesInvoicesRouter.patch("/:id", validateBody(salesInvoicePatchSchema), (request, response) => {
-  response.json(updateSalesInvoice(getRouteParam(request.params.id), request.body));
+salesInvoicesRouter.patch("/:id", requireScope("write"), validateBody(salesInvoicePatchSchema), (request, response) => {
+  const invoice = updateSalesInvoice(getRouteParam(request.params.id), request.body);
+  response.locals.audit = {
+    action: "sales_invoice.update",
+    objectType: "sales_invoice",
+    objectId: invoice.salesInvoiceId,
+  };
+  response.json(invoice);
 });
 
-salesInvoicesRouter.delete("/:id", (request, response) => {
-  softDeleteSalesInvoice(getRouteParam(request.params.id));
+salesInvoicesRouter.delete("/:id", requireScope("write"), (request, response) => {
+  const id = getRouteParam(request.params.id);
+  const invoice = getSalesInvoice(id);
+  softDeleteSalesInvoice(id);
+  response.locals.audit = {
+    action: "sales_invoice.delete",
+    objectType: "sales_invoice",
+    objectId: invoice.salesInvoiceId,
+  };
   response.status(204).send();
 });

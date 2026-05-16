@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { parseListFilters } from "../lib/list-filters.js";
+import { requireScope } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   createBankAccount,
@@ -50,7 +51,7 @@ function getListFilters(query: Record<string, unknown>) {
   });
 }
 
-bankAccountsRouter.get("/", (request, response) => {
+bankAccountsRouter.get("/", requireScope("read"), (request, response) => {
   response.json(
     listBankAccounts({
       status: typeof request.query.status === "string" ? request.query.status : undefined,
@@ -58,24 +59,43 @@ bankAccountsRouter.get("/", (request, response) => {
   );
 });
 
-bankAccountsRouter.post("/", validateBody(bankAccountInputSchema), (request, response) => {
-  response.status(201).json(createBankAccount(request.body));
+bankAccountsRouter.post("/", requireScope("write"), validateBody(bankAccountInputSchema), (request, response) => {
+  const account = createBankAccount(request.body);
+  response.locals.audit = {
+    action: "bank_account.create",
+    objectType: "bank_account",
+    objectId: account.bankAccountId,
+  };
+  response.status(201).json(account);
 });
 
-bankAccountsRouter.get("/:id", (request, response) => {
+bankAccountsRouter.get("/:id", requireScope("read"), (request, response) => {
   response.json(getBankAccount(getRouteParam(request.params.id)));
 });
 
-bankAccountsRouter.patch("/:id", validateBody(bankAccountPatchSchema), (request, response) => {
-  response.json(updateBankAccount(getRouteParam(request.params.id), request.body));
+bankAccountsRouter.patch("/:id", requireScope("write"), validateBody(bankAccountPatchSchema), (request, response) => {
+  const account = updateBankAccount(getRouteParam(request.params.id), request.body);
+  response.locals.audit = {
+    action: "bank_account.update",
+    objectType: "bank_account",
+    objectId: account.bankAccountId,
+  };
+  response.json(account);
 });
 
-bankAccountsRouter.delete("/:id", (request, response) => {
-  softDeleteBankAccount(getRouteParam(request.params.id));
+bankAccountsRouter.delete("/:id", requireScope("write"), (request, response) => {
+  const id = getRouteParam(request.params.id);
+  const account = getBankAccount(id);
+  softDeleteBankAccount(id);
+  response.locals.audit = {
+    action: "bank_account.delete",
+    objectType: "bank_account",
+    objectId: account.bankAccountId,
+  };
   response.status(204).send();
 });
 
-bankTransactionsRouter.get("/", async (request, response, next) => {
+bankTransactionsRouter.get("/", requireScope("read"), async (request, response, next) => {
   try {
     response.json(
       await listBankTransactions({
@@ -90,32 +110,67 @@ bankTransactionsRouter.get("/", async (request, response, next) => {
   }
 });
 
-bankTransactionsRouter.post("/", validateBody(bankTransactionInputSchema), (request, response) => {
-  response.status(201).json(createBankTransaction(request.body));
+bankTransactionsRouter.post("/", requireScope("write"), validateBody(bankTransactionInputSchema), (request, response) => {
+  const transaction = createBankTransaction(request.body);
+  response.locals.audit = {
+    action: "bank_transaction.create",
+    objectType: "bank_transaction",
+    objectId: transaction.bankTransactionId,
+  };
+  response.status(201).json(transaction);
 });
 
-bankTransactionsRouter.post("/upsert", validateBody(bankTransactionUpsertSchema), (request, response) => {
-  response.status(201).json(upsertBankTransaction(request.body));
+bankTransactionsRouter.post("/upsert", requireScope("write"), validateBody(bankTransactionUpsertSchema), (request, response) => {
+  const result = upsertBankTransaction(request.body);
+  response.locals.audit = {
+    action: `bank_transaction.${result.action}`,
+    objectType: "bank_transaction",
+    objectId: result.transaction.bankTransactionId,
+  };
+  response.status(201).json(result);
 });
 
-bankTransactionsRouter.get("/:id", (request, response) => {
+bankTransactionsRouter.get("/:id", requireScope("read"), (request, response) => {
   response.json(getBankTransaction(getRouteParam(request.params.id)));
 });
 
-bankTransactionsRouter.patch("/:id", validateBody(bankTransactionPatchSchema), (request, response) => {
-  response.json(updateBankTransaction(getRouteParam(request.params.id), request.body));
+bankTransactionsRouter.patch("/:id", requireScope("write"), validateBody(bankTransactionPatchSchema), (request, response) => {
+  const transaction = updateBankTransaction(getRouteParam(request.params.id), request.body);
+  response.locals.audit = {
+    action: "bank_transaction.update",
+    objectType: "bank_transaction",
+    objectId: transaction.bankTransactionId,
+  };
+  response.json(transaction);
 });
 
-bankTransactionsRouter.delete("/:id", (request, response) => {
-  softDeleteBankTransaction(getRouteParam(request.params.id));
+bankTransactionsRouter.delete("/:id", requireScope("write"), (request, response) => {
+  const id = getRouteParam(request.params.id);
+  const transaction = getBankTransaction(id);
+  softDeleteBankTransaction(id);
+  response.locals.audit = {
+    action: "bank_transaction.delete",
+    objectType: "bank_transaction",
+    objectId: transaction.bankTransactionId,
+  };
   response.status(204).send();
 });
 
-bankTransactionsRouter.post("/:id/match", (request, response) => {
-  response.json(matchBankTransaction(getRouteParam(request.params.id)));
+bankTransactionsRouter.post("/:id/match", requireScope("write"), (request, response) => {
+  const result = matchBankTransaction(getRouteParam(request.params.id));
+  response.locals.audit = {
+    action: "bank_transaction.match",
+    objectType: "bank_transaction",
+    objectId: result.bankTransactionId,
+    metadata: {
+      autoConfirmed: result.autoConfirmed,
+      matchCount: result.matches.length,
+    },
+  };
+  response.json(result);
 });
 
-bankBalanceSnapshotsRouter.get("/", (request, response) => {
+bankBalanceSnapshotsRouter.get("/", requireScope("read"), (request, response) => {
   response.json(
     listBankBalanceSnapshots({
       ...getListFilters(request.query),
@@ -124,11 +179,17 @@ bankBalanceSnapshotsRouter.get("/", (request, response) => {
   );
 });
 
-bankBalanceSnapshotsRouter.post("/", validateBody(bankBalanceSnapshotInputSchema), (request, response) => {
-  response.status(201).json(createBankBalanceSnapshot(request.body));
+bankBalanceSnapshotsRouter.post("/", requireScope("write"), validateBody(bankBalanceSnapshotInputSchema), (request, response) => {
+  const snapshot = createBankBalanceSnapshot(request.body);
+  response.locals.audit = {
+    action: "bank_balance_snapshot.create",
+    objectType: "bank_balance_snapshot",
+    objectId: snapshot.bankBalanceSnapshotId,
+  };
+  response.status(201).json(snapshot);
 });
 
-bankTransactionMatchesRouter.get("/", (request, response) => {
+bankTransactionMatchesRouter.get("/", requireScope("read"), (request, response) => {
   response.json(
     listBankTransactionMatches({
       bankTransactionId:
@@ -138,10 +199,22 @@ bankTransactionMatchesRouter.get("/", (request, response) => {
   );
 });
 
-bankTransactionMatchesRouter.post("/", validateBody(bankTransactionMatchInputSchema), (request, response) => {
-  response.status(201).json(createBankTransactionMatch(request.body));
+bankTransactionMatchesRouter.post("/", requireScope("write"), validateBody(bankTransactionMatchInputSchema), (request, response) => {
+  const match = createBankTransactionMatch(request.body);
+  response.locals.audit = {
+    action: "bank_transaction_match.create",
+    objectType: "bank_transaction_match",
+    objectId: match.bankTransactionMatchId,
+  };
+  response.status(201).json(match);
 });
 
-bankTransactionMatchesRouter.patch("/:id", validateBody(bankTransactionMatchPatchSchema), (request, response) => {
-  response.json(updateBankTransactionMatch(getRouteParam(request.params.id), request.body));
+bankTransactionMatchesRouter.patch("/:id", requireScope("write"), validateBody(bankTransactionMatchPatchSchema), (request, response) => {
+  const match = updateBankTransactionMatch(getRouteParam(request.params.id), request.body);
+  response.locals.audit = {
+    action: "bank_transaction_match.update",
+    objectType: "bank_transaction_match",
+    objectId: match.bankTransactionMatchId,
+  };
+  response.json(match);
 });

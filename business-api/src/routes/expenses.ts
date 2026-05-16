@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { parseListFilters } from "../lib/list-filters.js";
+import { requireScope } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { expenseInputSchema, expensePatchSchema } from "@warehouse-hub/business-schemas";
 import {
@@ -17,7 +18,7 @@ function getRouteParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
 
-expensesRouter.get("/", async (request, response, next) => {
+expensesRouter.get("/", requireScope("read"), async (request, response, next) => {
   try {
     response.json(
       await listExpenses({
@@ -39,19 +40,38 @@ expensesRouter.get("/", async (request, response, next) => {
   }
 });
 
-expensesRouter.post("/", validateBody(expenseInputSchema), (request, response) => {
-  response.status(201).json(createExpense(request.body));
+expensesRouter.post("/", requireScope("write"), validateBody(expenseInputSchema), (request, response) => {
+  const expense = createExpense(request.body);
+  response.locals.audit = {
+    action: "expense.create",
+    objectType: "expense",
+    objectId: expense.expenseId,
+  };
+  response.status(201).json(expense);
 });
 
-expensesRouter.get("/:id", (request, response) => {
+expensesRouter.get("/:id", requireScope("read"), (request, response) => {
   response.json(getExpense(getRouteParam(request.params.id)));
 });
 
-expensesRouter.patch("/:id", validateBody(expensePatchSchema), (request, response) => {
-  response.json(updateExpense(getRouteParam(request.params.id), request.body));
+expensesRouter.patch("/:id", requireScope("write"), validateBody(expensePatchSchema), (request, response) => {
+  const expense = updateExpense(getRouteParam(request.params.id), request.body);
+  response.locals.audit = {
+    action: "expense.update",
+    objectType: "expense",
+    objectId: expense.expenseId,
+  };
+  response.json(expense);
 });
 
-expensesRouter.delete("/:id", (request, response) => {
-  softDeleteExpense(getRouteParam(request.params.id));
+expensesRouter.delete("/:id", requireScope("write"), (request, response) => {
+  const id = getRouteParam(request.params.id);
+  const expense = getExpense(id);
+  softDeleteExpense(id);
+  response.locals.audit = {
+    action: "expense.delete",
+    objectType: "expense",
+    objectId: expense.expenseId,
+  };
   response.status(204).send();
 });

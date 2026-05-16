@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { asyncRoute } from "../lib/express.js";
-import { requireCurrentUserId, requireRole } from "../middleware/auth.js";
+import { requireCurrentUserId, requireRole, requireScope } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   acceptInvitation,
@@ -56,12 +56,13 @@ publicUsersRouter.post(
 
 usersRouter.use(requireRole("admin"));
 
-usersRouter.get("/", (_request, response) => {
+usersRouter.get("/", requireScope("read"), (_request, response) => {
   response.json(listUsers());
 });
 
 usersRouter.post(
   "/invitations",
+  requireScope("write"),
   validateBody(createInvitationSchema),
   asyncRoute(async (request, response) => {
     const invitation = await createInvitation({
@@ -83,7 +84,7 @@ usersRouter.post(
   }),
 );
 
-usersRouter.delete("/invitations/:id", (request, response, next) => {
+usersRouter.delete("/invitations/:id", requireScope("write"), (request, response, next) => {
   try {
     const invitation = revokeInvitation(request.params.id as string);
     response.locals.audit = {
@@ -103,6 +104,7 @@ usersRouter.delete("/invitations/:id", (request, response, next) => {
 
 usersRouter.patch(
   "/:id",
+  requireScope("write"),
   validateBody(updateUserSchema),
   asyncRoute(async (request, response) => {
     const user = await updateUser(
@@ -121,7 +123,7 @@ usersRouter.patch(
   }),
 );
 
-usersRouter.delete("/:id", (request, response, next) => {
+usersRouter.delete("/:id", requireScope("write"), (request, response, next) => {
   try {
     const userId = request.params.id as string;
     softDeleteUser(userId);

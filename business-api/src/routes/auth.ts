@@ -5,7 +5,7 @@ import { config } from "../config.js";
 import { AppError } from "../lib/errors.js";
 import { asyncRoute } from "../lib/express.js";
 import { logger } from "../lib/logger.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireScope } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { magicLinkLoginEmail } from "../services/email.js";
 import {
@@ -61,7 +61,7 @@ authRouter.post(
   "/login",
   validateBody(loginSchema),
   asyncRoute(async (request, response) => {
-    if (!config.HUB_PASSWORD_LOGIN) {
+    if (!config.AUTH_PASSWORD_LOGIN_ENABLED) {
       throw new AppError("Password login is disabled", {
         statusCode: 403,
         code: "password_login_disabled",
@@ -82,6 +82,13 @@ authRouter.post(
   "/magic-link/request",
   validateBody(magicLinkRequestSchema),
   asyncRoute(async (request, response) => {
+    if (!config.AUTH_MAGIC_LINK_ENABLED) {
+      throw new AppError("Magic-link login is disabled", {
+        statusCode: 403,
+        code: "magic_link_disabled",
+      });
+    }
+
     let user: User | null = null;
     try {
       user = getUser(request.body.email);
@@ -121,6 +128,13 @@ authRouter.post(
   "/magic-link/consume",
   validateBody(magicLinkConsumeSchema),
   asyncRoute(async (request, response) => {
+    if (!config.AUTH_MAGIC_LINK_ENABLED) {
+      throw new AppError("Magic-link login is disabled", {
+        statusCode: 403,
+        code: "magic_link_disabled",
+      });
+    }
+
     const magicLink = consumeMagicLink(request.body.token, "login");
     let user: User;
     try {
@@ -138,20 +152,29 @@ authRouter.post(
   }),
 );
 
-authRouter.post("/logout", requireAuth, (request, response, next) => {
+authRouter.post("/logout", requireAuth, requireScope("write"), (request, response, next) => {
   try {
     if (request.context?.sessionId) {
       revokeSession(request.context.sessionId);
     }
 
     clearSessionCookie(response);
+    response.locals.audit = {
+      action: "auth.logout",
+      objectType: "user_session",
+      objectId:
+        request.context?.sessionId ??
+        request.context?.tokenId ??
+        request.context?.userId ??
+        "current",
+    };
     response.status(204).send();
   } catch (error) {
     next(error);
   }
 });
 
-authRouter.get("/me", requireAuth, (request, response, next) => {
+authRouter.get("/me", requireAuth, requireScope("read"), (request, response, next) => {
   try {
     const user = request.context?.user
       ? mapPublicUser(request.context.user)

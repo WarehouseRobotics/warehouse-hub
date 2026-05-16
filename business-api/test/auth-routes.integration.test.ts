@@ -113,6 +113,41 @@ describe("auth routes", () => {
 
     expect(disabledResponse.status).toBe(403);
     expect(disabledBody.error.code).toBe("password_login_disabled");
+
+    await closeAuthApp();
+
+    baseUrl = await createAuthApp({
+      AUTH_PASSWORD_LOGIN_ENABLED: "false",
+      HUB_PASSWORD_LOGIN: "1",
+    });
+    const { createUser: createCanonicalDisabledUser } = await import(
+      "../src/services/users.js"
+    );
+    await createCanonicalDisabledUser({
+      email: "canonical-disabled@example.com",
+      displayName: "Canonical Disabled",
+      password: "owner-password",
+      role: "owner",
+    });
+
+    const canonicalDisabledResponse = await fetch(
+      `${baseUrl}/api/v1/auth/login`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "canonical-disabled@example.com",
+          password: "owner-password",
+        }),
+      },
+    );
+    const canonicalDisabledBody =
+      (await canonicalDisabledResponse.json()) as {
+        error: { code: string };
+      };
+
+    expect(canonicalDisabledResponse.status).toBe(403);
+    expect(canonicalDisabledBody.error.code).toBe("password_login_disabled");
   });
 
   it("always returns 204 for magic-link requests and only emails known users", async () => {
@@ -167,6 +202,40 @@ describe("auth routes", () => {
       expect.objectContaining({
         to: "magic@example.com",
         subject: "Your Warehouse Hub sign-in link",
+      }),
+    );
+  });
+
+  it("rejects magic-link request and consume when magic links are disabled", async () => {
+    const baseUrl = await createAuthApp({ AUTH_MAGIC_LINK_ENABLED: "false" });
+
+    const requestResponse = await fetch(
+      `${baseUrl}/api/v1/auth/magic-link/request`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "magic@example.com" }),
+      },
+    );
+    const consumeResponse = await fetch(
+      `${baseUrl}/api/v1/auth/magic-link/consume`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: "mlt_disabled" }),
+      },
+    );
+
+    expect(requestResponse.status).toBe(403);
+    expect((await requestResponse.json()) as { error: { code: string } }).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ code: "magic_link_disabled" }),
+      }),
+    );
+    expect(consumeResponse.status).toBe(403);
+    expect((await consumeResponse.json()) as { error: { code: string } }).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ code: "magic_link_disabled" }),
       }),
     );
   });

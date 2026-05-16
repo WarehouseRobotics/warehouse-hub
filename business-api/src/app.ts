@@ -2,7 +2,7 @@ import express from "express";
 
 import { errorHandler } from "./middleware/error-handler.js";
 import { auditMiddleware, requestIdMiddleware } from "./middleware/audit.js";
-import { requireAuth, requireScope } from "./middleware/auth.js";
+import { requireAuth } from "./middleware/auth.js";
 import { config } from "./config.js";
 import {
   bankAccountsRouter,
@@ -76,11 +76,6 @@ export function createApp() {
   app.use("/api/v1/users", publicUsersRouter);
 
   app.use("/api/v1", requireAuth);
-  app.use("/api/v1", (request, response, next) => {
-    const requiredScope =
-      request.method === "GET" || request.method === "HEAD" ? "read" : "write";
-    requireScope(requiredScope)(request, response, next);
-  });
   app.use("/api/v1", auditMiddleware);
   app.use("/api/v1/bank-accounts", bankAccountsRouter);
   app.use("/api/v1/bank-transactions", bankTransactionsRouter);

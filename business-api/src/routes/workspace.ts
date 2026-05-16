@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 
-import { requireRole } from "../middleware/auth.js";
+import { requireRole, requireScope } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { getWorkspace, updateWorkspace } from "../services/workspaces.js";
 
@@ -17,7 +17,7 @@ const updateWorkspaceSchema = z
     "At least one field must be provided",
   );
 
-workspaceRouter.get("/", (_request, response, next) => {
+workspaceRouter.get("/", requireScope("read"), (_request, response, next) => {
   try {
     response.json(getWorkspace());
   } catch (error) {
@@ -27,6 +27,7 @@ workspaceRouter.get("/", (_request, response, next) => {
 
 workspaceRouter.patch(
   "/",
+  requireScope("write"),
   requireRole("admin"),
   validateBody(updateWorkspaceSchema),
   (request, response, next) => {

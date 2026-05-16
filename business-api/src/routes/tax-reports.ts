@@ -4,6 +4,7 @@ import { Router } from "express";
 import { AppError } from "../lib/errors.js";
 import { parseListFilters } from "../lib/list-filters.js";
 import { parseMultipartJson } from "../lib/multipart-json.js";
+import { requireScope } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { ingestTaxReport } from "../services/tax-report-ingestion.js";
 import {
@@ -44,7 +45,7 @@ function parseOptionalInteger(
   return Number.parseInt(value, 10);
 }
 
-taxReportsRouter.get("/", async (request, response, next) => {
+taxReportsRouter.get("/", requireScope("read"), async (request, response, next) => {
   try {
     const listFilters = parseListFilters({
       similar:
@@ -105,14 +106,25 @@ taxReportsRouter.get("/", async (request, response, next) => {
 
 taxReportsRouter.post(
   "/",
+  requireScope("write"),
   validateBody(taxReportCreateRequestSchema),
   (request, response) => {
-    response.status(201).json(createTaxReport(request.body));
+    const result = createTaxReport(request.body);
+    response.locals.audit = {
+      action: result.duplicate ? "tax_report.deduplicate" : "tax_report.create",
+      objectType: "tax_report",
+      objectId: result.taxReport.taxReportId,
+      metadata: {
+        duplicate: result.duplicate,
+      },
+    };
+    response.status(201).json(result);
   },
 );
 
 taxReportsRouter.post(
   "/ingest",
+  requireScope("write"),
   upload.single("file"),
   async (request, response, next) => {
     try {
@@ -138,23 +150,40 @@ taxReportsRouter.post(
         overrides: parseMultipartJson(request.body.overrides, "overrides"),
       });
 
-      response.status(201).json(await ingestTaxReport(request.file, meta));
+      const result = await ingestTaxReport(request.file, meta);
+      response.locals.audit = {
+        action: "tax_report.ingest",
+        objectType: "tax_report",
+        objectId: result.taxReport.taxReportId,
+        metadata: {
+          duplicate: result.duplicate,
+          documentId: result.document.documentId,
+        },
+      };
+      response.status(201).json(result);
     } catch (error) {
       next(error);
     }
   },
 );
 
-taxReportsRouter.get("/:id", (request, response) => {
+taxReportsRouter.get("/:id", requireScope("read"), (request, response) => {
   response.json(getTaxReport(getRouteParam(request.params.id)));
 });
 
-taxReportsRouter.delete("/:id", (request, response) => {
-  softDeleteTaxReport(getRouteParam(request.params.id));
+taxReportsRouter.delete("/:id", requireScope("write"), (request, response) => {
+  const id = getRouteParam(request.params.id);
+  const report = getTaxReport(id);
+  softDeleteTaxReport(id);
+  response.locals.audit = {
+    action: "tax_report.delete",
+    objectType: "tax_report",
+    objectId: report.taxReport.taxReportId,
+  };
   response.status(204).send();
 });
 
-taxCarryforwardsRouter.get("/", (request, response, next) => {
+taxCarryforwardsRouter.get("/", requireScope("read"), (request, response, next) => {
   try {
     response.json(
       listTaxCarryforwards({

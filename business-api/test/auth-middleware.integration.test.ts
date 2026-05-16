@@ -2,8 +2,9 @@ import fs from "node:fs";
 import type { Server } from "node:http";
 import path from "node:path";
 
-import type { Application } from "express";
+import type { Application, Express } from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { requireRole, requireScope } from "../src/middleware/auth.js";
 
 const testDataDir = path.resolve(process.cwd(), "test-data");
 const databasePath = path.join(testDataDir, "business-api.sqlite");
@@ -26,6 +27,8 @@ function resetProcessEnv(overrides: Record<string, string | undefined> = {}) {
   delete process.env.WORKSPACE_SLUG;
   delete process.env.BOOTSTRAP_OWNER_EMAIL;
   delete process.env.BOOTSTRAP_OWNER_PASSWORD;
+  delete process.env.AUTH_PASSWORD_LOGIN_ENABLED;
+  delete process.env.AUTH_MAGIC_LINK_ENABLED;
 
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) {
@@ -66,9 +69,9 @@ async function listen(app: Application): Promise<string> {
 
 async function createMiddlewareApp(
   routes: (args: {
-    app: import("express").Express;
-    requireScope: typeof import("../src/middleware/auth.js").requireScope;
-    requireRole: typeof import("../src/middleware/auth.js").requireRole;
+    app: Express;
+    requireScope: typeof requireScope;
+    requireRole: typeof requireRole;
   }) => void,
   overrides: Record<string, string | undefined> = {},
 ) {

@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
 
-import { requireCurrentUserId } from "../middleware/auth.js";
+import { requireCurrentUserId, requireScope } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   createToken,
@@ -11,6 +11,10 @@ import {
 } from "../services/personal-access-tokens.js";
 
 export const tokensRouter = Router();
+
+function getRouteParam(value: string | string[]): string {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 const authScopeSchema = z.enum(["read", "write", "admin"]);
 
@@ -21,7 +25,7 @@ const createTokenSchema = z.object({
   expiresAt: z.string().datetime().nullable().optional(),
 });
 
-tokensRouter.get("/", (request, response, next) => {
+tokensRouter.get("/", requireScope("read"), (request, response, next) => {
   try {
     response.json(listTokensForUser(requireCurrentUserId(request)));
   } catch (error) {
@@ -31,6 +35,7 @@ tokensRouter.get("/", (request, response, next) => {
 
 tokensRouter.post(
   "/",
+  requireScope("write"),
   validateBody(createTokenSchema),
   (request: Request, response: Response, next) => {
     try {
@@ -51,9 +56,9 @@ tokensRouter.post(
   },
 );
 
-tokensRouter.delete("/:id", (request, response, next) => {
+tokensRouter.delete("/:id", requireScope("write"), (request, response, next) => {
   try {
-    const tokenId = request.params.id;
+    const tokenId = getRouteParam(request.params.id);
     revokeToken(tokenId, requireCurrentUserId(request));
     response.locals.audit = {
       action: "personal_access_token.revoke",

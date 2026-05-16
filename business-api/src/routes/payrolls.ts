@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { parseListFilters } from "../lib/list-filters.js";
+import { requireScope } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { payrollInputSchema, payrollPatchSchema } from "@warehouse-hub/business-schemas";
 import {
@@ -17,7 +18,7 @@ function getRouteParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
 
-payrollsRouter.get("/", async (request, response, next) => {
+payrollsRouter.get("/", requireScope("read"), async (request, response, next) => {
   try {
     response.json(
       await listPayrolls({
@@ -39,19 +40,38 @@ payrollsRouter.get("/", async (request, response, next) => {
   }
 });
 
-payrollsRouter.post("/", validateBody(payrollInputSchema), (request, response) => {
-  response.status(201).json(createPayroll(request.body));
+payrollsRouter.post("/", requireScope("write"), validateBody(payrollInputSchema), (request, response) => {
+  const payroll = createPayroll(request.body);
+  response.locals.audit = {
+    action: "payroll.create",
+    objectType: "payroll",
+    objectId: payroll.payrollId,
+  };
+  response.status(201).json(payroll);
 });
 
-payrollsRouter.get("/:id", (request, response) => {
+payrollsRouter.get("/:id", requireScope("read"), (request, response) => {
   response.json(getPayroll(getRouteParam(request.params.id)));
 });
 
-payrollsRouter.patch("/:id", validateBody(payrollPatchSchema), (request, response) => {
-  response.json(updatePayroll(getRouteParam(request.params.id), request.body));
+payrollsRouter.patch("/:id", requireScope("write"), validateBody(payrollPatchSchema), (request, response) => {
+  const payroll = updatePayroll(getRouteParam(request.params.id), request.body);
+  response.locals.audit = {
+    action: "payroll.update",
+    objectType: "payroll",
+    objectId: payroll.payrollId,
+  };
+  response.json(payroll);
 });
 
-payrollsRouter.delete("/:id", (request, response) => {
-  softDeletePayroll(getRouteParam(request.params.id));
+payrollsRouter.delete("/:id", requireScope("write"), (request, response) => {
+  const id = getRouteParam(request.params.id);
+  const payroll = getPayroll(id);
+  softDeletePayroll(id);
+  response.locals.audit = {
+    action: "payroll.delete",
+    objectType: "payroll",
+    objectId: payroll.payrollId,
+  };
   response.status(204).send();
 });
