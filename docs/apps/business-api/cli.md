@@ -84,6 +84,30 @@ SqliteError: FOREIGN KEY constraint failed
 FOREIGN KEY constraint failed
 ~~~
 
+## Authentication, Tokens, and Workspace
+
+Sign in as a workspace user and inspect the active session:
+
+```bash
+wrobo-biz auth login --email owner@example.com --password owner-password
+wrobo-biz auth whoami --json
+```
+
+Create, list, and revoke Personal Access Tokens for CLI, MCP, and agent use:
+
+```bash
+wrobo-biz tokens create --name claude-desktop --actor-type agent --scopes write
+wrobo-biz tokens list --json
+wrobo-biz tokens revoke pat_000000000000
+```
+
+Read or update the singleton workspace:
+
+```bash
+wrobo-biz workspace get --json
+wrobo-biz workspace set --name "Northwind Robotics"
+```
+
 ## Database and Company Card
 
 Initialize or migrate the local database:

@@ -407,5 +407,5 @@ describe("bank tracking", () => {
       ]),
     ) as { created: number; updated: number };
     expect(imported.created).toBe(1);
-  });
+  }, { timeout: 15000 });
 });

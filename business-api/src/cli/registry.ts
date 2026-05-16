@@ -6,7 +6,9 @@ import { commandDefinitions as coreCommandDefinitions } from "./commands/core.js
 import { commandDefinitions as crmCommandDefinitions } from "./commands/crm.js";
 import { commandDefinitions as dataCacheCommandDefinitions } from "./commands/data-cache.js";
 import { commandDefinitions as documentCommandDefinitions } from "./commands/documents.js";
+import { commandDefinitions as tokenCommandDefinitions } from "./commands/tokens.js";
 import { commandDefinitions as userCommandDefinitions } from "./commands/users.js";
+import { commandDefinitions as workspaceCommandDefinitions } from "./commands/workspace.js";
 import { throwUnknownCommand, type CliCommandDefinition, type CliContext } from "./core.js";
 
 const COMMAND_SCOPE_ORDER = [
@@ -14,6 +16,8 @@ const COMMAND_SCOPE_ORDER = [
   "db",
   "auth",
   "users",
+  "tokens",
+  "workspace",
   "company-card",
   "bank-accounts",
   "bank-transactions",
@@ -38,15 +42,23 @@ export const commandDefinitions: CliCommandDefinition[] = [
   ...coreCommandDefinitions,
   ...authCommandDefinitions,
   ...userCommandDefinitions,
+  ...tokenCommandDefinitions,
+  ...workspaceCommandDefinitions,
   ...bankCommandDefinitions,
   ...bookingCommandDefinitions,
   ...crmCommandDefinitions,
   ...dataCacheCommandDefinitions,
   ...documentCommandDefinitions,
   ...accountingCommandDefinitions,
-].sort((left, right) => COMMAND_SCOPE_ORDER.indexOf(left.scope) - COMMAND_SCOPE_ORDER.indexOf(right.scope));
+].sort(
+  (left, right) =>
+    COMMAND_SCOPE_ORDER.indexOf(left.scope) -
+    COMMAND_SCOPE_ORDER.indexOf(right.scope),
+);
 
-const commandByScope = new Map(commandDefinitions.map((definition) => [definition.scope, definition]));
+const commandByScope = new Map(
+  commandDefinitions.map((definition) => [definition.scope, definition]),
+);
 const aliasToScope = new Map<string, string>();
 
 for (const definition of commandDefinitions) {
