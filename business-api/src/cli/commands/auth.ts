@@ -25,7 +25,7 @@ import {
   mapCliPublicUser,
   mapCliPublicWorkspace,
   readCliSession,
-  resolveCliAuth,
+  requireInjectedCliAuth,
   writeCliSession,
 } from "../auth-session.js";
 import {
@@ -174,7 +174,7 @@ export const commandDefinitions: CliCommandDefinition[] = [
       }
 
       if (subcommand === "whoami") {
-        const auth = resolveCliAuth(rest);
+        const auth = requireInjectedCliAuth(context.auth);
         context.printJson({
           user: mapCliPublicUser(auth.user),
           workspace: mapCliPublicWorkspace(getWorkspace()),

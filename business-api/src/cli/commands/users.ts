@@ -5,10 +5,8 @@ import {
 } from "../../services/user-invitations.js";
 import { listUsers, softDeleteUser, updateUser } from "../../services/users.js";
 import {
-  requireCliRole,
-  requireCliScope,
-  resolveCliAuth,
-  splitCliCredentialOption,
+  requireInjectedCliAuth,
+  type CliAuthContext,
 } from "../auth-session.js";
 import {
   parseFlexibleFlagArgs,
@@ -19,11 +17,8 @@ import {
 const invitationRoles = new Set(["admin", "member"]);
 const userRoles = new Set(["owner", "admin", "member"]);
 
-function requireCurrentCliUserId(rest: string[], write = false): string {
-  const auth = resolveCliAuth(rest);
-  requireCliRole(auth, "admin");
-  requireCliScope(auth, write ? "write" : "read");
-
+function requireCurrentCliUserId(authContext: CliAuthContext | undefined): string {
+  const auth = requireInjectedCliAuth(authContext);
   if (!auth.userId) {
     throw new AppError("Current-user routes require user auth", {
       statusCode: 403,
@@ -68,20 +63,15 @@ export const commandDefinitions: CliCommandDefinition[] = [
       ],
     },
     async handler({ subcommand, rest, positionalArgs, context }) {
-      const credentialSplit = splitCliCredentialOption(rest);
-      const credentialArgs = credentialSplit.token
-        ? ["--token", credentialSplit.token]
-        : [];
-
       if (subcommand === "list") {
-        requireCurrentCliUserId(credentialArgs, false);
+        requireCurrentCliUserId(context.auth);
         context.printJson(listUsers());
         return;
       }
 
       if (subcommand === "invite") {
         const { options } = parseFlexibleFlagArgs(
-          credentialSplit.rest,
+          rest,
           new Set(["json"]),
         );
         const email = requireOption(options, "email");
@@ -90,7 +80,7 @@ export const commandDefinitions: CliCommandDefinition[] = [
           throw new Error("Invitation role must be admin or member");
         }
 
-        const invitedByUserId = requireCurrentCliUserId(credentialArgs, true);
+        const invitedByUserId = requireCurrentCliUserId(context.auth);
         context.printJson(
           await createInvitation({
             email,
@@ -102,8 +92,8 @@ export const commandDefinitions: CliCommandDefinition[] = [
       }
 
       if (subcommand === "revoke-invite") {
-        requireCurrentCliUserId(credentialArgs, true);
-        const invitationId = credentialSplit.rest[0];
+        requireCurrentCliUserId(context.auth);
+        const invitationId = rest[0];
         if (!invitationId) {
           throw new Error("Missing invitation ID");
         }
@@ -114,7 +104,7 @@ export const commandDefinitions: CliCommandDefinition[] = [
 
       if (subcommand === "set-role") {
         const { positionals, options } = parseFlexibleFlagArgs(
-          credentialSplit.rest,
+          rest,
           new Set(["json"]),
         );
         const userId = positionals[0];
@@ -127,7 +117,7 @@ export const commandDefinitions: CliCommandDefinition[] = [
           throw new Error("User role must be owner, admin, or member");
         }
 
-        requireCurrentCliUserId(credentialArgs, true);
+        requireCurrentCliUserId(context.auth);
         context.printJson(
           await updateUser(userId, {
             role: role as "owner" | "admin" | "member",
@@ -137,8 +127,8 @@ export const commandDefinitions: CliCommandDefinition[] = [
       }
 
       if (subcommand === "delete") {
-        requireCurrentCliUserId(credentialArgs, true);
-        const userId = credentialSplit.rest[0];
+        requireCurrentCliUserId(context.auth);
+        const userId = rest[0];
         if (!userId) {
           throw new Error("Missing user ID");
         }

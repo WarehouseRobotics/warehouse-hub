@@ -7,9 +7,8 @@ import {
 } from "../../services/personal-access-tokens.js";
 import type { PersonalAccessTokenActorType } from "../../db/schema/index.js";
 import {
-  requireCliScope,
-  resolveCliAuth,
-  splitCliCredentialOption,
+  requireInjectedCliAuth,
+  type CliAuthContext,
 } from "../auth-session.js";
 import {
   parseFlexibleFlagArgs,
@@ -20,10 +19,8 @@ import {
 const authScopes = new Set<AuthScope>(["read", "write", "admin"]);
 const actorTypes = new Set<PersonalAccessTokenActorType>(["user", "agent"]);
 
-function requireCurrentCliUserId(rest: string[], write = false): string {
-  const auth = resolveCliAuth(rest);
-  requireCliScope(auth, write ? "write" : "read");
-
+function requireCurrentCliUserId(authContext: CliAuthContext | undefined): string {
+  const auth = requireInjectedCliAuth(authContext);
   if (!auth.userId) {
     throw new AppError("Current-user routes require user auth", {
       statusCode: 403,
@@ -88,20 +85,15 @@ export const commandDefinitions: CliCommandDefinition[] = [
       ],
     },
     async handler({ subcommand, rest, positionalArgs, context }) {
-      const credentialSplit = splitCliCredentialOption(rest);
-      const credentialArgs = credentialSplit.token
-        ? ["--token", credentialSplit.token]
-        : [];
-
       if (subcommand === "create") {
         const { options } = parseFlexibleFlagArgs(
-          credentialSplit.rest,
+          rest,
           new Set(["json"]),
         );
         const name = requireOption(options, "name");
         const actorType = parseActorType(requireOption(options, "actor-type"));
         const scopes = parseScopes(requireOption(options, "scopes"));
-        const userId = requireCurrentCliUserId(credentialArgs, true);
+        const userId = requireCurrentCliUserId(context.auth);
 
         context.printJson(
           createToken(userId, {
@@ -115,18 +107,18 @@ export const commandDefinitions: CliCommandDefinition[] = [
       }
 
       if (subcommand === "list") {
-        const userId = requireCurrentCliUserId(credentialArgs, false);
+        const userId = requireCurrentCliUserId(context.auth);
         context.printJson(listTokensForUser(userId));
         return;
       }
 
       if (subcommand === "revoke") {
-        const tokenId = credentialSplit.rest[0];
+        const tokenId = rest[0];
         if (!tokenId) {
           throw new Error("Missing token ID");
         }
 
-        const userId = requireCurrentCliUserId(credentialArgs, true);
+        const userId = requireCurrentCliUserId(context.auth);
         revokeToken(tokenId, userId);
         context.printJson({ ok: true, tokenId });
         return;

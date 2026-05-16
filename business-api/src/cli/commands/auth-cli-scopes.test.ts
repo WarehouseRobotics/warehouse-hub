@@ -70,8 +70,7 @@ async function setupHarness() {
 
   const users = await import("../../services/users.js");
   const sessions = await import("../../services/user-sessions.js");
-  const tokens = await import("./tokens.js");
-  const workspace = await import("./workspace.js");
+  const { dispatchCommand } = await import("../registry.js");
   const owner = users.getUser("owner@example.com");
   const session = sessions.createSession(owner.userId, {
     userAgent: "auth-cli-scopes-test",
@@ -80,8 +79,7 @@ async function setupHarness() {
   return {
     createUser: users.createUser,
     sessionToken: session.sessionToken,
-    tokensCommand: tokens.commandDefinitions[0],
-    workspaceCommand: workspace.commandDefinitions[0],
+    dispatchCommand,
   };
 }
 
@@ -109,7 +107,8 @@ describe("auth CLI token and workspace scopes", () => {
     const harness = await setupHarness();
     const output = createOutput();
 
-    await harness.tokensCommand.handler({
+    await harness.dispatchCommand({
+      rawCommand: "tokens",
       subcommand: "create",
       rest: [
         "--name",
@@ -137,7 +136,8 @@ describe("auth CLI token and workspace scopes", () => {
     expect(created.actorType).toEqual("agent");
     expect(created.scopes).toEqual(["write"]);
 
-    await harness.tokensCommand.handler({
+    await harness.dispatchCommand({
+      rawCommand: "tokens",
       subcommand: "list",
       rest: ["--token", harness.sessionToken],
       rawArgs: [],
@@ -148,7 +148,8 @@ describe("auth CLI token and workspace scopes", () => {
     const listed = output.json[1] as Array<{ tokenId: string }>;
     expect(listed.map((token) => token.tokenId)).toContain(created.tokenId);
 
-    await harness.tokensCommand.handler({
+    await harness.dispatchCommand({
+      rawCommand: "tokens",
       subcommand: "revoke",
       rest: [created.tokenId, "--token", harness.sessionToken],
       rawArgs: [],
@@ -157,7 +158,8 @@ describe("auth CLI token and workspace scopes", () => {
     });
     expect(output.json[2]).toEqual({ ok: true, tokenId: created.tokenId });
 
-    await harness.tokensCommand.handler({
+    await harness.dispatchCommand({
+      rawCommand: "tokens",
       subcommand: "list",
       rest: ["--token", harness.sessionToken],
       rawArgs: [],
@@ -179,7 +181,8 @@ describe("auth CLI token and workspace scopes", () => {
     const output = createOutput();
 
     await expect(
-      harness.tokensCommand.handler({
+      harness.dispatchCommand({
+        rawCommand: "tokens",
         subcommand: "create",
         rest: [
           "--name",
@@ -202,7 +205,8 @@ describe("auth CLI token and workspace scopes", () => {
     const harness = await setupHarness();
     const output = createOutput();
 
-    await harness.workspaceCommand.handler({
+    await harness.dispatchCommand({
+      rawCommand: "workspace",
       subcommand: "get",
       rest: ["--token", harness.sessionToken],
       rawArgs: [],
@@ -214,7 +218,8 @@ describe("auth CLI token and workspace scopes", () => {
       name: "Test Workspace",
     });
 
-    await harness.workspaceCommand.handler({
+    await harness.dispatchCommand({
+      rawCommand: "workspace",
       subcommand: "set",
       rest: [
         "--name",
@@ -243,7 +248,8 @@ describe("auth CLI token and workspace scopes", () => {
     const memberSession = sessions.createSession(member.userId);
 
     await expect(
-      harness.workspaceCommand.handler({
+      harness.dispatchCommand({
+        rawCommand: "workspace",
         subcommand: "set",
         rest: [
           "--name",

@@ -170,9 +170,10 @@ export function clearCliSession(): void {
   fs.rmSync(getCliSessionFilePath(), { force: true });
 }
 
-export function resolveCliAuth(rest: string[] = []): CliAuthContext {
-  const explicit = resolveExplicitCredential(rest).token;
-  const token = explicit ?? process.env.WROBO_API_TOKEN;
+export function resolveCliAuthFromCredential(
+  explicitToken?: string,
+): CliAuthContext {
+  const token = explicitToken ?? process.env.WROBO_API_TOKEN;
 
   if (token?.startsWith("sess_")) {
     return mapSessionContext(requireActiveSession(token));
@@ -211,6 +212,23 @@ export function resolveCliAuth(rest: string[] = []): CliAuthContext {
     statusCode: 401,
     code: "unauthorized",
   });
+}
+
+export function resolveCliAuth(rest: string[] = []): CliAuthContext {
+  return resolveCliAuthFromCredential(resolveExplicitCredential(rest).token);
+}
+
+export function requireInjectedCliAuth(
+  auth: CliAuthContext | undefined,
+): CliAuthContext {
+  if (!auth) {
+    throw new AppError("CLI authentication is required", {
+      statusCode: 401,
+      code: "unauthorized",
+    });
+  }
+
+  return auth;
 }
 
 export function requireCliScope(

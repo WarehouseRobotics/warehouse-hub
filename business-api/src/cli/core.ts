@@ -4,6 +4,9 @@ import path from "node:path";
 import { config } from "../config.js";
 import { isTruthyEnvValue } from "../lib/cli-error-format.js";
 import { logger } from "../lib/logger.js";
+import type { AuthScope } from "../services/personal-access-tokens.js";
+import type { User } from "../services/users.js";
+import type { CliAuthContext } from "./auth-session.js";
 
 export type CliHelpScope = {
   description: string;
@@ -13,9 +16,26 @@ export type CliHelpScope = {
 
 export type CliContext = {
   rawArgs: string[];
+  auth?: CliAuthContext;
   printJson: (value: unknown) => void;
   printLines: (lines: string[]) => void;
 };
+
+export type CliAuthRequirement = {
+  scope: AuthScope;
+  role?: User["role"];
+  userRequired?: boolean;
+};
+
+export type CliAuthPolicy =
+  | false
+  | CliAuthRequirement
+  | ((args: {
+      subcommand: string | undefined;
+      rest: string[];
+      rawCommand: string | undefined;
+      positionalArgs: string[];
+    }) => CliAuthRequirement | false | undefined);
 
 export type CliHandlerArgs = {
   subcommand: string | undefined;
@@ -28,6 +48,7 @@ export type CliHandlerArgs = {
 export type CliCommandDefinition = {
   scope: string;
   aliases?: string[];
+  auth?: CliAuthPolicy;
   help: CliHelpScope;
   hiddenFromHelp?: boolean;
   handler: (args: CliHandlerArgs) => Promise<void> | void;

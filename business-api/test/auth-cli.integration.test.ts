@@ -245,6 +245,40 @@ describe("auth CLI", () => {
       user: { email: "env-token@example.com" },
     });
   }, 15000);
+
+  it("requires auth for protected business commands and clears stale sessions on logout", async () => {
+    const homeDir = makeHomeDir("protected-command-auth");
+    const pamEnv = { HUB_AUTH_MODE: "pam", API_KEY: "" };
+
+    expect(
+      runCliFailure(["company-card", "get"], {
+        homeDir,
+        env: pamEnv,
+      }),
+    ).toContain("CLI authentication is required");
+
+    writeSessionFile(homeDir, {
+      sessionToken: "sess_missing",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    expect(
+      runCliFailure(["company-card", "get"], {
+        homeDir,
+        env: pamEnv,
+      }),
+    ).toContain("Session is invalid or expired");
+
+    expect(
+      JSON.parse(
+        runCli(["auth", "logout"], {
+          homeDir,
+          env: pamEnv,
+        }),
+      ),
+    ).toEqual({ ok: true });
+    expect(fs.existsSync(sessionFilePath(homeDir))).toBe(false);
+  }, 15000);
 });
 
 describe("users CLI", () => {
