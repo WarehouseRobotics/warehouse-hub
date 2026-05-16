@@ -1,3 +1,4 @@
+import { commandDefinitions as authCommandDefinitions } from "./commands/auth.js";
 import { commandDefinitions as accountingCommandDefinitions } from "./commands/accounting.js";
 import { commandDefinitions as bankCommandDefinitions } from "./commands/bank.js";
 import { commandDefinitions as bookingCommandDefinitions } from "./commands/bookings.js";
@@ -5,11 +6,14 @@ import { commandDefinitions as coreCommandDefinitions } from "./commands/core.js
 import { commandDefinitions as crmCommandDefinitions } from "./commands/crm.js";
 import { commandDefinitions as dataCacheCommandDefinitions } from "./commands/data-cache.js";
 import { commandDefinitions as documentCommandDefinitions } from "./commands/documents.js";
+import { commandDefinitions as userCommandDefinitions } from "./commands/users.js";
 import { throwUnknownCommand, type CliCommandDefinition, type CliContext } from "./core.js";
 
 const COMMAND_SCOPE_ORDER = [
   "serve",
   "db",
+  "auth",
+  "users",
   "company-card",
   "bank-accounts",
   "bank-transactions",
@@ -32,6 +36,8 @@ const COMMAND_SCOPE_ORDER = [
 
 export const commandDefinitions: CliCommandDefinition[] = [
   ...coreCommandDefinitions,
+  ...authCommandDefinitions,
+  ...userCommandDefinitions,
   ...bankCommandDefinitions,
   ...bookingCommandDefinitions,
   ...crmCommandDefinitions,
