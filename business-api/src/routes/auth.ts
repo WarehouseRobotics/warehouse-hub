@@ -6,6 +6,11 @@ import { AppError } from "../lib/errors.js";
 import { asyncRoute } from "../lib/express.js";
 import { logger } from "../lib/logger.js";
 import { requireAuth, requireScope } from "../middleware/auth.js";
+import {
+  rateLimitLogin,
+  rateLimitMagicLinkConsume,
+  rateLimitMagicLinkRequest,
+} from "../middleware/rate-limit.js";
 import { validateBody } from "../middleware/validate.js";
 import { magicLinkLoginEmail } from "../services/email.js";
 import {
@@ -60,6 +65,7 @@ function throwInvalidMagicLinkToken(): never {
 authRouter.post(
   "/login",
   validateBody(loginSchema),
+  rateLimitLogin,
   asyncRoute(async (request, response) => {
     if (!config.AUTH_PASSWORD_LOGIN_ENABLED) {
       throw new AppError("Password login is disabled", {
@@ -81,6 +87,7 @@ authRouter.post(
 authRouter.post(
   "/magic-link/request",
   validateBody(magicLinkRequestSchema),
+  rateLimitMagicLinkRequest,
   asyncRoute(async (request, response) => {
     if (!config.AUTH_MAGIC_LINK_ENABLED) {
       throw new AppError("Magic-link login is disabled", {
@@ -127,6 +134,7 @@ authRouter.post(
 authRouter.post(
   "/magic-link/consume",
   validateBody(magicLinkConsumeSchema),
+  rateLimitMagicLinkConsume,
   asyncRoute(async (request, response) => {
     if (!config.AUTH_MAGIC_LINK_ENABLED) {
       throw new AppError("Magic-link login is disabled", {

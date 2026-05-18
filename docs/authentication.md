@@ -99,6 +99,25 @@ Two methods are first-class in v1, controlled by independent feature flags so a 
 
 Magic-link request always returns `204` regardless of whether the email maps to a real user and performs comparable token-creation work for both known and unknown emails — this prevents account enumeration.
 
+Password login, magic-link request, and magic-link consume endpoints are rate limited by the Business API before expensive credential verification or token work. v1 uses in-memory fixed-window buckets for the single-process deployment model:
+
+```yaml
+authRateLimits:
+  enabled: true
+  windowMs: 900000
+  login:
+    perIp: 30
+    perEmail: 5
+  magicLinkRequest:
+    perIp: 30
+    perEmail: 5
+  magicLinkConsume:
+    perIp: 60
+    perToken: 5
+```
+
+Rate-limited auth requests return `429` with `error.code = "rate_limit_exceeded"` and a `Retry-After` header. Magic-link consume keys use a SHA-256 hash of the submitted token, not the raw token.
+
 If neither method is enabled, the deployment is locked to `BOOTSTRAP_OWNER_*` plus PATs only.
 
 ## How an agent gets credentials

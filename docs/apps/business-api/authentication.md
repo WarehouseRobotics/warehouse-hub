@@ -196,6 +196,53 @@ requireScope("write");        // admin > write > read implication
 requireRole("admin");          // for /users, /tokens, /workspace PATCH
 ```
 
+### Auth rate limiting
+
+`src/middleware/rate-limit.ts` protects the public login and magic-link routes
+before password verification, token creation, email delivery, or token consume
+work happens. The v1 limiter is dependency-free and in-memory, matching the
+current single-process Business API deployment model.
+
+```yaml
+defaults:
+  AUTH_RATE_LIMIT_ENABLED: true
+  AUTH_RATE_LIMIT_WINDOW_MS: 900000
+  AUTH_LOGIN_IP_LIMIT: 30
+  AUTH_LOGIN_EMAIL_LIMIT: 5
+  AUTH_MAGIC_LINK_REQUEST_IP_LIMIT: 30
+  AUTH_MAGIC_LINK_REQUEST_EMAIL_LIMIT: 5
+  AUTH_MAGIC_LINK_CONSUME_IP_LIMIT: 60
+  AUTH_MAGIC_LINK_CONSUME_TOKEN_LIMIT: 5
+```
+
+Bucket identities:
+
+- `POST /auth/login`: caller IP and normalized email.
+- `POST /auth/magic-link/request`: caller IP and normalized email.
+- `POST /auth/magic-link/consume`: caller IP and SHA-256 hash of the submitted token.
+
+When any bucket is exhausted, the route returns:
+
+```json
+{
+  "error": {
+    "code": "rate_limit_exceeded",
+    "message": "Too many authentication attempts",
+    "retryAfterSeconds": 60,
+    "limit": 5,
+    "windowMs": 900000,
+    "details": {
+      "retryAfterSeconds": 60,
+      "limit": 5,
+      "windowMs": 900000
+    }
+  }
+}
+```
+
+The response also sets `Retry-After` to the same retry delay in seconds. Raw
+magic-link tokens are never used as externally visible identifiers.
+
 ### `audit` middleware
 
 Request ID generation is mounted before public and protected routes, so health checks, auth flows, protected routes, and error responses all get `request.requestId` and an `X-Request-Id` response header.
@@ -248,6 +295,11 @@ All endpoints under `/api/v1`. Bodies are validated with Zod via `validateBody()
 
 Sets `Set-Cookie: wh_session=sess_...; HttpOnly; Secure; SameSite=Lax; Path=/`. The body also includes `sessionToken` for non-browser clients.
 
+Password login attempts are rate limited before password verification using
+both the caller IP and normalized email address. When a bucket is exhausted the
+endpoint returns `429` with `error.code = "rate_limit_exceeded"` and a
+`Retry-After` header.
+
 `POST /auth/magic-link/request`
 
 ```json
@@ -256,6 +308,9 @@ Sets `Set-Cookie: wh_session=sess_...; HttpOnly; Secure; SameSite=Lax; Path=/`. 
 
 Always returns `204` regardless of whether the email maps to a user and performs comparable token-creation work for known and unknown emails. No enumeration.
 
+Magic-link requests are rate limited by caller IP and normalized email address.
+Rate-limited requests return `429` before token creation or email delivery.
+
 `POST /auth/magic-link/consume`
 
 ```json
@@ -263,6 +318,10 @@ Always returns `204` regardless of whether the email maps to a user and performs
 ```
 
 Same response shape as `/auth/login`.
+
+Magic-link consume attempts are rate limited by caller IP and SHA-256 hash of
+the submitted token. Raw tokens are not used in rate-limit keys exposed outside
+the process.
 
 `POST /auth/logout` — revokes the current session.
 
@@ -391,6 +450,14 @@ BOOTSTRAP_OWNER_EMAIL:          optional; first-boot owner seed
 BOOTSTRAP_OWNER_PASSWORD:       optional; pairs with above
 AUTH_PASSWORD_LOGIN_ENABLED:    default true
 AUTH_MAGIC_LINK_ENABLED:        default true
+AUTH_RATE_LIMIT_ENABLED:        default true
+AUTH_RATE_LIMIT_WINDOW_MS:      default 900000; shared auth limiter window
+AUTH_LOGIN_IP_LIMIT:            default 30
+AUTH_LOGIN_EMAIL_LIMIT:         default 5
+AUTH_MAGIC_LINK_REQUEST_IP_LIMIT:    default 30
+AUTH_MAGIC_LINK_REQUEST_EMAIL_LIMIT: default 5
+AUTH_MAGIC_LINK_CONSUME_IP_LIMIT:    default 60
+AUTH_MAGIC_LINK_CONSUME_TOKEN_LIMIT: default 5
 SESSION_TTL_DAYS:               default 14
 SESSION_MAX_LIFETIME_DAYS:      default 30; absolute cap from session creation
 DASHBOARD_BASE_URL:             required for magic-link emails

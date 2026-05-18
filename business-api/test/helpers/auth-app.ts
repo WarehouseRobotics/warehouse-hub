@@ -32,6 +32,14 @@ export function resetProcessEnv(
   delete process.env.BOOTSTRAP_OWNER_PASSWORD;
   delete process.env.AUTH_PASSWORD_LOGIN_ENABLED;
   delete process.env.AUTH_MAGIC_LINK_ENABLED;
+  delete process.env.AUTH_RATE_LIMIT_ENABLED;
+  delete process.env.AUTH_RATE_LIMIT_WINDOW_MS;
+  delete process.env.AUTH_LOGIN_IP_LIMIT;
+  delete process.env.AUTH_LOGIN_EMAIL_LIMIT;
+  delete process.env.AUTH_MAGIC_LINK_REQUEST_IP_LIMIT;
+  delete process.env.AUTH_MAGIC_LINK_REQUEST_EMAIL_LIMIT;
+  delete process.env.AUTH_MAGIC_LINK_CONSUME_IP_LIMIT;
+  delete process.env.AUTH_MAGIC_LINK_CONSUME_TOKEN_LIMIT;
 
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) {

@@ -30,6 +30,34 @@ const envSchema = z.object({
   HUB_PASSWORD_LOGIN: booleanishSchema.default("1"),
   AUTH_PASSWORD_LOGIN_ENABLED: booleanishSchema.optional(),
   AUTH_MAGIC_LINK_ENABLED: booleanishSchema.default("true"),
+  AUTH_RATE_LIMIT_ENABLED: booleanishSchema.default("true"),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+  AUTH_LOGIN_IP_LIMIT: z.coerce.number().int().positive().default(30),
+  AUTH_LOGIN_EMAIL_LIMIT: z.coerce.number().int().positive().default(5),
+  AUTH_MAGIC_LINK_REQUEST_IP_LIMIT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(30),
+  AUTH_MAGIC_LINK_REQUEST_EMAIL_LIMIT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5),
+  AUTH_MAGIC_LINK_CONSUME_IP_LIMIT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
+  AUTH_MAGIC_LINK_CONSUME_TOKEN_LIMIT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   LLMS_CONFIG_PATH: z.string().optional(),
   EMBEDDING_API_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
