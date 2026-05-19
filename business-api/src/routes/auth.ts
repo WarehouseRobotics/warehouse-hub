@@ -62,6 +62,13 @@ function throwInvalidMagicLinkToken(): never {
   });
 }
 
+authRouter.get("/config", (_request, response) => {
+  response.json({
+    passwordLoginEnabled: config.AUTH_PASSWORD_LOGIN_ENABLED,
+    magicLinkEnabled: config.AUTH_MAGIC_LINK_ENABLED,
+  });
+});
+
 authRouter.post(
   "/login",
   validateBody(loginSchema),

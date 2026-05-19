@@ -95,6 +95,11 @@ Each section also has a `*ReloadKey` integer; incrementing it triggers a list re
 | Function | Purpose |
 |---|---|
 | `businessApiFetch<T>(path, init?)` | Generic authenticated fetch |
+| `getAuthConfig()` | Read public auth method flags from `/auth/config` |
+| `loginWithPassword(data)` | POST email/password login and receive a browser session cookie |
+| `requestMagicLink(data)` | POST a non-enumerating magic-link request |
+| `consumeMagicLink(token)` | POST a magic-link token and receive a browser session cookie |
+| `getCurrentSession()` | GET `/auth/me` for the current browser session |
 | `listBusinessResources<T>(key, searchTerm)` | List expenses/invoices — uses `?similar=` param |
 | `getBusinessResource<T>(key, id)` | Fetch single expense/invoice |
 | `deleteBusinessResource(key, id)` | DELETE expense/invoice |
@@ -109,7 +114,33 @@ Note: contacts use `?query=` for server-side search; the other resources use `?s
 
 ## Authentication
 
-TODO: 
+The dashboard uses Business API cookie sessions. `src/lib/api.ts` always sends
+`credentials: "include"` and dispatches `wh:auth:expired` when protected API
+calls return `401`, except for explicit session/auth probes that suppress the
+event.
+
+`App.tsx` owns session state. On startup it calls `getCurrentSession()`;
+authenticated sessions load protected dashboard data, while unauthenticated
+sessions reset protected state and route to `/login`. The public auth routes are
+handled outside the app shell:
+
+- `/login` renders `features/dashboard/pages/login-page.tsx`.
+- `/auth/consume?token=...` renders `features/dashboard/pages/auth-consume-page.tsx`.
+
+The login page first calls `GET /api/v1/auth/config` through `getAuthConfig()`
+and only renders enabled methods:
+
+- password login posts `{ email, password }` to `/auth/login`;
+- magic-link login posts `{ email, purpose: "login" }` to
+  `/auth/magic-link/request` and always shows neutral success copy;
+- both successful password login and magic-link consume refresh `/auth/me` and
+  navigate back to the protected route that triggered login, or to `/expenses`.
+
+The consume page reads the `token` query parameter, posts it to
+`/auth/magic-link/consume`, and replaces the URL with `/expenses` after the
+session is established. Missing, expired, reused, disabled, validation, and
+rate-limit failures are mapped to friendly recovery messages with a return to
+the login page.
 
 
 ## Section Patterns

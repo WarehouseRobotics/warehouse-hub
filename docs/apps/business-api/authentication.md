@@ -267,6 +267,7 @@ mountOrder:
       - POST /api/v1/auth/login
       - POST /api/v1/auth/magic-link/request
       - POST /api/v1/auth/magic-link/consume
+      - GET  /api/v1/auth/config
       - POST /api/v1/users/invitations/:token/accept
   - protected:              # mounted AFTER requireAuth
       - everything else under /api/v1
@@ -277,6 +278,19 @@ mountOrder:
 All endpoints under `/api/v1`. Bodies are validated with Zod via `validateBody()` ([src/middleware/validate.ts](../../../business-api/src/middleware/validate.ts)).
 
 ### Auth
+
+`GET /auth/config`
+
+```json
+{
+  "passwordLoginEnabled": true,
+  "magicLinkEnabled": true
+}
+```
+
+Public capability endpoint used by the Dashboard login page to hide disabled
+auth methods. Values are sourced from `AUTH_PASSWORD_LOGIN_ENABLED` and
+`AUTH_MAGIC_LINK_ENABLED`.
 
 `POST /auth/login`
 
