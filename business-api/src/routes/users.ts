@@ -7,6 +7,7 @@ import { validateBody } from "../middleware/validate.js";
 import {
   acceptInvitation,
   createInvitation,
+  listPendingInvitations,
   revokeInvitation,
 } from "../services/user-invitations.js";
 import { listUsers, softDeleteUser, updateUser } from "../services/users.js";
@@ -58,6 +59,10 @@ usersRouter.use(requireRole("admin"));
 
 usersRouter.get("/", requireScope("read"), (_request, response) => {
   response.json(listUsers());
+});
+
+usersRouter.get("/invitations", requireScope("read"), (_request, response) => {
+  response.json(listPendingInvitations());
 });
 
 usersRouter.post(

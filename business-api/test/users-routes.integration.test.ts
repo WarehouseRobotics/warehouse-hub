@@ -7,17 +7,33 @@ const createUsersApp = createAuthApp;
 
 afterEach(closeAuthApp);
 
+async function getOrCreateOwner() {
+  const usersService = await import("../src/services/users.js");
+  const existingOwner = usersService
+    .listUsers()
+    .find((user) => user.role === "owner");
+  if (existingOwner) {
+    return existingOwner;
+  }
+
+  try {
+    return usersService.getUser("owner@example.com");
+  } catch {
+    return await usersService.createUser({
+      email: "owner@example.com",
+      displayName: "Owner",
+      role: "owner",
+    });
+  }
+}
+
 describe("users routes", () => {
   it("lets admins list users, manage invitations, patch users, delete members, and audit mutations", async () => {
     const baseUrl = await createUsersApp();
     const { createSession } = await import("../src/services/user-sessions.js");
     const { createUser } = await import("../src/services/users.js");
     const { listAuditLogEntries } = await import("../src/services/audit-log.js");
-    const owner = await createUser({
-      email: "owner@example.com",
-      displayName: "Owner",
-      role: "owner",
-    });
+    const owner = await getOrCreateOwner();
     const admin = await createUser({
       email: "admin@example.com",
       displayName: "Admin",
@@ -67,6 +83,26 @@ describe("users routes", () => {
       acceptUrl: expect.stringContaining("/accept-invite/mlt_"),
     });
 
+    const invitationsResponse = await fetch(
+      `${baseUrl}/api/v1/users/invitations`,
+      { headers },
+    );
+    const invitations = (await invitationsResponse.json()) as Array<{
+      invitationId: string;
+      email: string;
+      acceptedAt: string | null;
+      revokedAt: string | null;
+    }>;
+    expect(invitationsResponse.status).toBe(200);
+    expect(invitations).toEqual([
+      expect.objectContaining({
+        invitationId: invitation.invitationId,
+        email: "invited@example.com",
+        acceptedAt: null,
+        revokedAt: null,
+      }),
+    ]);
+
     const revokeResponse = await fetch(
       `${baseUrl}/api/v1/users/invitations/${invitation.invitationId}`,
       {
@@ -77,6 +113,13 @@ describe("users routes", () => {
     const revoked = (await revokeResponse.json()) as { revokedAt: string };
     expect(revokeResponse.status).toBe(200);
     expect(revoked.revokedAt).toEqual(expect.any(String));
+
+    const afterRevokeInvitationsResponse = await fetch(
+      `${baseUrl}/api/v1/users/invitations`,
+      { headers },
+    );
+    expect(afterRevokeInvitationsResponse.status).toBe(200);
+    await expect(afterRevokeInvitationsResponse.json()).resolves.toEqual([]);
 
     const patchResponse = await fetch(
       `${baseUrl}/api/v1/users/${member.userId}`,
@@ -183,6 +226,14 @@ describe("users routes", () => {
     });
     expect(memberResponse.status).toBe(403);
 
+    const memberInvitationsResponse = await fetch(
+      `${baseUrl}/api/v1/users/invitations`,
+      {
+        headers: { authorization: `Bearer ${memberToken.plaintext}` },
+      },
+    );
+    expect(memberInvitationsResponse.status).toBe(403);
+
     const readOnlyPostResponse = await fetch(
       `${baseUrl}/api/v1/users/invitations`,
       {
@@ -207,12 +258,7 @@ describe("users routes", () => {
     const { createInvitation, revokeInvitation } = await import(
       "../src/services/user-invitations.js"
     );
-    const { createUser } = await import("../src/services/users.js");
-    const owner = await createUser({
-      email: "owner@example.com",
-      displayName: "Owner",
-      role: "owner",
-    });
+    const owner = await getOrCreateOwner();
     const invitation = await createInvitation({
       email: "new-user@example.com",
       invitedByUserId: owner.userId,
@@ -251,6 +297,19 @@ describe("users routes", () => {
       headers: { cookie },
     });
     expect(meResponse.status).toBe(200);
+
+    const ownerSession = (await import("../src/services/user-sessions.js"))
+      .createSession(owner.userId);
+    const pendingAfterAcceptResponse = await fetch(
+      `${baseUrl}/api/v1/users/invitations`,
+      {
+        headers: {
+          cookie: `wh_session=${ownerSession.sessionToken}`,
+        },
+      },
+    );
+    expect(pendingAfterAcceptResponse.status).toBe(200);
+    await expect(pendingAfterAcceptResponse.json()).resolves.toEqual([]);
 
     const reusedResponse = await fetch(
       `${baseUrl}/api/v1/users/invitations/${token}/accept`,
@@ -325,12 +384,7 @@ describe("users routes", () => {
   it("refuses owner role changes and owner deletion", async () => {
     const baseUrl = await createUsersApp();
     const { createSession } = await import("../src/services/user-sessions.js");
-    const { createUser } = await import("../src/services/users.js");
-    const owner = await createUser({
-      email: "owner@example.com",
-      displayName: "Owner",
-      role: "owner",
-    });
+    const owner = await getOrCreateOwner();
     const session = createSession(owner.userId);
     const headers = {
       "content-type": "application/json",
