@@ -14,82 +14,150 @@ import type {
   TaxReportFactCreateInput,
 } from "@warehouse-hub/business-schemas";
 
-const MODELO_303_FORM_NAME = "Modelo 303";
-const MODELO_130_FORM_NAME = "Modelo 130";
 const MONEY_PATTERN =
   "-?\\d{1,3}(?:\\.\\d{3})*,\\d{2}|-?\\d+,\\d{2}|-?\\d+\\.\\d{2}";
-const SUPPORTED_FORM_CODES = new Set(["130", "303"]);
-const MODELO_303_LAYOUT_FIELD_CODES = [
-  "07",
-  "09",
-  "27",
-  "28",
-  "45",
-  "64",
-  "66",
-  "69",
-  "71",
-  "72",
-  "73",
-  "78",
-  "87",
-  "110",
-];
-const MODELO_130_LAYOUT_FIELD_CODES = [
-  "01",
-  "02",
-  "03",
-  "04",
-  "05",
-  "06",
-  "07",
-  "12",
-  "14",
-  "15",
-  "17",
-  "18",
-  "19",
-];
-const FIELD_LABELS: Record<string, Record<string, string>> = {
+
+type SpainSupportedFormCode = "130" | "200" | "303";
+type SpainFormConfig = {
+  formName: string;
+  taxKind: NormalizedTaxReportDraft["taxKind"];
+  layoutFieldCodes: string[];
+  resultFieldCode: string;
+  fieldLabels: Record<string, string>;
+};
+type TaxReportFactDirection = NonNullable<
+  TaxReportFactCreateInput["direction"]
+>;
+
+const FORM_CONFIG: Record<SpainSupportedFormCode, SpainFormConfig> = {
   "303": {
-    "07": "Base imponible IVA general",
-    "09": "Cuota devengada IVA general",
-    "27": "Total cuota devengada",
-    "28": "Base IVA deducible operaciones interiores corrientes",
-    "45": "Total IVA deducible",
-    "64": "Suma de resultados",
-    "66": "Atribuible a la Administracion del Estado",
-    "69": "Resultado de la autoliquidacion",
-    "71": "Resultado de la liquidacion",
-    "72": "Importe a compensar",
-    "73": "Importe a devolver",
-    "78": "Cuotas pendientes de compensacion aplicadas",
-    "87": "Cuotas a compensar pendientes",
-    "110": "Cuotas a compensar de periodos anteriores",
+    formName: "Modelo 303",
+    taxKind: "vat",
+    layoutFieldCodes: [
+      "07",
+      "09",
+      "27",
+      "28",
+      "45",
+      "64",
+      "66",
+      "69",
+      "71",
+      "72",
+      "73",
+      "78",
+      "87",
+      "110",
+    ],
+    resultFieldCode: "71",
+    fieldLabels: {
+      "07": "Base imponible IVA general",
+      "09": "Cuota devengada IVA general",
+      "27": "Total cuota devengada",
+      "28": "Base IVA deducible operaciones interiores corrientes",
+      "45": "Total IVA deducible",
+      "64": "Suma de resultados",
+      "66": "Atribuible a la Administracion del Estado",
+      "69": "Resultado de la autoliquidacion",
+      "71": "Resultado de la liquidacion",
+      "72": "Importe a compensar",
+      "73": "Importe a devolver",
+      "78": "Cuotas pendientes de compensacion aplicadas",
+      "87": "Cuotas a compensar pendientes",
+      "110": "Cuotas a compensar de periodos anteriores",
+    },
   },
   "130": {
-    "01": "Ingresos fiscalmente computables acumulados",
-    "02": "Gastos fiscalmente deducibles acumulados",
-    "03": "Rendimiento neto acumulado",
-    "04": "Porcentaje sobre rendimiento neto positivo",
-    "05": "Pagos fraccionados positivos anteriores",
-    "06": "Retenciones e ingresos a cuenta soportados",
-    "07": "Resultado parcial",
-    "12": "Total liquidacion",
-    "14": "Resultado despues de minoracion",
-    "15": "Resultados negativos de trimestres anteriores",
-    "17": "Resultado previo a complementaria",
-    "18": "Resultados a ingresar de autoliquidaciones anteriores",
-    "19": "Resultado de la autoliquidacion",
+    formName: "Modelo 130",
+    taxKind: "personal_income",
+    layoutFieldCodes: [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "12",
+      "14",
+      "15",
+      "17",
+      "18",
+      "19",
+    ],
+    resultFieldCode: "19",
+    fieldLabels: {
+      "01": "Ingresos fiscalmente computables acumulados",
+      "02": "Gastos fiscalmente deducibles acumulados",
+      "03": "Rendimiento neto acumulado",
+      "04": "Porcentaje sobre rendimiento neto positivo",
+      "05": "Pagos fraccionados positivos anteriores",
+      "06": "Retenciones e ingresos a cuenta soportados",
+      "07": "Resultado parcial",
+      "12": "Total liquidacion",
+      "14": "Resultado despues de minoracion",
+      "15": "Resultados negativos de trimestres anteriores",
+      "17": "Resultado previo a complementaria",
+      "18": "Resultados a ingresar de autoliquidaciones anteriores",
+      "19": "Resultado de la autoliquidacion",
+    },
+  },
+  "200": {
+    formName: "Modelo 200",
+    taxKind: "corporate_income",
+    layoutFieldCodes: [
+      "00500",
+      "00501",
+      "00547",
+      "00550",
+      "00552",
+      "01586",
+    ],
+    resultFieldCode: "01586",
+    fieldLabels: {
+      "00500": "Resultado de la cuenta de perdidas y ganancias",
+      "00501": "Resultado antes del Impuesto sobre Sociedades",
+      "00547":
+        "Compensacion de bases imponibles negativas de periodos anteriores",
+      "00550":
+        "Base imponible antes de reserva de capitalizacion y compensacion",
+      "00552": "Base imponible",
+      "01586": "Resultado de la liquidacion",
+    },
   },
 };
+const SUPPORTED_FORM_CODES = new Set(Object.keys(FORM_CONFIG));
+
+type Modelo200NegativeBaseDetailRow = {
+  originFiscalYear: number;
+  pendingAtStartOrGenerated: string;
+  appliedThisReturn: string;
+  pendingForFuture: string;
+};
+
+type Modelo200NegativeBaseDetailParseResult = {
+  rows: Modelo200NegativeBaseDetailRow[];
+  warnings: string[];
+};
+
+type Modelo200CodeAmount = {
+  code: string;
+  amount: string | null;
+};
+
+function configForForm(formCode: string): SpainFormConfig {
+  return FORM_CONFIG[formCode as SpainSupportedFormCode];
+}
 
 function normalizeCountryCode(value: string | undefined): string | undefined {
   return value?.trim().toUpperCase();
 }
 
 function normalizeFormCode(value: string | undefined): string | undefined {
-  const normalized = value?.trim().toUpperCase().replace(/^MODELO[_\s-]*/, "");
+  const normalized = value
+    ?.trim()
+    .toUpperCase()
+    .replace(/^MODELO[_\s-]*/, "");
   return normalized || undefined;
 }
 
@@ -138,6 +206,7 @@ function parseFiscalYear(text: string): number | undefined {
   const year = firstMatch(text, [
     /(?:fiscal\s+year|tax\s+year|ejercicio|ano|año)\s*[:=\-]\s*(20\d{2})/im,
     /(?:fiscal\s+year|tax\s+year|ejercicio|ano|año)\s+(20\d{2})/im,
+    /(?:fiscal\s+year|tax\s+year|ejercicio|ano|año)[^\d]{0,80}(20\d{2})/im,
     /\b(20\d{2})\s*[-/]\s*(?:q[1-4]|[1-4]t)\b/im,
   ]);
   return year ? Number.parseInt(year, 10) : undefined;
@@ -160,6 +229,14 @@ function monthBoundaries(year: number, month: number) {
     label: `${year}-${month.toString().padStart(2, "0")}`,
     start,
     end: endDate.toISOString().slice(0, 10),
+  };
+}
+
+function yearBoundaries(year: number) {
+  return {
+    label: `${year}`,
+    start: `${year}-01-01`,
+    end: `${year}-12-31`,
   };
 }
 
@@ -214,7 +291,10 @@ function parsePeriod(
     /(?:period|per[ií]odo|mes)\s*[:=\-]\s*(0?[1-9]|1[0-2])/im,
   ]);
   if (monthMatch && fiscalYear) {
-    const boundaries = monthBoundaries(fiscalYear, Number.parseInt(monthMatch, 10));
+    const boundaries = monthBoundaries(
+      fiscalYear,
+      Number.parseInt(monthMatch, 10),
+    );
     return {
       periodLabel: boundaries.label,
       periodStart: boundaries.start,
@@ -227,27 +307,59 @@ function parsePeriod(
   return {};
 }
 
-function layoutFieldCodesForForm(formCode: string): string[] {
-  return formCode === "130"
-    ? MODELO_130_LAYOUT_FIELD_CODES
-    : MODELO_303_LAYOUT_FIELD_CODES;
+function parseAnnualPeriod(
+  text: string,
+  fiscalYear?: number,
+  providedPeriodLabel?: string,
+) {
+  const explicitYear =
+    firstMatch(providedPeriodLabel ?? "", [/^(20\d{2})$/]) ??
+    firstMatch(text, [
+      /period\s+label\s*[:=\-]\s*(20\d{2})/im,
+      /per[ií]odo\s*[:=\-]\s*(20\d{2})/im,
+    ]) ??
+    (fiscalYear ? String(fiscalYear) : undefined);
+
+  if (!explicitYear) {
+    return {};
+  }
+
+  const year = Number.parseInt(explicitYear, 10);
+  const boundaries = yearBoundaries(year);
+  return {
+    periodLabel: boundaries.label,
+    periodStart: boundaries.start,
+    periodEnd: boundaries.end,
+    periodGranularity: "year" as const,
+    fiscalYear: year,
+  };
 }
 
-function formNameForCode(formCode: string): string {
-  return formCode === "130" ? MODELO_130_FORM_NAME : MODELO_303_FORM_NAME;
+function layoutFieldCodesForForm(formCode: string): string[] {
+  return configForForm(formCode).layoutFieldCodes;
+}
+
+function taxKindForForm(formCode: string): NormalizedTaxReportDraft["taxKind"] {
+  return configForForm(formCode).taxKind;
+}
+
+function normalizeCasillaCode(rawValue: string, formCode: string): string {
+  const numericCode = Number.parseInt(rawValue, 10);
+  if (formCode === "200") {
+    return numericCode.toString().padStart(5, "0");
+  }
+
+  return numericCode < 100
+    ? numericCode.toString().padStart(2, "0")
+    : numericCode.toString();
 }
 
 function parseCasillas(text: string, formCode: string) {
   const fields = new Map<string, string>();
-  const pattern = /^\s*(?:casilla|box)\s*0*(\d{1,5})\s*[:=\-]\s*(-?\d[\d.,]*)/gim;
+  const pattern = /^\s*(?:casilla|box)\s*(\d{1,5})\s*[:=\-]\s*(-?\d[\d.,]*)/gim;
 
   for (const match of text.matchAll(pattern)) {
-    const numericCode = Number.parseInt(match[1], 10);
-    const fieldCode =
-      numericCode < 100
-        ? numericCode.toString().padStart(2, "0")
-        : numericCode.toString();
-    fields.set(fieldCode, match[2]);
+    fields.set(normalizeCasillaCode(match[1], formCode), match[2]);
   }
 
   for (const fieldCode of layoutFieldCodesForForm(formCode)) {
@@ -269,6 +381,116 @@ function parseCasillas(text: string, formCode: string) {
   }
 
   return fields;
+}
+
+function parseModelo200CodeAmounts(line: string): Modelo200CodeAmount[] {
+  return Array.from(
+    line.matchAll(new RegExp(`\\b(\\d{5})\\b(?:\\s+(${MONEY_PATTERN}))?`, "g")),
+  ).map((match) => ({
+    code: match[1],
+    amount: optionalMoney(match[2]) ?? null,
+  }));
+}
+
+function parseModelo200NegativeBaseDetailTotals(
+  text: string,
+): Modelo200NegativeBaseDetailRow | null {
+  const totalLine = text.match(/^\s*Total\b.*$/im)?.[0];
+  if (!totalLine) {
+    return null;
+  }
+
+  const totals = new Map(
+    parseModelo200CodeAmounts(totalLine)
+      .filter((cell) => cell.amount)
+      .map((cell) => [cell.code, cell.amount as string]),
+  );
+  const pendingAtStartOrGenerated = totals.get("00670");
+  const appliedThisReturn = totals.get("00547");
+  const pendingForFuture = totals.get("00671");
+  if (
+    !pendingAtStartOrGenerated ||
+    !appliedThisReturn ||
+    !pendingForFuture
+  ) {
+    return null;
+  }
+
+  return {
+    originFiscalYear: 0,
+    pendingAtStartOrGenerated,
+    appliedThisReturn,
+    pendingForFuture,
+  };
+}
+
+function sumsMatchModelo200Totals(
+  rows: Modelo200NegativeBaseDetailRow[],
+  totals: Modelo200NegativeBaseDetailRow | null,
+): boolean {
+  if (!totals) {
+    return false;
+  }
+
+  const sum = (selector: (row: Modelo200NegativeBaseDetailRow) => string) =>
+    rows
+      .reduce((total, row) => total.plus(selector(row)), new Decimal(0))
+      .toFixed(2);
+
+  return (
+    new Decimal(sum((row) => row.pendingAtStartOrGenerated)).eq(
+      totals.pendingAtStartOrGenerated,
+    ) &&
+    new Decimal(sum((row) => row.appliedThisReturn)).eq(
+      totals.appliedThisReturn,
+    ) &&
+    new Decimal(sum((row) => row.pendingForFuture)).eq(
+      totals.pendingForFuture,
+    )
+  );
+}
+
+function parseModelo200NegativeBaseDetail(
+  text: string,
+): Modelo200NegativeBaseDetailParseResult {
+  const rows: Modelo200NegativeBaseDetailRow[] = [];
+  const warnings: string[] = [];
+  let hasMissingAmount = false;
+  const rowPattern =
+    /^.*Compensaci[oó]n de base a[nñ]o\s+(20\d{2})(?:\(\*\))?.*$/gim;
+
+  for (const match of text.matchAll(rowPattern)) {
+    const line = match[0];
+    const cells = parseModelo200CodeAmounts(line).slice(0, 3);
+    if (cells.length < 3) {
+      continue;
+    }
+
+    hasMissingAmount ||= cells.some((cell) => !cell.amount);
+    const amounts = cells.map((cell) => cell.amount ?? "0.00");
+    if (amounts.every((amount) => new Decimal(amount).eq(0))) {
+      continue;
+    }
+
+    rows.push({
+      originFiscalYear: Number.parseInt(match[1], 10),
+      pendingAtStartOrGenerated: amounts[0],
+      appliedThisReturn: amounts[1],
+      pendingForFuture: amounts[2],
+    });
+  }
+
+  if (
+    hasMissingAmount &&
+    !sumsMatchModelo200Totals(
+      rows,
+      parseModelo200NegativeBaseDetailTotals(text),
+    )
+  ) {
+    warnings.push("model_200_negative_base_detail_amount_missing");
+  }
+
+  return { rows, warnings };
 }
 
 // AEAT NIF/CIF: 8 digits + letter, letter + 7 digits + letter/digit,
@@ -307,6 +529,93 @@ function hasPositiveCasilla(
   return isPositive(value);
 }
 
+function directionForResultAmount(
+  result: NormalizedTaxReportDraft["result"],
+): TaxReportFactDirection {
+  if (result === "payable") {
+    return "payable";
+  }
+
+  if (result === "refund_requested") {
+    return "refund";
+  }
+
+  if (result === "compensate") {
+    return "credit";
+  }
+
+  return "informational";
+}
+
+function modelo130Direction(
+  fieldCode: string,
+  result: NormalizedTaxReportDraft["result"],
+): TaxReportFactDirection {
+  if (fieldCode === FORM_CONFIG["130"].resultFieldCode) {
+    return directionForResultAmount(result);
+  }
+
+  if (["05", "06", "15"].includes(fieldCode)) {
+    return "credit";
+  }
+
+  if (fieldCode === "02") {
+    return "deductible";
+  }
+
+  return "informational";
+}
+
+function modelo200Direction(
+  fieldCode: string,
+  result: NormalizedTaxReportDraft["result"],
+): TaxReportFactDirection {
+  if (fieldCode === "00547") {
+    return "credit";
+  }
+
+  if (fieldCode === FORM_CONFIG["200"].resultFieldCode) {
+    return directionForResultAmount(result);
+  }
+
+  return "informational";
+}
+
+function modelo303Direction(
+  fieldCode: string,
+  result: NormalizedTaxReportDraft["result"],
+): TaxReportFactDirection {
+  if (fieldCode === FORM_CONFIG["303"].resultFieldCode) {
+    return directionForResultAmount(result);
+  }
+
+  if (["72", "78", "87", "110"].includes(fieldCode)) {
+    return "credit";
+  }
+
+  if (fieldCode === "45") {
+    return "deductible";
+  }
+
+  return "informational";
+}
+
+function directionForFact(
+  formCode: string,
+  fieldCode: string,
+  result: NormalizedTaxReportDraft["result"],
+): TaxReportFactDirection {
+  if (formCode === "130") {
+    return modelo130Direction(fieldCode, result);
+  }
+
+  if (formCode === "200") {
+    return modelo200Direction(fieldCode, result);
+  }
+
+  return modelo303Direction(fieldCode, result);
+}
+
 function buildFact(
   formCode: string,
   fieldCode: string,
@@ -314,42 +623,17 @@ function buildFact(
   result: NormalizedTaxReportDraft["result"],
 ): TaxReportFactCreateInput {
   const normalizedValue = normalizeMoneyString(rawValue);
-  const direction =
-    formCode === "130"
-      ? fieldCode === "19"
-        ? result === "payable"
-          ? "payable"
-          : result === "compensate"
-            ? "credit"
-            : "informational"
-        : ["05", "06", "15"].includes(fieldCode)
-          ? "credit"
-          : fieldCode === "02"
-            ? "deductible"
-            : "informational"
-      : fieldCode === "71"
-        ? result === "payable"
-          ? "payable"
-          : result === "refund_requested"
-            ? "refund"
-            : result === "compensate"
-              ? "credit"
-              : "informational"
-        : ["72", "78", "87", "110"].includes(fieldCode)
-          ? "credit"
-          : fieldCode === "45"
-            ? "deductible"
-            : "informational";
+  const formConfig = configForForm(formCode);
 
   return {
     fieldCode,
     fieldSystem: "casilla",
-    label: FIELD_LABELS[formCode]?.[fieldCode] ?? null,
+    label: formConfig.fieldLabels[fieldCode] ?? null,
     valueType: "money",
     rawValue,
     normalizedValue,
     currency: "EUR",
-    direction,
+    direction: directionForFact(formCode, fieldCode, result),
     confidence: "medium",
   };
 }
@@ -373,7 +657,8 @@ function inferResult(
 
   if (
     hasPositiveCasilla(casillas, "73") ||
-    (isNegative(resultAmount) && /\b(?:a\s+devolver|devolver|refund)\b/i.test(text))
+    (isNegative(resultAmount) &&
+      /\b(?:a\s+devolver|devolver|refund)\b/i.test(text))
   ) {
     return "refund_requested";
   }
@@ -389,6 +674,48 @@ function inferModelo130Result(
   }
 
   return isPositive(resultAmount) ? "payable" : "compensate";
+}
+
+function inferModelo200Result(
+  resultAmount: string | null | undefined,
+  taxableBase: string | null | undefined,
+  text: string,
+): NormalizedTaxReportDraft["result"] {
+  if (resultAmount) {
+    if (new Decimal(resultAmount).eq(0)) {
+      return "zero";
+    }
+
+    return isPositive(resultAmount) ? "payable" : "refund_requested";
+  }
+
+  if (
+    /\bresultado\s+cero\b/i.test(text) ||
+    (taxableBase && new Decimal(taxableBase).lte(0))
+  ) {
+    return "zero";
+  }
+
+  return "unknown";
+}
+
+function inferModelo200TaxableBase(
+  casillas: Map<string, string>,
+): string | null {
+  const taxableBase = optionalMoney(casillas.get("00552"));
+  if (taxableBase) {
+    return taxableBase;
+  }
+
+  const preCompensationTaxableBase = optionalMoney(casillas.get("00550"));
+  const priorNegativeBaseApplied = optionalMoney(casillas.get("00547"));
+  if (preCompensationTaxableBase && priorNegativeBaseApplied) {
+    return new Decimal(preCompensationTaxableBase)
+      .minus(priorNegativeBaseApplied)
+      .toFixed(2);
+  }
+
+  return null;
 }
 
 function paymentStatusForResult(
@@ -429,11 +756,14 @@ function requireNormalized(
   ].filter((value): value is string => Boolean(value));
 
   if (missing.length > 0) {
-    throw new AppError(`Missing Spanish tax report fields: ${missing.join(", ")}`, {
-      statusCode: 422,
-      code: "tax_report_extraction_incomplete",
-      details: { missing },
-    });
+    throw new AppError(
+      `Missing Spanish tax report fields: ${missing.join(", ")}`,
+      {
+        statusCode: 422,
+        code: "tax_report_extraction_incomplete",
+        details: { missing },
+      },
+    );
   }
 }
 
@@ -451,7 +781,11 @@ export const spainTaxCountryModule: TaxCountryModule = {
       };
     }
 
-    if (/\b(?:AEAT|Agencia Tributaria|Modelo\s+303|Modelo\s+390|Modelo\s+130|Modelo\s+200)\b/i.test(input.ocrText)) {
+    if (
+      /\b(?:AEAT|Agencia Tributaria|Modelo\s+303|Modelo\s+390|Modelo\s+130|Modelo\s+200)\b/i.test(
+        input.ocrText,
+      )
+    ) {
       return {
         matched: true,
         countryCode: "ES",
@@ -469,7 +803,9 @@ export const spainTaxCountryModule: TaxCountryModule = {
     const formCode =
       normalizeFormCode(overrides?.formCode) ??
       normalizeFormCode(input.metadata.formCode) ??
-      normalizeFormCode(firstMatch(text, [/modelo\s*[_\s-]*(303|390|130|200)/im]));
+      normalizeFormCode(
+        firstMatch(text, [/modelo\s*[_\s-]*(303|390|130|200)/im]),
+      );
 
     if (!formCode) {
       throw new AppError("Could not detect Spanish tax form code", {
@@ -479,35 +815,65 @@ export const spainTaxCountryModule: TaxCountryModule = {
     }
 
     if (!SUPPORTED_FORM_CODES.has(formCode)) {
-      throw new AppError(`Spanish tax form is not supported for ingest yet: ${formCode}`, {
-        statusCode: 422,
-        code: "tax_form_not_supported",
-        details: { countryCode: "ES", formCode },
-      });
+      throw new AppError(
+        `Spanish tax form is not supported for ingest yet: ${formCode}`,
+        {
+          statusCode: 422,
+          code: "tax_form_not_supported",
+          details: { countryCode: "ES", formCode },
+        },
+      );
     }
 
     const casillas = parseCasillas(text, formCode);
+    const formConfig = configForForm(formCode);
     const warnings: string[] = [];
     const fiscalYear =
-      overrides?.fiscalYear ?? input.metadata.fiscalYear ?? parseFiscalYear(text);
-    const parsedPeriod = parsePeriod(
-      text,
-      fiscalYear,
-      overrides?.periodLabel ?? input.metadata.periodLabel,
-    );
+      overrides?.fiscalYear ??
+      input.metadata.fiscalYear ??
+      parseFiscalYear(text);
+    const parsedPeriod =
+      formCode === "200"
+        ? parseAnnualPeriod(
+            text,
+            fiscalYear,
+            overrides?.periodLabel ?? input.metadata.periodLabel,
+          )
+        : parsePeriod(
+            text,
+            fiscalYear,
+            overrides?.periodLabel ?? input.metadata.periodLabel,
+          );
+    const modelo200NegativeBaseDetailParse =
+      formCode === "200"
+        ? parseModelo200NegativeBaseDetail(text)
+        : { rows: [], warnings: [] };
+    const modelo200NegativeBaseDetail = modelo200NegativeBaseDetailParse.rows;
+    const taxableBase =
+      formCode === "303"
+        ? (optionalMoney(
+            firstMatch(text, [/taxable\s+base\s*[:=\-]\s*(-?\d[\d.,]*)/im]),
+          ) ?? optionalMoney(casillas.get("07")))
+        : formCode === "200"
+          ? inferModelo200TaxableBase(casillas)
+          : null;
     const resultAmount =
-      optionalMoney(casillas.get(formCode === "130" ? "19" : "71")) ??
+      optionalMoney(casillas.get(formConfig.resultFieldCode)) ??
       optionalMoney(
         firstMatch(text, [
           new RegExp(`Importe:\\s*I\\s*(${MONEY_PATTERN})`, "im"),
         ]),
       ) ??
-      optionalMoney(firstMatch(text, [/result(?:\s+amount)?\s*[:=\-]\s*(-?\d[\d.,]*)/im]));
+      optionalMoney(
+        firstMatch(text, [/result(?:\s+amount)?\s*[:=\-]\s*(-?\d[\d.,]*)/im]),
+      );
     const result =
       overrides?.result ??
       (formCode === "130"
         ? inferModelo130Result(resultAmount)
-        : inferResult(resultAmount, text, casillas));
+        : formCode === "200"
+          ? inferModelo200Result(resultAmount, taxableBase, text)
+          : inferResult(resultAmount, text, casillas));
     const authoritySubmissionId =
       overrides?.authoritySubmissionId ??
       firstMatch(text, [
@@ -524,38 +890,51 @@ export const spainTaxCountryModule: TaxCountryModule = {
       ]) ??
       null;
 
+    warnings.push(...modelo200NegativeBaseDetailParse.warnings);
+
     if (!authoritySubmissionId && !authorityReceiptNumber) {
       warnings.push("missing_authority_reference");
     }
 
-    if (!parsedPeriod.periodLabel && !overrides?.periodLabel && !input.metadata.periodLabel) {
+    if (
+      !parsedPeriod.periodLabel &&
+      !overrides?.periodLabel &&
+      !input.metadata.periodLabel
+    ) {
       warnings.push("period_ambiguous");
+    }
+
+    if (
+      formCode === "200" &&
+      taxableBase &&
+      isNegative(taxableBase) &&
+      modelo200NegativeBaseDetail.length === 0
+    ) {
+      warnings.push("model_200_negative_base_detail_missing");
     }
 
     const facts = Array.from(casillas.entries()).map(([fieldCode, rawValue]) =>
       buildFact(formCode, fieldCode, rawValue, result),
     );
-    const taxableBase =
-      formCode === "303"
-        ? optionalMoney(firstMatch(text, [/taxable\s+base\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
-          optionalMoney(casillas.get("07"))
-        : null;
     const taxDue =
       formCode === "303"
-        ? optionalMoney(firstMatch(text, [/tax\s+due\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
+        ? (optionalMoney(
+            firstMatch(text, [/tax\s+due\s*[:=\-]\s*(-?\d[\d.,]*)/im]),
+          ) ??
           optionalMoney(casillas.get("27")) ??
-          optionalMoney(casillas.get("09"))
+          optionalMoney(casillas.get("09")))
         : null;
     const taxDeductible =
       formCode === "303"
-        ? optionalMoney(firstMatch(text, [/tax\s+deductible\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
-          optionalMoney(casillas.get("45"))
+        ? (optionalMoney(
+            firstMatch(text, [/tax\s+deductible\s*[:=\-]\s*(-?\d[\d.,]*)/im]),
+          ) ?? optionalMoney(casillas.get("45")))
         : null;
 
     return {
       countryCode: "ES",
       formCode,
-      formName: formNameForCode(formCode),
+      formName: formConfig.formName,
       fiscalYear: parsedPeriod.fiscalYear ?? fiscalYear,
       periodGranularity: parsedPeriod.periodGranularity,
       periodLabel: parsedPeriod.periodLabel,
@@ -577,11 +956,19 @@ export const spainTaxCountryModule: TaxCountryModule = {
         null,
       dueDate:
         overrides?.dueDate ??
-        parseDateValue(firstMatch(text, [/(?:due\s+date|fecha\s+limite|fecha\s+límite)\s*[:=\-]\s*([^\n]+)/im])) ??
+        parseDateValue(
+          firstMatch(text, [
+            /(?:due\s+date|fecha\s+limite|fecha\s+límite)\s*[:=\-]\s*([^\n]+)/im,
+          ]),
+        ) ??
         null,
       paymentDueDate:
         overrides?.paymentDueDate ??
-        parseDateValue(firstMatch(text, [/(?:payment\s+due\s+date|fecha\s+de\s+pago)\s*[:=\-]\s*([^\n]+)/im])) ??
+        parseDateValue(
+          firstMatch(text, [
+            /(?:payment\s+due\s+date|fecha\s+de\s+pago)\s*[:=\-]\s*([^\n]+)/im,
+          ]),
+        ) ??
         null,
       result,
       paymentStatus: overrides?.paymentStatus ?? paymentStatusForResult(result),
@@ -590,18 +977,27 @@ export const spainTaxCountryModule: TaxCountryModule = {
       taxDue,
       taxDeductible,
       resultAmount: resultAmount ?? null,
-      retainedAmount: formCode === "130" ? optionalMoney(casillas.get("06")) ?? null : null,
-      profitOrLoss: formCode === "130" ? optionalMoney(casillas.get("03")) ?? null : null,
+      retainedAmount:
+        formCode === "130" ? (optionalMoney(casillas.get("06")) ?? null) : null,
+      profitOrLoss:
+        formCode === "130"
+          ? (optionalMoney(casillas.get("03")) ?? null)
+          : formCode === "200"
+            ? (taxableBase ?? optionalMoney(casillas.get("00500")) ?? null)
+            : null,
       facts,
       warnings,
       confidence:
-        warnings.includes("period_ambiguous") || warnings.includes("missing_authority_reference")
+        warnings.includes("period_ambiguous") ||
+        warnings.includes("missing_authority_reference") ||
+        warnings.includes("model_200_negative_base_detail_amount_missing")
           ? "medium"
           : "high",
       extractedData: {
         parser: "spain.v1",
         formCode,
         casillas: Object.fromEntries(casillas),
+        modelo200NegativeBaseDetail,
       },
     } satisfies TaxCountryParseResult;
   },
@@ -618,7 +1014,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
     return {
       countryCode: input.countryCode,
       jurisdiction: null,
-      taxKind: input.formCode === "130" ? "personal_income" : "vat",
+      taxKind: taxKindForForm(input.formCode),
       formCode: input.formCode,
       formName: input.formName ?? null,
       formVersion: input.formVersion ?? null,
@@ -654,7 +1050,10 @@ export const spainTaxCountryModule: TaxCountryModule = {
 
   buildCarryforwards(input: NormalizedTaxReportDraft) {
     const extracted = input.extractedData as
-      | { casillas?: Record<string, string> }
+      | {
+          casillas?: Record<string, string>;
+          modelo200NegativeBaseDetail?: Modelo200NegativeBaseDetailRow[];
+        }
       | null
       | undefined;
     const casillas = extracted?.casillas ?? {};
@@ -684,7 +1083,52 @@ export const spainTaxCountryModule: TaxCountryModule = {
           remainingAmount: amount,
           expiresAt: `${input.fiscalYear}-12-31`,
           status,
-          notes: `${MODELO_130_FORM_NAME} same-year negative payment result to deduct (casilla 19)`,
+          notes: `${FORM_CONFIG["130"].formName} same-year negative payment result to deduct (casilla 19)`,
+        },
+      ];
+    }
+
+    if (input.formCode === "200") {
+      const detailRows = extracted?.modelo200NegativeBaseDetail ?? [];
+      if (detailRows.length > 0) {
+        return detailRows.map((row) => {
+          const remainingAmount = normalizeMoneyString(row.pendingForFuture);
+          const rowStatus: TaxCarryforwardCreateInput["status"] =
+            status === "needs_review"
+              ? "needs_review"
+              : isPositive(remainingAmount)
+                ? "active"
+                : "used";
+
+          return {
+            kind: "tax_loss",
+            currency: input.currency,
+            originalAmount: normalizeMoneyString(row.pendingAtStartOrGenerated),
+            usedAmount: normalizeMoneyString(row.appliedThisReturn),
+            remainingAmount,
+            expiresAt: null,
+            status: rowStatus,
+            notes: `${FORM_CONFIG["200"].formName} negative taxable base detail for ${row.originFiscalYear}`,
+          };
+        });
+      }
+
+      const taxableBase = input.taxableBase ?? optionalMoney(casillas["00552"]);
+      if (!taxableBase || !isNegative(taxableBase)) {
+        return [];
+      }
+
+      const amount = absoluteMoney(taxableBase);
+      return [
+        {
+          kind: "tax_loss",
+          currency: input.currency,
+          originalAmount: amount,
+          usedAmount: "0.00",
+          remainingAmount: amount,
+          expiresAt: null,
+          status: "needs_review",
+          notes: `${FORM_CONFIG["200"].formName} negative taxable base without page-15 detail`,
         },
       ];
     }
@@ -708,7 +1152,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
         remainingAmount: amount,
         expiresAt: null,
         status,
-        notes: `${MODELO_303_FORM_NAME} prior-period VAT credit remaining (casilla 87)`,
+        notes: `${FORM_CONFIG["303"].formName} prior-period VAT credit remaining (casilla 87)`,
       });
     }
 
@@ -729,7 +1173,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
           remainingAmount: amount,
           expiresAt: null,
           status,
-          notes: `${MODELO_303_FORM_NAME} current-period VAT credit to compensate (casilla 72)`,
+          notes: `${FORM_CONFIG["303"].formName} current-period VAT credit to compensate (casilla 72)`,
         });
       }
     }

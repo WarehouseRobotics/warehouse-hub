@@ -42,7 +42,10 @@ async function createCompanyCard() {
   });
 }
 
-function uploadFile(text: string, name = "modelo-303.pdf"): Express.Multer.File {
+function uploadFile(
+  text: string,
+  name = "modelo-303.pdf",
+): Express.Multer.File {
   return {
     fieldname: "file",
     originalname: name,
@@ -92,6 +95,27 @@ Casilla 15: 0,00
 Casilla 17: -75,00
 Casilla 18: 0,00
 Casilla 19: -75,00
+`;
+}
+
+function modelo200Text(reference = "202420067210082L") {
+  return `
+INFORMACIÓN DE LA PRESENTACIÓN DE LA DECLARACIÓN
+Modelo 200
+Presentación realizada el: 21-07-2025 a las 10:32:02
+Expediente/Referencia (nº registro asignado): ${reference}
+Número de justificante: 2005683250690
+Ejercicio: 2024
+NIF: B02672152
+Casilla 00500: -4.688,48
+Casilla 00501: -4.638,22
+Casilla 00550: 218,51
+Casilla 00547: 218,51
+Detalle de la compensación de bases imponibles negativas
+Compensación de base año 2022 00896 20.087,97 00897 218,51 00898 19.869,46
+Compensación de base año 2023 00009 19.593,97 00010 00020 19.593,97
+Total 00670 39.681,94 00547 218,51 00671 39.463,43
+Resultado cero
 `;
 }
 
@@ -309,6 +333,104 @@ describe("tax report ingestion service", () => {
     );
   });
 
+  it("ingests a Spanish Modelo 200 into corporate facts and tax-loss carryforwards", async () => {
+    const company = await createCompanyCard();
+    const { getDocumentMeta } = await import("../src/services/documents.js");
+    const { ingestTaxReport } =
+      await import("../src/services/tax-report-ingestion.js");
+
+    const ingested = await ingestTaxReport(
+      uploadFile(modelo200Text(), "modelo-200-2024.pdf"),
+      {
+        kind: "tax_declaration",
+        companyCardId: company.companyId,
+        countryCode: "ES",
+        source: "accountant_upload",
+      },
+    );
+
+    expect(ingested.duplicate).toBe(false);
+    expect(ingested.taxReport).toEqual(
+      expect.objectContaining({
+        countryCode: "ES",
+        taxKind: "corporate_income",
+        formCode: "200",
+        formName: "Modelo 200",
+        fiscalYear: 2024,
+        periodGranularity: "year",
+        periodLabel: "2024",
+        periodStart: "2024-01-01",
+        periodEnd: "2024-12-31",
+        taxpayerTaxId: "B02672152",
+        authoritySubmissionId: "202420067210082L",
+        authorityReceiptNumber: "2005683250690",
+        result: "zero",
+        paymentStatus: "not_required",
+        taxableBase: "0.00",
+        profitOrLoss: "0.00",
+        extractedData: expect.objectContaining({
+          casillas: expect.objectContaining({
+            "00500": "-4.688,48",
+            "00547": "218,51",
+            "00550": "218,51",
+          }),
+          modelo200NegativeBaseDetail: [
+            expect.objectContaining({
+              originFiscalYear: 2022,
+              pendingAtStartOrGenerated: "20087.97",
+              appliedThisReturn: "218.51",
+              pendingForFuture: "19869.46",
+            }),
+            expect.objectContaining({
+              originFiscalYear: 2023,
+              pendingAtStartOrGenerated: "19593.97",
+              appliedThisReturn: "0.00",
+              pendingForFuture: "19593.97",
+            }),
+          ],
+          normalizedBy: "ES",
+          appliedOverrides: [],
+        }),
+      }),
+    );
+    expect(ingested.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldCode: "00500",
+          normalizedValue: "-4688.48",
+        }),
+        expect.objectContaining({
+          fieldCode: "00547",
+          direction: "credit",
+          normalizedValue: "218.51",
+        }),
+        expect.objectContaining({
+          fieldCode: "00550",
+          normalizedValue: "218.51",
+        }),
+      ]),
+    );
+    expect(ingested.carryforwards).toEqual([
+      expect.objectContaining({
+        kind: "tax_loss",
+        originalAmount: "20087.97",
+        usedAmount: "218.51",
+        remainingAmount: "19869.46",
+        status: "active",
+      }),
+      expect.objectContaining({
+        kind: "tax_loss",
+        originalAmount: "19593.97",
+        usedAmount: "0.00",
+        remainingAmount: "19593.97",
+        status: "active",
+      }),
+    ]);
+    expect(getDocumentMeta(ingested.document.documentId).ocrText).toContain(
+      "Modelo 200",
+    );
+  });
+
   it("returns the existing report for duplicate fingerprints and links the new document", async () => {
     const company = await createCompanyCard();
     const { getDocumentMeta } = await import("../src/services/documents.js");
@@ -364,7 +486,9 @@ Casilla 71: 0,00
 
     expect(ingested.taxReport.status).toBe("needs_review");
     expect(ingested.taxReport.confidence).toBe("medium");
-    expect(ingested.taxReport.warnings).toContain("missing_authority_reference");
+    expect(ingested.taxReport.warnings).toContain(
+      "missing_authority_reference",
+    );
   });
 
   it("marks the document failed and creates no report when parsing fails", async () => {

@@ -274,6 +274,10 @@ Minimum facts:
     fieldCode: "00552"
     meaning: Base imponible after reserve and negative-base compensation
     mapsTo: taxReport.taxableBase and SpainTaxPosition.corporateIncome.taxableBase
+  result_amount:
+    fieldCode: "01586"
+    meaning: Resultado de la liquidación
+    mapsTo: taxReport.resultAmount
 ```
 
 Page-15 negative-base detail:

@@ -38,6 +38,25 @@ Casilla 18: 0,00
 Casilla 19: 2300,00
 `;
 
+const modelo200PositiveWithPriorLossesText = `
+INFORMACIÓN DE LA PRESENTACIÓN DE LA DECLARACIÓN
+Modelo 200
+Presentación realizada el: 21-07-2025 a las 10:32:02
+Expediente/Referencia (nº registro asignado): 202420067210082L
+Número de justificante: 2005683250690
+Ejercicio: 2024
+NIF: B02672152
+Casilla 00500: -4.688,48
+Casilla 00501: -4.638,22
+Casilla 00550: 218,51
+Casilla 00547: 218,51
+Detalle de la compensación de bases imponibles negativas
+Compensación de base año 2022 00896 20.087,97 00897 218,51 00898 19.869,46
+Compensación de base año 2023 00009 19.593,97 00010 00020 19.593,97
+Total 00670 39.681,94 00547 218,51 00671 39.463,43
+Resultado cero
+`;
+
 function parseAndNormalize(text: string) {
   const parsed = spainTaxCountryModule.parse({
     ocrText: text,
@@ -284,10 +303,19 @@ Casilla 87: 180,00
     );
     expect(normalized.facts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ fieldCode: "71", normalizedValue: "-169.41" }),
+        expect.objectContaining({
+          fieldCode: "71",
+          normalizedValue: "-169.41",
+        }),
         expect.objectContaining({ fieldCode: "72", normalizedValue: "169.41" }),
-        expect.objectContaining({ fieldCode: "87", normalizedValue: "7648.17" }),
-        expect.objectContaining({ fieldCode: "110", normalizedValue: "7648.17" }),
+        expect.objectContaining({
+          fieldCode: "87",
+          normalizedValue: "7648.17",
+        }),
+        expect.objectContaining({
+          fieldCode: "110",
+          normalizedValue: "7648.17",
+        }),
       ]),
     );
     expect(normalized.warnings).toEqual([]);
@@ -516,6 +544,241 @@ Casilla 19: -75,00
       }),
     );
     expect(spainTaxCountryModule.buildCarryforwards(normalized)).toEqual([]);
+  });
+
+  it("normalizes Modelo 200 annual corporate facts and applies prior tax-loss detail", () => {
+    const { parsed, normalized } = parseAndNormalize(
+      modelo200PositiveWithPriorLossesText,
+    );
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        countryCode: "ES",
+        taxKind: "corporate_income",
+        formCode: "200",
+        formName: "Modelo 200",
+        fiscalYear: 2024,
+        periodGranularity: "year",
+        periodLabel: "2024",
+        periodStart: "2024-01-01",
+        periodEnd: "2024-12-31",
+        taxpayerTaxId: "B02672152",
+        authoritySubmissionId: "202420067210082L",
+        authorityReceiptNumber: "2005683250690",
+        result: "zero",
+        paymentStatus: "not_required",
+        taxableBase: "0.00",
+        profitOrLoss: "0.00",
+      }),
+    );
+    expect(normalized.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldCode: "00500",
+          normalizedValue: "-4688.48",
+        }),
+        expect.objectContaining({
+          fieldCode: "00501",
+          normalizedValue: "-4638.22",
+        }),
+        expect.objectContaining({
+          fieldCode: "00547",
+          direction: "credit",
+          normalizedValue: "218.51",
+        }),
+        expect.objectContaining({
+          fieldCode: "00550",
+          normalizedValue: "218.51",
+        }),
+      ]),
+    );
+    expect(parsed.extractedData).toEqual(
+      expect.objectContaining({
+        modelo200NegativeBaseDetail: [
+          {
+            originFiscalYear: 2022,
+            pendingAtStartOrGenerated: "20087.97",
+            appliedThisReturn: "218.51",
+            pendingForFuture: "19869.46",
+          },
+          {
+            originFiscalYear: 2023,
+            pendingAtStartOrGenerated: "19593.97",
+            appliedThisReturn: "0.00",
+            pendingForFuture: "19593.97",
+          },
+        ],
+      }),
+    );
+    expect(normalized.warnings).not.toContain(
+      "model_200_negative_base_detail_amount_missing",
+    );
+    expect(spainTaxCountryModule.buildCarryforwards(normalized)).toEqual([
+      expect.objectContaining({
+        kind: "tax_loss",
+        originalAmount: "20087.97",
+        usedAmount: "218.51",
+        remainingAmount: "19869.46",
+        status: "active",
+        notes: expect.stringContaining("2022"),
+      }),
+      expect.objectContaining({
+        kind: "tax_loss",
+        originalAmount: "19593.97",
+        usedAmount: "0.00",
+        remainingAmount: "19593.97",
+        status: "active",
+        notes: expect.stringContaining("2023"),
+      }),
+    ]);
+  });
+
+  it("extracts Modelo 200 layout result casilla 01586", () => {
+    const { parsed, normalized } = parseAndNormalize(`
+AEAT Modelo 200
+Ejercicio: 2026
+NIF: B12345678
+Presentacion id: AEAT200PAYABLE
+Número de justificante: 200PAYABLE
+00500 1000,00
+00501 1000,00
+00550 1000,00
+00552 1000,00
+01586 250,00
+`);
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        formCode: "200",
+        result: "payable",
+        paymentStatus: "unpaid",
+        taxableBase: "1000.00",
+        resultAmount: "250.00",
+      }),
+    );
+    expect(parsed.extractedData).toEqual(
+      expect.objectContaining({
+        casillas: expect.objectContaining({
+          "01586": "250,00",
+        }),
+      }),
+    );
+    expect(normalized.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldCode: "01586",
+          label: "Resultado de la liquidacion",
+          direction: "payable",
+          normalizedValue: "250.00",
+        }),
+      ]),
+    );
+  });
+
+  it("creates Modelo 200 tax-loss carryforwards from negative-base detail", () => {
+    const { normalized } = parseAndNormalize(`
+AEAT Modelo 200
+Ejercicio: 2026
+NIF: B12345678
+Presentacion id: AEAT200NEG
+Número de justificante: 200NEG
+Casilla 00500: -1200,00
+Casilla 00501: -1200,00
+Casilla 00550: -1200,00
+Casilla 00547: 0,00
+Casilla 00552: -1200,00
+Detalle de la compensación de bases imponibles negativas
+Compensación de base año 2026(*) 02316 1200,00 02317 0,00 02318 1200,00
+`);
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        taxKind: "corporate_income",
+        formCode: "200",
+        taxableBase: "-1200.00",
+        profitOrLoss: "-1200.00",
+        warnings: [],
+      }),
+    );
+    expect(spainTaxCountryModule.buildCarryforwards(normalized)).toEqual([
+      expect.objectContaining({
+        kind: "tax_loss",
+        originalAmount: "1200.00",
+        usedAmount: "0.00",
+        remainingAmount: "1200.00",
+        status: "active",
+      }),
+    ]);
+  });
+
+  it("does not shift Modelo 200 detail amounts when a middle cell is missing", () => {
+    const { parsed, normalized } = parseAndNormalize(`
+AEAT Modelo 200
+Ejercicio: 2026
+NIF: B12345678
+Presentacion id: AEAT200MISSINGCELL
+Número de justificante: 200MISSINGCELL
+Casilla 00500: -100,00
+Casilla 00501: -100,00
+Casilla 00550: -100,00
+Casilla 00547: 0,00
+Casilla 00552: -100,00
+Detalle de la compensación de bases imponibles negativas
+Compensación de base año 2026(*) 02316 100,00 02317 02318 90,00
+`);
+
+    expect(parsed.extractedData).toEqual(
+      expect.objectContaining({
+        modelo200NegativeBaseDetail: [
+          {
+            originFiscalYear: 2026,
+            pendingAtStartOrGenerated: "100.00",
+            appliedThisReturn: "0.00",
+            pendingForFuture: "90.00",
+          },
+        ],
+      }),
+    );
+    expect(normalized.warnings).toContain(
+      "model_200_negative_base_detail_amount_missing",
+    );
+    expect(normalized.confidence).toBe("medium");
+    expect(spainTaxCountryModule.buildCarryforwards(normalized)).toEqual([
+      expect.objectContaining({
+        kind: "tax_loss",
+        originalAmount: "100.00",
+        usedAmount: "0.00",
+        remainingAmount: "90.00",
+      }),
+    ]);
+  });
+
+  it("creates a needs-review Modelo 200 tax-loss carryforward when negative-base detail is missing", () => {
+    const { normalized } = parseAndNormalize(`
+AEAT Modelo 200
+Ejercicio: 2026
+NIF: B12345678
+Presentacion id: AEAT200NEGNODETAIL
+Número de justificante: 200NEGNODETAIL
+Casilla 00500: -900,00
+Casilla 00501: -900,00
+Casilla 00550: -900,00
+Casilla 00547: 0,00
+Casilla 00552: -900,00
+`);
+
+    expect(normalized.warnings).toContain(
+      "model_200_negative_base_detail_missing",
+    );
+    expect(spainTaxCountryModule.buildCarryforwards(normalized)).toEqual([
+      expect.objectContaining({
+        kind: "tax_loss",
+        originalAmount: "900.00",
+        usedAmount: "0.00",
+        remainingAmount: "900.00",
+        status: "needs_review",
+      }),
+    ]);
   });
 
   it("rejects unsupported countries and Spanish forms", () => {
