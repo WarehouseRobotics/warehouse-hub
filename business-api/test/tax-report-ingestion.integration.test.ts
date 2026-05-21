@@ -72,6 +72,29 @@ Casilla 87: 180,00
 `;
 }
 
+function modelo130Text(reference = "AEAT130Q3CREDIT") {
+  return `
+AEAT Modelo 130
+Ejercicio: 2026
+Periodo: Q3
+NIF: 12345678Z
+Presentacion id: ${reference}
+Casilla 01: 20000,00
+Casilla 02: 15000,00
+Casilla 03: 5000,00
+Casilla 04: 1000,00
+Casilla 05: 700,00
+Casilla 06: 100,00
+Casilla 07: 200,00
+Casilla 12: 200,00
+Casilla 14: -75,00
+Casilla 15: 0,00
+Casilla 17: -75,00
+Casilla 18: 0,00
+Casilla 19: -75,00
+`;
+}
+
 describe("tax report ingestion service", () => {
   beforeEach(async () => {
     await resetTestState();
@@ -205,6 +228,84 @@ describe("tax report ingestion service", () => {
           notes: expect.stringContaining("casilla 72"),
         }),
       ]),
+    );
+  });
+
+  it("ingests a Spanish Modelo 130 into report facts and same-year installment credit", async () => {
+    const company = await createCompanyCard();
+    const { getDocumentMeta } = await import("../src/services/documents.js");
+    const { ingestTaxReport } =
+      await import("../src/services/tax-report-ingestion.js");
+
+    const ingested = await ingestTaxReport(
+      uploadFile(modelo130Text(), "modelo-130-q3.pdf"),
+      {
+        kind: "tax_declaration",
+        companyCardId: company.companyId,
+        countryCode: "ES",
+        source: "accountant_upload",
+      },
+    );
+
+    expect(ingested.duplicate).toBe(false);
+    expect(ingested.taxReport).toEqual(
+      expect.objectContaining({
+        countryCode: "ES",
+        taxKind: "personal_income",
+        formCode: "130",
+        formName: "Modelo 130",
+        periodLabel: "2026-Q3",
+        result: "compensate",
+        paymentStatus: "not_required",
+        resultAmount: "-75.00",
+        retainedAmount: "100.00",
+        profitOrLoss: "5000.00",
+        extractedData: expect.objectContaining({
+          casillas: expect.objectContaining({
+            "03": "5000,00",
+            "19": "-75,00",
+          }),
+          normalizedBy: "ES",
+          appliedOverrides: [],
+        }),
+      }),
+    );
+    expect(ingested.document).toEqual(
+      expect.objectContaining({
+        kind: "tax_declaration",
+        ocrStatus: "completed",
+        linkedEntityType: "tax_report",
+        linkedEntityId: ingested.taxReport.taxReportId,
+      }),
+    );
+    expect(ingested.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldCode: "01",
+          normalizedValue: "20000.00",
+        }),
+        expect.objectContaining({
+          fieldCode: "02",
+          direction: "deductible",
+          normalizedValue: "15000.00",
+        }),
+        expect.objectContaining({
+          fieldCode: "19",
+          direction: "credit",
+          normalizedValue: "-75.00",
+        }),
+      ]),
+    );
+    expect(ingested.carryforwards).toEqual([
+      expect.objectContaining({
+        kind: "installment_credit",
+        originalAmount: "75.00",
+        remainingAmount: "75.00",
+        expiresAt: "2026-12-31",
+      }),
+    ]);
+    expect(getDocumentMeta(ingested.document.documentId).ocrText).toContain(
+      "Modelo 130",
     );
   });
 

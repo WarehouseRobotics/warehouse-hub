@@ -15,8 +15,10 @@ import type {
 } from "@warehouse-hub/business-schemas";
 
 const MODELO_303_FORM_NAME = "Modelo 303";
+const MODELO_130_FORM_NAME = "Modelo 130";
 const MONEY_PATTERN =
   "-?\\d{1,3}(?:\\.\\d{3})*,\\d{2}|-?\\d+,\\d{2}|-?\\d+\\.\\d{2}";
+const SUPPORTED_FORM_CODES = new Set(["130", "303"]);
 const MODELO_303_LAYOUT_FIELD_CODES = [
   "07",
   "09",
@@ -33,21 +35,53 @@ const MODELO_303_LAYOUT_FIELD_CODES = [
   "87",
   "110",
 ];
-const FIELD_LABELS: Record<string, string> = {
-  "07": "Base imponible IVA general",
-  "09": "Cuota devengada IVA general",
-  "27": "Total cuota devengada",
-  "28": "Base IVA deducible operaciones interiores corrientes",
-  "45": "Total IVA deducible",
-  "64": "Suma de resultados",
-  "66": "Atribuible a la Administracion del Estado",
-  "69": "Resultado de la autoliquidacion",
-  "71": "Resultado de la liquidacion",
-  "72": "Importe a compensar",
-  "73": "Importe a devolver",
-  "78": "Cuotas pendientes de compensacion aplicadas",
-  "87": "Cuotas a compensar pendientes",
-  "110": "Cuotas a compensar de periodos anteriores",
+const MODELO_130_LAYOUT_FIELD_CODES = [
+  "01",
+  "02",
+  "03",
+  "04",
+  "05",
+  "06",
+  "07",
+  "12",
+  "14",
+  "15",
+  "17",
+  "18",
+  "19",
+];
+const FIELD_LABELS: Record<string, Record<string, string>> = {
+  "303": {
+    "07": "Base imponible IVA general",
+    "09": "Cuota devengada IVA general",
+    "27": "Total cuota devengada",
+    "28": "Base IVA deducible operaciones interiores corrientes",
+    "45": "Total IVA deducible",
+    "64": "Suma de resultados",
+    "66": "Atribuible a la Administracion del Estado",
+    "69": "Resultado de la autoliquidacion",
+    "71": "Resultado de la liquidacion",
+    "72": "Importe a compensar",
+    "73": "Importe a devolver",
+    "78": "Cuotas pendientes de compensacion aplicadas",
+    "87": "Cuotas a compensar pendientes",
+    "110": "Cuotas a compensar de periodos anteriores",
+  },
+  "130": {
+    "01": "Ingresos fiscalmente computables acumulados",
+    "02": "Gastos fiscalmente deducibles acumulados",
+    "03": "Rendimiento neto acumulado",
+    "04": "Porcentaje sobre rendimiento neto positivo",
+    "05": "Pagos fraccionados positivos anteriores",
+    "06": "Retenciones e ingresos a cuenta soportados",
+    "07": "Resultado parcial",
+    "12": "Total liquidacion",
+    "14": "Resultado despues de minoracion",
+    "15": "Resultados negativos de trimestres anteriores",
+    "17": "Resultado previo a complementaria",
+    "18": "Resultados a ingresar de autoliquidaciones anteriores",
+    "19": "Resultado de la autoliquidacion",
+  },
 };
 
 function normalizeCountryCode(value: string | undefined): string | undefined {
@@ -193,7 +227,17 @@ function parsePeriod(
   return {};
 }
 
-function parseCasillas(text: string) {
+function layoutFieldCodesForForm(formCode: string): string[] {
+  return formCode === "130"
+    ? MODELO_130_LAYOUT_FIELD_CODES
+    : MODELO_303_LAYOUT_FIELD_CODES;
+}
+
+function formNameForCode(formCode: string): string {
+  return formCode === "130" ? MODELO_130_FORM_NAME : MODELO_303_FORM_NAME;
+}
+
+function parseCasillas(text: string, formCode: string) {
   const fields = new Map<string, string>();
   const pattern = /^\s*(?:casilla|box)\s*0*(\d{1,5})\s*[:=\-]\s*(-?\d[\d.,]*)/gim;
 
@@ -206,7 +250,7 @@ function parseCasillas(text: string) {
     fields.set(fieldCode, match[2]);
   }
 
-  for (const fieldCode of MODELO_303_LAYOUT_FIELD_CODES) {
+  for (const fieldCode of layoutFieldCodesForForm(formCode)) {
     if (fields.has(fieldCode)) {
       continue;
     }
@@ -264,30 +308,43 @@ function hasPositiveCasilla(
 }
 
 function buildFact(
+  formCode: string,
   fieldCode: string,
   rawValue: string,
   result: NormalizedTaxReportDraft["result"],
 ): TaxReportFactCreateInput {
   const normalizedValue = normalizeMoneyString(rawValue);
   const direction =
-    fieldCode === "71"
-      ? result === "payable"
-        ? "payable"
-        : result === "refund_requested"
-          ? "refund"
+    formCode === "130"
+      ? fieldCode === "19"
+        ? result === "payable"
+          ? "payable"
           : result === "compensate"
             ? "credit"
             : "informational"
-      : ["72", "78", "87", "110"].includes(fieldCode)
-        ? "credit"
-        : fieldCode === "45"
-          ? "deductible"
-          : "informational";
+        : ["05", "06", "15"].includes(fieldCode)
+          ? "credit"
+          : fieldCode === "02"
+            ? "deductible"
+            : "informational"
+      : fieldCode === "71"
+        ? result === "payable"
+          ? "payable"
+          : result === "refund_requested"
+            ? "refund"
+            : result === "compensate"
+              ? "credit"
+              : "informational"
+        : ["72", "78", "87", "110"].includes(fieldCode)
+          ? "credit"
+          : fieldCode === "45"
+            ? "deductible"
+            : "informational";
 
   return {
     fieldCode,
     fieldSystem: "casilla",
-    label: FIELD_LABELS[fieldCode] ?? null,
+    label: FIELD_LABELS[formCode]?.[fieldCode] ?? null,
     valueType: "money",
     rawValue,
     normalizedValue,
@@ -322,6 +379,16 @@ function inferResult(
   }
 
   return "compensate";
+}
+
+function inferModelo130Result(
+  resultAmount: string | null | undefined,
+): NormalizedTaxReportDraft["result"] {
+  if (!resultAmount || new Decimal(resultAmount).eq(0)) {
+    return "zero";
+  }
+
+  return isPositive(resultAmount) ? "payable" : "compensate";
 }
 
 function paymentStatusForResult(
@@ -411,7 +478,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
       });
     }
 
-    if (formCode !== "303") {
+    if (!SUPPORTED_FORM_CODES.has(formCode)) {
       throw new AppError(`Spanish tax form is not supported for ingest yet: ${formCode}`, {
         statusCode: 422,
         code: "tax_form_not_supported",
@@ -419,7 +486,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
       });
     }
 
-    const casillas = parseCasillas(text);
+    const casillas = parseCasillas(text, formCode);
     const warnings: string[] = [];
     const fiscalYear =
       overrides?.fiscalYear ?? input.metadata.fiscalYear ?? parseFiscalYear(text);
@@ -429,14 +496,18 @@ export const spainTaxCountryModule: TaxCountryModule = {
       overrides?.periodLabel ?? input.metadata.periodLabel,
     );
     const resultAmount =
-      optionalMoney(casillas.get("71")) ??
+      optionalMoney(casillas.get(formCode === "130" ? "19" : "71")) ??
       optionalMoney(
         firstMatch(text, [
           new RegExp(`Importe:\\s*I\\s*(${MONEY_PATTERN})`, "im"),
         ]),
       ) ??
       optionalMoney(firstMatch(text, [/result(?:\s+amount)?\s*[:=\-]\s*(-?\d[\d.,]*)/im]));
-    const result = overrides?.result ?? inferResult(resultAmount, text, casillas);
+    const result =
+      overrides?.result ??
+      (formCode === "130"
+        ? inferModelo130Result(resultAmount)
+        : inferResult(resultAmount, text, casillas));
     const authoritySubmissionId =
       overrides?.authoritySubmissionId ??
       firstMatch(text, [
@@ -462,23 +533,29 @@ export const spainTaxCountryModule: TaxCountryModule = {
     }
 
     const facts = Array.from(casillas.entries()).map(([fieldCode, rawValue]) =>
-      buildFact(fieldCode, rawValue, result),
+      buildFact(formCode, fieldCode, rawValue, result),
     );
     const taxableBase =
-      optionalMoney(firstMatch(text, [/taxable\s+base\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
-      optionalMoney(casillas.get("07"));
+      formCode === "303"
+        ? optionalMoney(firstMatch(text, [/taxable\s+base\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
+          optionalMoney(casillas.get("07"))
+        : null;
     const taxDue =
-      optionalMoney(firstMatch(text, [/tax\s+due\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
-      optionalMoney(casillas.get("27")) ??
-      optionalMoney(casillas.get("09"));
+      formCode === "303"
+        ? optionalMoney(firstMatch(text, [/tax\s+due\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
+          optionalMoney(casillas.get("27")) ??
+          optionalMoney(casillas.get("09"))
+        : null;
     const taxDeductible =
-      optionalMoney(firstMatch(text, [/tax\s+deductible\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
-      optionalMoney(casillas.get("45"));
+      formCode === "303"
+        ? optionalMoney(firstMatch(text, [/tax\s+deductible\s*[:=\-]\s*(-?\d[\d.,]*)/im])) ??
+          optionalMoney(casillas.get("45"))
+        : null;
 
     return {
       countryCode: "ES",
       formCode,
-      formName: MODELO_303_FORM_NAME,
+      formName: formNameForCode(formCode),
       fiscalYear: parsedPeriod.fiscalYear ?? fiscalYear,
       periodGranularity: parsedPeriod.periodGranularity,
       periodLabel: parsedPeriod.periodLabel,
@@ -513,8 +590,8 @@ export const spainTaxCountryModule: TaxCountryModule = {
       taxDue,
       taxDeductible,
       resultAmount: resultAmount ?? null,
-      retainedAmount: null,
-      profitOrLoss: null,
+      retainedAmount: formCode === "130" ? optionalMoney(casillas.get("06")) ?? null : null,
+      profitOrLoss: formCode === "130" ? optionalMoney(casillas.get("03")) ?? null : null,
       facts,
       warnings,
       confidence:
@@ -541,7 +618,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
     return {
       countryCode: input.countryCode,
       jurisdiction: null,
-      taxKind: "vat",
+      taxKind: input.formCode === "130" ? "personal_income" : "vat",
       formCode: input.formCode,
       formName: input.formName ?? null,
       formVersion: input.formVersion ?? null,
@@ -576,10 +653,6 @@ export const spainTaxCountryModule: TaxCountryModule = {
   },
 
   buildCarryforwards(input: NormalizedTaxReportDraft) {
-    if (!["compensate", "refund_requested"].includes(input.result)) {
-      return [];
-    }
-
     const extracted = input.extractedData as
       | { casillas?: Record<string, string> }
       | null
@@ -588,6 +661,37 @@ export const spainTaxCountryModule: TaxCountryModule = {
     const status: TaxCarryforwardCreateInput["status"] =
       input.status === "needs_review" ? "needs_review" : "active";
     const carryforwards: TaxCarryforwardCreateInput[] = [];
+
+    if (input.formCode === "130") {
+      const finalResult = optionalMoney(casillas["19"]) ?? input.resultAmount;
+      const quarter = input.periodLabel.match(/-Q([1-4])$/)?.[1];
+      if (
+        input.result !== "compensate" ||
+        !finalResult ||
+        !isNegative(finalResult) ||
+        !["1", "2", "3"].includes(quarter ?? "")
+      ) {
+        return [];
+      }
+
+      const amount = absoluteMoney(finalResult);
+      return [
+        {
+          kind: "installment_credit",
+          currency: input.currency,
+          originalAmount: amount,
+          usedAmount: "0.00",
+          remainingAmount: amount,
+          expiresAt: `${input.fiscalYear}-12-31`,
+          status,
+          notes: `${MODELO_130_FORM_NAME} same-year negative payment result to deduct (casilla 19)`,
+        },
+      ];
+    }
+
+    if (!["compensate", "refund_requested"].includes(input.result)) {
+      return [];
+    }
 
     // Casilla 87: prior-period VAT credits remaining after this return.
     // Persists across return types (compensate or refund) because unused

@@ -17,6 +17,27 @@ Casilla 45: 680,00
 Casilla 71: 1840,00
 `;
 
+const payable130Text = `
+AEAT Modelo 130
+Ejercicio: 2026
+Periodo: Q2
+NIF: 12345678Z
+Presentacion id: AEAT130Q2
+Casilla 01: 30000,00
+Casilla 02: 12000,00
+Casilla 03: 18000,00
+Casilla 04: 3600,00
+Casilla 05: 800,00
+Casilla 06: 500,00
+Casilla 07: 2300,00
+Casilla 12: 2300,00
+Casilla 14: 2300,00
+Casilla 15: 0,00
+Casilla 17: 2300,00
+Casilla 18: 0,00
+Casilla 19: 2300,00
+`;
+
 function parseAndNormalize(text: string) {
   const parsed = spainTaxCountryModule.parse({
     ocrText: text,
@@ -316,6 +337,185 @@ Casilla 73: 0,00
 `);
 
     expect(normalized.result).toBe("compensate");
+  });
+
+  it("normalizes Modelo 130 payable returns with YTD profit and retained amount but no withholding carryforward", () => {
+    const { parsed, normalized } = parseAndNormalize(payable130Text);
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        countryCode: "ES",
+        taxKind: "personal_income",
+        formCode: "130",
+        formName: "Modelo 130",
+        fiscalYear: 2026,
+        periodGranularity: "quarter",
+        periodLabel: "2026-Q2",
+        periodStart: "2026-04-01",
+        periodEnd: "2026-06-30",
+        taxpayerTaxId: "12345678Z",
+        status: "filed",
+        result: "payable",
+        paymentStatus: "unpaid",
+        resultAmount: "2300.00",
+        retainedAmount: "500.00",
+        profitOrLoss: "18000.00",
+      }),
+    );
+    expect(normalized.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldCode: "01",
+          label: "Ingresos fiscalmente computables acumulados",
+          normalizedValue: "30000.00",
+        }),
+        expect.objectContaining({
+          fieldCode: "02",
+          direction: "deductible",
+          normalizedValue: "12000.00",
+        }),
+        expect.objectContaining({
+          fieldCode: "06",
+          direction: "credit",
+          normalizedValue: "500.00",
+        }),
+        expect.objectContaining({
+          fieldCode: "19",
+          direction: "payable",
+          normalizedValue: "2300.00",
+        }),
+      ]),
+    );
+    expect(parsed.extractedData).toEqual(
+      expect.objectContaining({
+        casillas: expect.objectContaining({
+          "03": "18000,00",
+          "19": "2300,00",
+        }),
+      }),
+    );
+    const carryforwards = spainTaxCountryModule.buildCarryforwards(normalized);
+    expect(carryforwards).toEqual([]);
+    expect(carryforwards).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "withholding_credit" }),
+      ]),
+    );
+  });
+
+  it("keeps negative Modelo 130 YTD net result as profitOrLoss without tax-loss carryforward", () => {
+    const { normalized } = parseAndNormalize(`
+AEAT Modelo 130
+Ejercicio: 2026
+Periodo: Q1
+NIF: 12345678Z
+Presentacion id: AEAT130Q1NEG
+Casilla 01: 4000,00
+Casilla 02: 6000,00
+Casilla 03: -2000,00
+Casilla 04: 0,00
+Casilla 05: 0,00
+Casilla 06: 0,00
+Casilla 07: 0,00
+Casilla 12: 0,00
+Casilla 14: 0,00
+Casilla 15: 0,00
+Casilla 17: 0,00
+Casilla 18: 0,00
+Casilla 19: 0,00
+`);
+
+    const carryforwards = spainTaxCountryModule.buildCarryforwards(normalized);
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        taxKind: "personal_income",
+        formCode: "130",
+        result: "zero",
+        paymentStatus: "not_required",
+        resultAmount: "0.00",
+        profitOrLoss: "-2000.00",
+      }),
+    );
+    expect(carryforwards).toEqual([]);
+    expect(carryforwards).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "tax_loss" })]),
+    );
+  });
+
+  it("creates same-year Modelo 130 installment credits for negative Q1-Q3 final results", () => {
+    const { normalized } = parseAndNormalize(`
+AEAT Modelo 130
+Ejercicio: 2026
+Periodo: Q3
+NIF: 12345678Z
+Presentacion id: AEAT130Q3CREDIT
+Casilla 01: 20000,00
+Casilla 02: 15000,00
+Casilla 03: 5000,00
+Casilla 04: 1000,00
+Casilla 05: 700,00
+Casilla 06: 100,00
+Casilla 07: 200,00
+Casilla 12: 200,00
+Casilla 14: -75,00
+Casilla 15: 0,00
+Casilla 17: -75,00
+Casilla 18: 0,00
+Casilla 19: -75,00
+`);
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        result: "compensate",
+        paymentStatus: "not_required",
+        resultAmount: "-75.00",
+        profitOrLoss: "5000.00",
+      }),
+    );
+    expect(spainTaxCountryModule.buildCarryforwards(normalized)).toEqual([
+      expect.objectContaining({
+        kind: "installment_credit",
+        originalAmount: "75.00",
+        usedAmount: "0.00",
+        remainingAmount: "75.00",
+        expiresAt: "2026-12-31",
+        status: "active",
+        notes: expect.stringContaining("casilla 19"),
+      }),
+    ]);
+  });
+
+  it("does not carry negative Modelo 130 Q4 final results into the next year", () => {
+    const { normalized } = parseAndNormalize(`
+AEAT Modelo 130
+Ejercicio: 2026
+Periodo: Q4
+NIF: 12345678Z
+Presentacion id: AEAT130Q4NEG
+Casilla 01: 20000,00
+Casilla 02: 15000,00
+Casilla 03: 5000,00
+Casilla 04: 1000,00
+Casilla 05: 700,00
+Casilla 06: 100,00
+Casilla 07: 200,00
+Casilla 12: 200,00
+Casilla 14: -75,00
+Casilla 15: 0,00
+Casilla 17: -75,00
+Casilla 18: 0,00
+Casilla 19: -75,00
+`);
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        periodLabel: "2026-Q4",
+        result: "compensate",
+        resultAmount: "-75.00",
+      }),
+    );
+    expect(spainTaxCountryModule.buildCarryforwards(normalized)).toEqual([]);
   });
 
   it("rejects unsupported countries and Spanish forms", () => {

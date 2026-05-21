@@ -200,7 +200,7 @@ Minimum facts:
   retentions_ytd:
     fieldCode: "06"
     meaning: Retentions and payments on account borne during the YTD period
-    mapsTo: tax_carryforwards.kind=withholding_credit
+    mapsTo: taxReport.retainedAmount and tax_report_facts for the Modelo 130 MVP
   partial_result:
     fieldCode: "07"
     meaning: Casilla 04 minus casillas 05 and 06; may be negative
@@ -368,9 +368,9 @@ installment_credit:
 
 withholding_credit:
   sources:
-    - modelo_130 casilla 06
+    - modelo_130 casilla 06 when later reconciliation can avoid duplicate YTD balances
     - modelo_200 retentions and payments on account when later mapped
-  notes: Retentions are declared credits/payments, not business profit.
+  notes: Retentions are declared credits/payments, not business profit. Modelo 130 casilla 06 is YTD and is stored as retainedAmount plus a fact in the MVP; active withholding_credit carryforwards require later reconciliation logic to avoid double-counting quarterly YTD values.
 ```
 
 Accumulated profits are not carryforwards by default. They should be exposed through the Spanish tax-position summary from `Modelo 130` or `Modelo 200` facts. Only losses, credits, or other amounts with future tax effect should create `tax_carryforwards` rows.
