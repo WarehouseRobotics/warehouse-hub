@@ -11,6 +11,11 @@ from .errors import CliError, HttpError
 from .flags import extract_global_options
 from .help_text import print_help
 from .output import print_json, render_markdown_error, write_error_stderr
+from .scopes.accounting import (
+    handle_expenses,
+    handle_payrolls,
+    handle_sales_invoices,
+)
 from .scopes.crm import (
     handle_comments,
     handle_contacts,
@@ -41,6 +46,9 @@ SCOPE_HANDLERS: Dict[str, Callable[..., Any]] = {
     "tasks": handle_tasks,
     "comments": handle_comments,
     "documents": handle_documents,
+    "expenses": handle_expenses,
+    "payrolls": handle_payrolls,
+    "sales-invoices": handle_sales_invoices,
 }
 
 # Aliases honored locally (mirror src/cli/registry.ts where these are defined).
@@ -49,6 +57,16 @@ SCOPE_ALIASES = {
     "user": "users",
     "company": "company-card",
     "comment": "comments",
+    # accounting (src/cli/commands/accounting.ts)
+    "purchase-invoices": "expenses",
+    "expense-invoices": "expenses",
+    "bills": "expenses",
+    "payroll": "payrolls",
+    "nominas": "payrolls",
+    "nomina": "payrolls",
+    "invoice": "sales-invoices",
+    "invoices": "sales-invoices",
+    "sales-invoice": "sales-invoices",
 }
 
 

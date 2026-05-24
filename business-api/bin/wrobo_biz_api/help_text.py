@@ -38,13 +38,28 @@ Scopes implemented in this build:
                 | create <json> | get <id> | update <id> <json>
   documents     upload <file> <json> | ingest <file> <json>
                 | list [--similar --limit --since --before --after] | get <id> | download <id> <out>
+  expenses      create <json> | get <id> | update <id> <json>
+                | list [--status --include-payrolls
+                        --supplier-contact-id* --category*
+                        --similar --limit --since --before --after]
+                (aliases: purchase-invoices, expense-invoices, bills)
+  payrolls      create <json> | get <id> | update <id> <json>
+                | list [--status
+                        --employee-contact-id* --country-code*
+                        --similar --limit --since --before --after]
+                (aliases: payroll, nominas, nomina)
+  sales-invoices generate <json> | get <id> | update <id> <json> | pdf* <id> <out>
+                | list [--status* --customer-contact-id*
+                        --similar --limit --since --before --after]
+                (aliases: invoice, invoices, sales-invoice)
+                * = wrapper-only extension (forwarded to the server route but
+                    not exposed by the local `wrobo-biz` CLI)
 
 Host-only scopes (rejected with exit 2):
   serve, db init, db migrate, db ...
 
-Other scopes (expenses, payrolls, sales-invoices, bookings,
-bank-*, tax-*, data-cache) will be added in subsequent tasks of the
-wrobo-biz-api umbrella.
+Other scopes (bookings, bank-*, tax-*, data-cache) will be added in
+subsequent tasks of the wrobo-biz-api umbrella.
 
 Exit codes:
   0  success

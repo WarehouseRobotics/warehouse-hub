@@ -98,6 +98,8 @@ Constraints driving the breakdown:
 
 ### Task 3 — Accounting scopes: expenses, payrolls, sales-invoices
 
+> **Status:** ✅ Complete. Shipped as [business-api/bin/wrobo_biz_api/scopes/accounting.py](/Users/denis/src/warehouse-hub/business-api/bin/wrobo_biz_api/scopes/accounting.py) with three scope handlers — `expenses` (CRUD + `--include-payrolls` merged feed mirroring [lib/expense-list-cli.ts](/Users/denis/src/warehouse-hub/business-api/src/lib/expense-list-cli.ts)), `payrolls` (CRUD), `sales-invoices` (generate/get/list/update + a wrapper-only `pdf <id> <out>` two-request flow that fetches the invoice and then downloads the referenced PDF document; no dedicated invoice-PDF route exists server-side). 8 aliases from `src/cli/registry.ts:79-85` registered in `SCOPE_ALIASES` (`purchase-invoices` / `expense-invoices` / `bills` → `expenses`; `payroll` / `nominas` / `nomina` → `payrolls`; `invoice` / `invoices` / `sales-invoice` → `sales-invoices`). The `sales-invoices send` action mentioned in the original brief was skipped — no server route exists. List filters for expenses/payrolls/sales-invoices are wider than the local `wrobo-biz` CLI (server routes accept `--status`/`--supplier-contact-id`/`--category`/`--employee-contact-id`/`--country-code`/`--customer-contact-id`); these are marked with `*` in `wrobo-biz-api --help`. See [docs/apps/business-api/cli.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/cli.md) "Remote API wrapper" for the documented surface.
+
 - **Title:** `wrobo-biz-api: expenses, payrolls, sales-invoices (with invoice aliases)`
 - **Description:**
   - Umbrella: `<umbrella-task-id>`. Depends on Task 1a; Task 2 for the binary-download helper used by `sales-invoices pdf`.
