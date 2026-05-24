@@ -35,7 +35,6 @@ def handle_host_only(scope: str) -> None:
 
 PENDING_SCOPES = {
     "bookings", "booking-assignment-profiles", "booking-availability-exceptions",
-    "bank-accounts", "bank-transactions", "bank-balances", "bank-imports",
     "tax-reports", "tax-report-payment-links", "tax-carryforwards",
     "data-cache",
 }

@@ -52,13 +52,23 @@ Scopes implemented in this build:
                 | list [--status* --customer-contact-id*
                         --similar --limit --since --before --after]
                 (aliases: invoice, invoices, sales-invoice)
+  bank-accounts create <json> | get <id> | update <id> <json>
+                | list [--status]
+  bank-transactions create <json> | upsert <json> | get <id> | update <id> <json>
+                | match <id>
+                | list [--bank-account-id --status --kind
+                        --limit --since --before --after]
+  bank-balances record <json>
+                | list [--bank-account-id
+                        --limit --since --before --after]
+  bank-imports csv <bank-account-id> <file> <json>
                 * = wrapper-only extension (forwarded to the server route but
                     not exposed by the local `wrobo-biz` CLI)
 
 Host-only scopes (rejected with exit 2):
   serve, db init, db migrate, db ...
 
-Other scopes (bookings, bank-*, tax-*, data-cache) will be added in
+Other scopes (bookings, tax-*, data-cache) will be added in
 subsequent tasks of the wrobo-biz-api umbrella.
 
 Exit codes:

@@ -16,6 +16,12 @@ from .scopes.accounting import (
     handle_payrolls,
     handle_sales_invoices,
 )
+from .scopes.banking import (
+    handle_bank_accounts,
+    handle_bank_balances,
+    handle_bank_imports,
+    handle_bank_transactions,
+)
 from .scopes.crm import (
     handle_comments,
     handle_contacts,
@@ -49,6 +55,10 @@ SCOPE_HANDLERS: Dict[str, Callable[..., Any]] = {
     "expenses": handle_expenses,
     "payrolls": handle_payrolls,
     "sales-invoices": handle_sales_invoices,
+    "bank-accounts": handle_bank_accounts,
+    "bank-transactions": handle_bank_transactions,
+    "bank-balances": handle_bank_balances,
+    "bank-imports": handle_bank_imports,
 }
 
 # Aliases honored locally (mirror src/cli/registry.ts where these are defined).
