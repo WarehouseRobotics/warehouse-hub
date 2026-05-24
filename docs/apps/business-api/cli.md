@@ -58,7 +58,21 @@ When you run the raw CLI directly inside the repo container, examples keep the e
 
 For driving a deployed business-api instance from a host that must **not** run Node.js (e.g. operators, scheduled jobs, agents on a hardened box), use the companion wrapper [business-api/bin/wrobo-biz-api](/Users/denis/src/warehouse-hub/business-api/bin/wrobo-biz-api). It is a single-file Python 3 script that depends only on the standard library and mirrors the `wrobo-biz` command shape, but speaks HTTP only — no Docker, no Node, no container.
 
-Supported scopes today (identity-only foundation): `auth` (login/logout/whoami/magic-link request/consume), `tokens` (create/list/revoke), `users` (list/set-role/delete/invite/revoke-invite), `workspace` (get/set), `company-card` (get/set). Remaining scopes (`contacts`, `deals`, `projects`, `tasks`, `comments`, `documents`, `expenses`, `payrolls`, `sales-invoices`, `bookings`, `bank-*`, `tax-*`, `data-cache`, plus the `invoices` / `bills` / `purchase-invoices` / `expense-invoices` aliases) are reserved and reject with a `scope_not_implemented` Markdown error until their follow-up tasks land — see [docs/plans/cli-wrapper-api-transport-tasks.plan.md](/Users/denis/src/warehouse-hub/docs/plans/cli-wrapper-api-transport-tasks.plan.md).
+Supported scopes today:
+
+- **Identity foundation** (Task 1a): `auth` (login/logout/whoami/magic-link request/consume), `tokens` (create/list/revoke), `users` (list/set-role/delete/invite/revoke-invite), `workspace` (get/set), `company-card` (get/set).
+- **CRM and base-infra** (Task 1b): `contacts` (CRUD + `resolve`; list filters `--role`, `--query`, `--type`, `--parent-contact-id` / `--parentContactId`), `deals` (CRUD; list filters incl. `--stage`, `--customerContactId`, `--ownerEntityId`), `projects` (CRUD), `tasks` (CRUD with nested-task constraint passthrough), `comments` (CRUD; list filters `--commentable-type`, `--commentable-id`, plus an `--object-id` alias for `commentableId`).
+
+Remaining scopes (`documents`, `expenses`, `payrolls`, `sales-invoices`, `bookings`, `bank-*`, `tax-*`, `data-cache`, plus the `invoices` / `bills` / `purchase-invoices` / `expense-invoices` aliases) are reserved and reject with a `scope_not_implemented` Markdown error until their follow-up tasks land — see [docs/plans/cli-wrapper-api-transport-tasks.plan.md](/Users/denis/src/warehouse-hub/docs/plans/cli-wrapper-api-transport-tasks.plan.md).
+
+### Filter handling — divergence from local `wrobo-biz`
+
+The remote wrapper enforces server-side filter names more strictly than the local `wrobo-biz` CLI. For CRM `list` subcommands (contacts/deals/projects/tasks/comments), `wrobo-biz-api`:
+
+- Rejects unknown list flags up-front with a `cli_usage_error` (exit 2) so typos surface immediately, instead of being silently dropped.
+- Passes recognized scope-specific filters (`--role`, `--query`, `--stage`, `--customerContactId`, `--projectId`, `--parentTaskId`, `--commentable-id` / `--object-id`, etc.) through to the HTTP route as query-string parameters, so the response is server-filtered.
+
+The local `wrobo-biz` `list` handlers in `business-api/src/cli/commands/crm.ts` ignore unknown trailing flags and return the unfiltered list. As a result, **parity diff against the local CLI is byte-clean only on the canonical / error paths and the no-filter `list` calls** — `contacts list`, `deals list`, `projects list`, `tasks list`, `comments list`, plus CRUD round-trips and the documented 404 Markdown shape. Filtered-list diffs (e.g. `contacts list --role supplier --query paper`, `deals list --stage won --customerContactId ct_X`) are expected to differ: the wrapper returns the correct server-filtered result, the local CLI returns the full unfiltered set. This is intentional — the wrapper sits closer to the HTTP surface and is the right shape for remote agents — but reviewers comparing the two CLIs on filtered lists should expect divergence.
 
 Host-only commands are explicitly rejected with a Markdown error and exit code 2 — `serve` and `db *` cannot be driven over HTTP and the wrapper says so:
 

@@ -58,6 +58,8 @@ Constraints driving the breakdown:
 
 ### Task 1b — CRM and base-infra JSON-CRUD scopes
 
+> **Status:** ✅ Complete. Shipped as five new scope handlers in [business-api/bin/wrobo-biz-api](/Users/denis/src/warehouse-hub/business-api/bin/wrobo-biz-api) — `contacts` (CRUD + `resolve`, filters `--role/--query/--type/--parent-contact-id/--parentContactId`), `deals` (CRUD, filters incl. `--stage/--customerContactId`), `projects` (CRUD), `tasks` (CRUD with nested-task constraints), `comments` (CRUD with `--commentable-*` filters and an `--object-id` alias for `commentableId`). Identity-scope foundation from Task 1a unchanged; `PENDING_SCOPES` shrinks by five entries. See [docs/apps/business-api/cli.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/cli.md) for the documented filter-parity caveat.
+
 - **Title:** `wrobo-biz-api: contacts, deals, projects, tasks, comments`
 - **Description:**
   - Umbrella: `<umbrella-task-id>`. Depends on Task 1a (dispatcher, auth, error rendering must be in place).

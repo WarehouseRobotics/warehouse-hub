@@ -675,19 +675,25 @@ Environment:
 Session file:
   ~/.config/wrobo-api/session.json  (mode 0600)
 
-Scopes implemented in this build (Task 1a):
+Scopes implemented in this build:
   auth          login | logout | whoami | magic-link request | magic-link consume
   tokens        create | list | revoke
   users         list | invite | revoke-invite | set-role | delete
   workspace     get | set
   company-card  get | set
+  contacts      list [--query --role --type --parent-contact-id] | create <json> | get <id> | resolve <json>
+  deals         list [--stage --customerContactId] | create <json> | get <id>
+  projects      list [--ownerEntityId --status] | create <json> | get <id>
+  tasks         list [--projectId --status --parentTaskId] | create <json> | get <id> | update <id> <json>
+  comments      list [--commentable-type --commentable-id --commentable-slug --author-contact-id]
+                | create <json> | get <id> | update <id> <json>
 
 Host-only scopes (rejected with exit 2):
   serve, db init, db migrate, db ...
 
-Other scopes (contacts, deals, projects, tasks, comments, documents,
-expenses, payrolls, sales-invoices, bookings, bank-*, tax-*, data-cache)
-will be added in subsequent tasks of the wrobo-biz-api umbrella.
+Other scopes (documents, expenses, payrolls, sales-invoices, bookings,
+bank-*, tax-*, data-cache) will be added in subsequent tasks of the
+wrobo-biz-api umbrella.
 
 Exit codes:
   0  success
@@ -1050,6 +1056,338 @@ def handle_company_card(
 
 
 # ---------------------------------------------------------------------------
+# CRM scope helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_json_positional(raw: Optional[str], label: str) -> Any:
+    if raw is None:
+        raise CliError(f"Missing {label} JSON argument")
+    try:
+        return json.loads(raw)
+    except ValueError as err:
+        raise CliError(f"Invalid {label} JSON argument: {raw}") from err
+
+
+def _list_query_from_options(
+    options: Dict[str, str],
+    *,
+    list_filter: bool,
+    scope_filters: Optional[Dict[str, str]] = None,
+) -> List[Tuple[str, str]]:
+    """Build the GET query string from parsed options.
+
+    scope_filters maps the CLI flag name to the server query-param name. Only
+    flags present in options are emitted; unknown flags raise CliError so the
+    user sees the same kind of failure they'd get from the local CLI.
+
+    The ``list_filter`` flag enables the shared ``--similar/--limit/--since/
+    --before/--after`` set; all five CRM list scopes in Task 1b pass
+    ``list_filter=False`` (those filters are not exposed on the local CLI's
+    CRM list commands), but Tasks 3+ (documents, expenses, sales-invoices,
+    bank-*, tax-*) will opt into them, so the parameter is kept live here.
+    """
+    scope_filters = scope_filters or {}
+    query: List[Tuple[str, str]] = []
+    list_filter_recognized: Set[str] = (
+        set(LIST_FILTER_ALIASES) | LIST_FILTER_KEYS if list_filter else set()
+    )
+
+    for raw_key, value in options.items():
+        if raw_key in scope_filters:
+            query.append((scope_filters[raw_key], str(value)))
+            continue
+        if list_filter and raw_key in list_filter_recognized:
+            continue
+        raise CliError(f"Unknown list option: --{raw_key}")
+
+    if list_filter:
+        query.extend(list_filter_query_from_options(options))
+
+    return query
+
+
+CONTACT_LIST_FILTERS = {
+    "query": "query",
+    "role": "role",
+    "type": "type",
+    "parent-contact-id": "parentContactId",
+    "parentContactId": "parentContactId",
+}
+
+
+def handle_contacts(
+    subcommand: Optional[str],
+    rest: List[str],
+    *,
+    globals_: GlobalOptions,
+) -> Any:
+    base_url = resolve_base_url(globals_.base_url)
+    token = require_credential(globals_.token)
+
+    if subcommand == "list":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        query = _list_query_from_options(
+            parsed.options, list_filter=False, scope_filters=CONTACT_LIST_FILTERS
+        )
+        return call_api("GET", "/api/v1/contacts", base_url=base_url, token=token, query=query)
+
+    if subcommand == "create":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        payload = _parse_json_positional(parsed.positionals[0] if parsed.positionals else None, "contact")
+        return call_api(
+            "POST", "/api/v1/contacts", base_url=base_url, token=token, json_body=payload
+        )
+
+    if subcommand == "get":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if not parsed.positionals:
+            raise CliError("Missing contact id-or-slug")
+        contact_id = parsed.positionals[0]
+        return call_api(
+            "GET",
+            f"/api/v1/contacts/{urllib.parse.quote(contact_id, safe='')}",
+            base_url=base_url,
+            token=token,
+        )
+
+    if subcommand == "resolve":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        payload = _parse_json_positional(
+            parsed.positionals[0] if parsed.positionals else None, "contact resolve payload"
+        )
+        return call_api(
+            "POST",
+            "/api/v1/contacts/resolve",
+            base_url=base_url,
+            token=token,
+            json_body=payload,
+        )
+
+    raise CliError(f"Unknown contacts subcommand: {subcommand or '(none)'}")
+
+
+DEAL_LIST_FILTERS = {
+    "stage": "stage",
+    "customerContactId": "customerContactId",
+    "customer-contact-id": "customerContactId",
+}
+
+
+def handle_deals(
+    subcommand: Optional[str],
+    rest: List[str],
+    *,
+    globals_: GlobalOptions,
+) -> Any:
+    base_url = resolve_base_url(globals_.base_url)
+    token = require_credential(globals_.token)
+
+    if subcommand == "list":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        query = _list_query_from_options(
+            parsed.options, list_filter=False, scope_filters=DEAL_LIST_FILTERS
+        )
+        return call_api("GET", "/api/v1/deals", base_url=base_url, token=token, query=query)
+
+    if subcommand == "create":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        payload = _parse_json_positional(parsed.positionals[0] if parsed.positionals else None, "deal")
+        return call_api(
+            "POST", "/api/v1/deals", base_url=base_url, token=token, json_body=payload
+        )
+
+    if subcommand == "get":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if not parsed.positionals:
+            raise CliError("Missing deal id-or-slug")
+        deal_id = parsed.positionals[0]
+        return call_api(
+            "GET",
+            f"/api/v1/deals/{urllib.parse.quote(deal_id, safe='')}",
+            base_url=base_url,
+            token=token,
+        )
+
+    raise CliError(f"Unknown deals subcommand: {subcommand or '(none)'}")
+
+
+PROJECT_LIST_FILTERS = {
+    "ownerEntityId": "ownerEntityId",
+    "owner-entity-id": "ownerEntityId",
+    "status": "status",
+}
+
+
+def handle_projects(
+    subcommand: Optional[str],
+    rest: List[str],
+    *,
+    globals_: GlobalOptions,
+) -> Any:
+    base_url = resolve_base_url(globals_.base_url)
+    token = require_credential(globals_.token)
+
+    if subcommand == "list":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        query = _list_query_from_options(
+            parsed.options, list_filter=False, scope_filters=PROJECT_LIST_FILTERS
+        )
+        return call_api("GET", "/api/v1/projects", base_url=base_url, token=token, query=query)
+
+    if subcommand == "create":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        payload = _parse_json_positional(
+            parsed.positionals[0] if parsed.positionals else None, "project"
+        )
+        return call_api(
+            "POST", "/api/v1/projects", base_url=base_url, token=token, json_body=payload
+        )
+
+    if subcommand == "get":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if not parsed.positionals:
+            raise CliError("Missing project id-or-slug")
+        project_id = parsed.positionals[0]
+        return call_api(
+            "GET",
+            f"/api/v1/projects/{urllib.parse.quote(project_id, safe='')}",
+            base_url=base_url,
+            token=token,
+        )
+
+    raise CliError(f"Unknown projects subcommand: {subcommand or '(none)'}")
+
+
+TASK_LIST_FILTERS = {
+    "projectId": "projectId",
+    "project-id": "projectId",
+    "status": "status",
+    "parentTaskId": "parentTaskId",
+    "parent-task-id": "parentTaskId",
+}
+
+
+def handle_tasks(
+    subcommand: Optional[str],
+    rest: List[str],
+    *,
+    globals_: GlobalOptions,
+) -> Any:
+    base_url = resolve_base_url(globals_.base_url)
+    token = require_credential(globals_.token)
+
+    if subcommand == "list":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        query = _list_query_from_options(
+            parsed.options, list_filter=False, scope_filters=TASK_LIST_FILTERS
+        )
+        return call_api("GET", "/api/v1/tasks", base_url=base_url, token=token, query=query)
+
+    if subcommand == "create":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        payload = _parse_json_positional(parsed.positionals[0] if parsed.positionals else None, "task")
+        return call_api(
+            "POST", "/api/v1/tasks", base_url=base_url, token=token, json_body=payload
+        )
+
+    if subcommand == "get":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if not parsed.positionals:
+            raise CliError("Missing task id-or-slug")
+        task_id = parsed.positionals[0]
+        return call_api(
+            "GET",
+            f"/api/v1/tasks/{urllib.parse.quote(task_id, safe='')}",
+            base_url=base_url,
+            token=token,
+        )
+
+    if subcommand == "update":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if len(parsed.positionals) < 1:
+            raise CliError("Missing task id-or-slug")
+        if len(parsed.positionals) < 2:
+            raise CliError("Missing task patch JSON argument")
+        task_id = parsed.positionals[0]
+        payload = _parse_json_positional(parsed.positionals[1], "task patch")
+        return call_api(
+            "PATCH",
+            f"/api/v1/tasks/{urllib.parse.quote(task_id, safe='')}",
+            base_url=base_url,
+            token=token,
+            json_body=payload,
+        )
+
+    raise CliError(f"Unknown tasks subcommand: {subcommand or '(none)'}")
+
+
+COMMENT_LIST_FILTERS = {
+    "commentable-type": "commentableType",
+    "commentable-id": "commentableId",
+    "commentable-slug": "commentableSlug",
+    "author-contact-id": "authorContactId",
+    "object-id": "commentableId",
+}
+
+
+def handle_comments(
+    subcommand: Optional[str],
+    rest: List[str],
+    *,
+    globals_: GlobalOptions,
+) -> Any:
+    base_url = resolve_base_url(globals_.base_url)
+    token = require_credential(globals_.token)
+
+    if subcommand == "list":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        query = _list_query_from_options(
+            parsed.options, list_filter=False, scope_filters=COMMENT_LIST_FILTERS
+        )
+        return call_api("GET", "/api/v1/comments", base_url=base_url, token=token, query=query)
+
+    if subcommand == "create":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        payload = _parse_json_positional(
+            parsed.positionals[0] if parsed.positionals else None, "comment"
+        )
+        return call_api(
+            "POST", "/api/v1/comments", base_url=base_url, token=token, json_body=payload
+        )
+
+    if subcommand == "get":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if not parsed.positionals:
+            raise CliError("Missing comment id-or-slug")
+        comment_id = parsed.positionals[0]
+        return call_api(
+            "GET",
+            f"/api/v1/comments/{urllib.parse.quote(comment_id, safe='')}",
+            base_url=base_url,
+            token=token,
+        )
+
+    if subcommand == "update":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if len(parsed.positionals) < 1:
+            raise CliError("Missing comment id-or-slug")
+        if len(parsed.positionals) < 2:
+            raise CliError("Missing comment patch JSON argument")
+        comment_id = parsed.positionals[0]
+        payload = _parse_json_positional(parsed.positionals[1], "comment patch")
+        return call_api(
+            "PATCH",
+            f"/api/v1/comments/{urllib.parse.quote(comment_id, safe='')}",
+            base_url=base_url,
+            token=token,
+            json_body=payload,
+        )
+
+    raise CliError(f"Unknown comments subcommand: {subcommand or '(none)'}")
+
+
+# ---------------------------------------------------------------------------
 # Host-only commands (rejected with exit 2 + Markdown error)
 # ---------------------------------------------------------------------------
 
@@ -1079,7 +1417,6 @@ def handle_host_only(scope: str) -> None:
 # ---------------------------------------------------------------------------
 
 PENDING_SCOPES = {
-    "contacts", "deals", "projects", "tasks", "comments",
     "documents",
     "expenses", "payrolls", "sales-invoices",
     "invoices", "bills", "purchase-invoices", "expense-invoices",
@@ -1123,6 +1460,11 @@ SCOPE_HANDLERS: Dict[str, Callable[..., Any]] = {
     "users": handle_users,
     "workspace": handle_workspace,
     "company-card": handle_company_card,
+    "contacts": handle_contacts,
+    "deals": handle_deals,
+    "projects": handle_projects,
+    "tasks": handle_tasks,
+    "comments": handle_comments,
 }
 
 # Aliases honored locally (mirror src/cli/registry.ts where these are defined).
@@ -1130,6 +1472,7 @@ SCOPE_ALIASES = {
     "token": "tokens",
     "user": "users",
     "company": "company-card",
+    "comment": "comments",
 }
 
 
