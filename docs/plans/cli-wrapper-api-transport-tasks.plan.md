@@ -76,6 +76,8 @@ Constraints driving the breakdown:
 
 ### Task 2 — Documents: multipart upload + ingest + binary download
 
+> **Status:** ✅ Complete. Shipped as `handle_documents` plus the real `_build_multipart_body` / `upload_multipart` / `download_binary` / `_parse_content_disposition_filename` helpers in [business-api/bin/wrobo-biz-api](/Users/denis/src/warehouse-hub/business-api/bin/wrobo-biz-api), with the TS ingest formatter ported into Python (~95 LOC) under the "Document ingest TOON formatter" block so `documents ingest` output is byte-identical to local. Subcommands wired: `upload`, `ingest`, `list`, `get`, `download`. `documents download` is a single HTTP round-trip (filename parsed from `Content-Disposition` with RFC 5987 charset-aware decoding) — no metadata pre-fetch. See [docs/apps/business-api/cli.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/cli.md) "Remote API wrapper" for the documented surface.
+
 - **Title:** `wrobo-biz-api: documents scope (upload, ingest, list, get, download)`
 - **Description:**
   - Umbrella: `<umbrella-task-id>`. Depends on Task 1a (1b not required — different scope family, can run in parallel).

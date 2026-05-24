@@ -23,13 +23,16 @@ stubbed: they belong to Tasks 2 and onward.
 from __future__ import annotations
 
 import getpass
+import io
 import json
 import os
+import re
 import ssl
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
@@ -687,11 +690,13 @@ Scopes implemented in this build:
   tasks         list [--projectId --status --parentTaskId] | create <json> | get <id> | update <id> <json>
   comments      list [--commentable-type --commentable-id --commentable-slug --author-contact-id]
                 | create <json> | get <id> | update <id> <json>
+  documents     upload <file> <json> | ingest <file> <json>
+                | list [--similar --limit --since --before --after] | get <id> | download <id> <out>
 
 Host-only scopes (rejected with exit 2):
   serve, db init, db migrate, db ...
 
-Other scopes (documents, expenses, payrolls, sales-invoices, bookings,
+Other scopes (expenses, payrolls, sales-invoices, bookings,
 bank-*, tax-*, data-cache) will be added in subsequent tasks of the
 wrobo-biz-api umbrella.
 
@@ -1417,7 +1422,6 @@ def handle_host_only(scope: str) -> None:
 # ---------------------------------------------------------------------------
 
 PENDING_SCOPES = {
-    "documents",
     "expenses", "payrolls", "sales-invoices",
     "invoices", "bills", "purchase-invoices", "expense-invoices",
     "bookings", "booking-assignment-profiles", "booking-availability-exceptions",
@@ -1435,19 +1439,659 @@ def handle_pending(scope: str) -> None:
     )
 
 
-# Stub helpers — placeholders so Task 2 can plug in without restructuring.
-def _stub_multipart_upload(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
-    raise CliError(
-        "Multipart upload is not implemented in this build. See Task 2 (`documents` scope).",
-        code="not_implemented",
+# ---------------------------------------------------------------------------
+# Multipart upload + binary download helpers (used by the documents scope)
+# ---------------------------------------------------------------------------
+
+
+def _build_multipart_body(
+    file_path: str,
+    fields: Dict[str, str],
+    *,
+    file_field: str = "file",
+    mime_type: str = "application/octet-stream",
+) -> Tuple[bytes, str]:
+    """Encode a multipart/form-data body using stdlib only.
+
+    Mirrors the contract expected by routes/documents.ts:18-90: the file
+    arrives in field ``file``; top-level scalars (kind, companyCardId,
+    source, targetSalesInvoiceId) ride alongside as regular text fields;
+    ``overrides`` is sent as a JSON-encoded string and decoded server-side
+    by parseMultipartJson.
+    """
+    boundary = "----wrobo-biz-api-" + uuid.uuid4().hex
+    buf = io.BytesIO()
+    crlf = b"\r\n"
+    bdy = ("--" + boundary).encode("utf-8")
+
+    for name, value in fields.items():
+        buf.write(bdy + crlf)
+        disposition = f'Content-Disposition: form-data; name="{name}"'
+        buf.write(disposition.encode("utf-8") + crlf + crlf)
+        buf.write(value.encode("utf-8") + crlf)
+
+    filename = os.path.basename(file_path) or "upload.bin"
+    # RFC 7578 / RFC 2616 quoted-string: backslash-escape backslashes and
+    # double-quotes so weird filenames cannot break out of the header.
+    safe_filename = filename.replace("\\", "\\\\").replace('"', '\\"')
+    buf.write(bdy + crlf)
+    file_disp = (
+        f'Content-Disposition: form-data; name="{file_field}"; filename="{safe_filename}"'
+    )
+    buf.write(file_disp.encode("utf-8") + crlf)
+    buf.write(f"Content-Type: {mime_type}".encode("utf-8") + crlf + crlf)
+    with open(file_path, "rb") as fh:
+        buf.write(fh.read())
+    buf.write(crlf)
+    buf.write(("--" + boundary + "--").encode("utf-8") + crlf)
+
+    content_type = f"multipart/form-data; boundary={boundary}"
+    return buf.getvalue(), content_type
+
+
+def upload_multipart(
+    method: str,
+    path: str,
+    *,
+    base_url: str,
+    token: Optional[str],
+    file_path: str,
+    fields: Dict[str, str],
+    mime_type: str = "application/octet-stream",
+) -> Any:
+    if not os.path.isfile(file_path):
+        raise CliError(f"File not found: {file_path}", code="file_not_found")
+
+    body, content_type = _build_multipart_body(file_path, fields, mime_type=mime_type)
+    headers: Dict[str, str] = {"Content-Type": content_type}
+    if token:
+        headers.update(auth_headers_for_token(token))
+    headers["Accept"] = "application/json"
+    headers["User-Agent"] = USER_AGENT
+
+    url = _join_url(base_url, path)
+    request = urllib.request.Request(url=url, data=body, method=method.upper(), headers=headers)
+    try:
+        with urllib.request.urlopen(
+            request, timeout=_timeout_secs(), context=_ssl_context()
+        ) as resp:
+            raw = resp.read()
+            response = HttpResponse(
+                status_code=resp.status,
+                headers={k: v for k, v in resp.headers.items()},
+                body=raw,
+            )
+    except urllib.error.HTTPError as err:
+        raw = err.read() if err.fp else b""
+        response = HttpResponse(
+            status_code=err.code,
+            headers={k: v for k, v in (err.headers.items() if err.headers else [])},
+            body=raw,
+        )
+    except urllib.error.URLError as err:
+        raise HttpError(
+            f"Network error reaching {url}: {err.reason}",
+            code="network_error",
+            url=url,
+        ) from err
+    except (TimeoutError, OSError) as err:
+        raise HttpError(
+            f"Network error reaching {url}: {err}",
+            code="network_error",
+            url=url,
+        ) from err
+
+    if 200 <= response.status_code < 300:
+        if response.status_code == 204 or not response.body:
+            return None
+        try:
+            return response.json()
+        except ValueError:
+            return response.text
+    raise _http_error_from_response(response, url)
+
+
+def download_binary(
+    path: str,
+    *,
+    base_url: str,
+    token: Optional[str],
+    output_path: str,
+) -> Dict[str, str]:
+    """Stream GET <path> to ``output_path`` and return {filename, contentType}.
+
+    Returns the parsed Content-Disposition filename (if any) and the
+    Content-Type the server advertised, so the caller can build the same
+    receipt as the local CLI in commands/documents.ts:90-91.
+    """
+    headers: Dict[str, str] = {"User-Agent": USER_AGENT}
+    if token:
+        headers.update(auth_headers_for_token(token))
+
+    url = _join_url(base_url, path)
+    request = urllib.request.Request(url=url, method="GET", headers=headers)
+    try:
+        with urllib.request.urlopen(
+            request, timeout=_timeout_secs(), context=_ssl_context()
+        ) as resp:
+            # urllib raises HTTPError for non-2xx (handled below), so
+            # everything reaching this block is a 2xx success response.
+            content_type = resp.headers.get("Content-Type", "") or ""
+            disposition = resp.headers.get("Content-Disposition", "") or ""
+            with open(output_path, "wb") as out_fh:
+                while True:
+                    chunk = resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    out_fh.write(chunk)
+    except urllib.error.HTTPError as err:
+        body = err.read() if err.fp else b""
+        raise _http_error_from_response(
+            HttpResponse(
+                status_code=err.code,
+                headers={k: v for k, v in (err.headers.items() if err.headers else [])},
+                body=body,
+            ),
+            url,
+        )
+    except urllib.error.URLError as err:
+        raise HttpError(
+            f"Network error reaching {url}: {err.reason}",
+            code="network_error",
+            url=url,
+        ) from err
+    except (TimeoutError, OSError) as err:
+        raise HttpError(
+            f"Network error reaching {url}: {err}",
+            code="network_error",
+            url=url,
+        ) from err
+
+    return {"contentType": content_type, "filename": _parse_content_disposition_filename(disposition)}
+
+
+_CD_FILENAME_STAR_RE = re.compile(r"filename\*\s*=\s*([^;]+)", re.IGNORECASE)
+_CD_FILENAME_RE = re.compile(r'filename\s*=\s*"([^"]*)"|filename\s*=\s*([^;]+)', re.IGNORECASE)
+
+
+def _parse_content_disposition_filename(value: str) -> str:
+    if not value:
+        return ""
+    m_star = _CD_FILENAME_STAR_RE.search(value)
+    if m_star:
+        raw = m_star.group(1).strip()
+        if "''" in raw:
+            # RFC 5987 ext-value: charset'lang'pct-encoded.
+            # Express today emits UTF-8'', but ISO-8859-1'' is also valid and
+            # would mojibake if we always assumed UTF-8.
+            charset, _, rest = raw.partition("'")
+            _, _, encoded = rest.partition("'")
+            charset_name = (charset or "utf-8").strip().lower() or "utf-8"
+            try:
+                return urllib.parse.unquote(encoded, encoding=charset_name, errors="replace")
+            except (LookupError, Exception):
+                try:
+                    return urllib.parse.unquote(encoded)
+                except Exception:
+                    return encoded
+        return raw
+    m = _CD_FILENAME_RE.search(value)
+    if m:
+        return (m.group(1) or m.group(2) or "").strip()
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# documents scope
+# ---------------------------------------------------------------------------
+
+# Intentionally empty: routes/documents.ts:39-55 only accepts the shared
+# list filters (--similar/--limit/--since/--before/--after) routed through
+# _list_query_from_options(..., list_filter=True). No scope-specific keys.
+DOCUMENT_LIST_FILTERS: Dict[str, str] = {}
+
+
+def handle_documents(
+    subcommand: Optional[str],
+    rest: List[str],
+    *,
+    globals_: GlobalOptions,
+) -> Any:
+    base_url = resolve_base_url(globals_.base_url)
+    token = require_credential(globals_.token)
+
+    if subcommand == "list":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        query = _list_query_from_options(
+            parsed.options, list_filter=True, scope_filters=DOCUMENT_LIST_FILTERS
+        )
+        return call_api("GET", "/api/v1/documents", base_url=base_url, token=token, query=query)
+
+    if subcommand == "get":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if not parsed.positionals:
+            raise CliError("Missing document id-or-slug")
+        document_id = parsed.positionals[0]
+        return call_api(
+            "GET",
+            f"/api/v1/documents/{urllib.parse.quote(document_id, safe='')}",
+            base_url=base_url,
+            token=token,
+        )
+
+    if subcommand in ("upload", "ingest"):
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if len(parsed.positionals) < 1:
+            raise CliError("Missing file path")
+        if len(parsed.positionals) < 2:
+            label = "document metadata" if subcommand == "upload" else "document ingestion metadata"
+            raise CliError(f"Missing {label} JSON argument")
+        file_path = parsed.positionals[0]
+        meta_label = "document metadata" if subcommand == "upload" else "document ingestion metadata"
+        meta = _parse_json_positional(parsed.positionals[1], meta_label)
+        if not isinstance(meta, dict):
+            raise CliError(f"{meta_label} must be a JSON object")
+
+        fields: Dict[str, str] = {}
+        for key, value in meta.items():
+            if key == "overrides":
+                fields["overrides"] = json.dumps(value, ensure_ascii=False)
+            elif value is None:
+                continue
+            elif isinstance(value, (str, int, float, bool)):
+                fields[key] = str(value).lower() if isinstance(value, bool) else str(value)
+            else:
+                fields[key] = json.dumps(value, ensure_ascii=False)
+
+        if subcommand == "upload":
+            path = "/api/v1/documents"
+            mime_type = "application/octet-stream"
+        else:
+            path = "/api/v1/documents/ingest"
+            mime_type = (
+                "application/pdf" if file_path.lower().endswith(".pdf") else "image/png"
+            )
+        response = upload_multipart(
+            "POST", path,
+            base_url=base_url,
+            token=token,
+            file_path=file_path,
+            fields=fields,
+            mime_type=mime_type,
+        )
+
+        if subcommand == "ingest":
+            formatted = format_document_ingest_cli_output(response)
+            if formatted is not None:
+                sys.stdout.write(formatted + "\n")
+                sys.stdout.flush()
+                return None
+        return response
+
+    if subcommand == "download":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if len(parsed.positionals) < 1:
+            raise CliError("Missing document id-or-slug")
+        if len(parsed.positionals) < 2:
+            raise CliError("Missing output path")
+        document_id = parsed.positionals[0]
+        output_path = parsed.positionals[1]
+        # Single round-trip: the server's response.download() emits the same
+        # originalFilename via Content-Disposition that GET /documents/{id}
+        # would have returned in meta.filename, so we read it from the
+        # download response headers instead of doing an extra metadata fetch.
+        info = download_binary(
+            f"/api/v1/documents/{urllib.parse.quote(document_id, safe='')}/download",
+            base_url=base_url,
+            token=token,
+            output_path=output_path,
+        )
+        filename = info.get("filename") or os.path.basename(output_path)
+        return {"ok": True, "outputPath": output_path, "filename": filename}
+
+    raise CliError(f"Unknown documents subcommand: {subcommand or '(none)'}")
+
+
+# ---------------------------------------------------------------------------
+# Document ingest TOON formatter — Python port of
+# business-api/src/lib/cli-document-ingest-format.ts
+# ---------------------------------------------------------------------------
+
+_TOON_UNQUOTED_KEY_RE = re.compile(r"^[A-Za-z_][\w.]*$")
+_TOON_NUMERIC_LIKE_RE = re.compile(r"^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$")
+_TOON_LEADING_ZERO_RE = re.compile(r"^0\d+$")
+_TOON_CTRL_RE = re.compile(r"[\n\r\t]")
+_TOON_BRACKETS_RE = re.compile(r"[\[\]{}]")
+
+
+def _toon_escape_string(s: str) -> str:
+    return (
+        s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
     )
 
 
-def _stub_binary_download(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
-    raise CliError(
-        "Binary download is not implemented in this build. See Task 2 (`documents` scope).",
-        code="not_implemented",
-    )
+def _toon_is_safe_unquoted(value: str) -> bool:
+    if not value:
+        return False
+    if value != value.strip():
+        return False
+    if value in ("true", "false", "null"):
+        return False
+    if _TOON_NUMERIC_LIKE_RE.match(value) or _TOON_LEADING_ZERO_RE.match(value):
+        return False
+    if ":" in value or '"' in value or "\\" in value:
+        return False
+    if _TOON_BRACKETS_RE.search(value) or _TOON_CTRL_RE.search(value):
+        return False
+    if "," in value:
+        return False
+    if value.startswith("-"):
+        return False
+    return True
+
+
+def _toon_encode_key(key: str) -> str:
+    if _TOON_UNQUOTED_KEY_RE.match(key):
+        return key
+    return '"' + _toon_escape_string(key) + '"'
+
+
+def _toon_encode_primitive(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value)
+    s = str(value)
+    if _toon_is_safe_unquoted(s):
+        return s
+    return '"' + _toon_escape_string(s) + '"'
+
+
+def _toon_is_primitive(v: Any) -> bool:
+    return v is None or isinstance(v, (str, int, float, bool))
+
+
+def _toon_extract_tabular_header(rows: List[Any]) -> Optional[List[str]]:
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    header = list(rows[0].keys())
+    if not header:
+        return None
+    for row in rows:
+        if not isinstance(row, dict) or list(row.keys()) != header:
+            return None
+        for k in header:
+            if not _toon_is_primitive(row[k]):
+                return None
+    return header
+
+
+def _toon_format_array_header(length: int, key: Optional[str] = None, fields: Optional[List[str]] = None) -> str:
+    header = ""
+    if key:
+        header += _toon_encode_key(key)
+    header += f"[{length}]"
+    if fields is not None:
+        header += "{" + ",".join(_toon_encode_key(f) for f in fields) + "}"
+    header += ":"
+    return header
+
+
+def _toon_encode_value(value: Any, depth: int, lines: List[str]) -> None:
+    indent = "  " * depth
+    if isinstance(value, dict):
+        for k, v in value.items():
+            ek = _toon_encode_key(k)
+            if _toon_is_primitive(v):
+                lines.append(f"{indent}{ek}: {_toon_encode_primitive(v)}")
+            elif isinstance(v, list):
+                _toon_encode_array(k, v, depth, lines)
+            elif isinstance(v, dict):
+                lines.append(f"{indent}{ek}:")
+                if v:
+                    _toon_encode_value(v, depth + 1, lines)
+    elif isinstance(value, list):
+        _toon_encode_array(None, value, depth, lines)
+    elif _toon_is_primitive(value):
+        enc = _toon_encode_primitive(value)
+        if enc != "":
+            lines.append(f"{indent}{enc}")
+
+
+def _toon_encode_array(key: Optional[str], value: List[Any], depth: int, lines: List[str]) -> None:
+    indent = "  " * depth
+    if len(value) == 0:
+        lines.append(indent + _toon_format_array_header(0, key))
+        return
+    if all(_toon_is_primitive(item) for item in value):
+        header = _toon_format_array_header(len(value), key)
+        joined = ",".join(_toon_encode_primitive(v) for v in value)
+        lines.append(f"{indent}{header} {joined}")
+        return
+    if all(isinstance(item, dict) for item in value):
+        header_fields = _toon_extract_tabular_header(value)
+        if header_fields is not None:
+            lines.append(indent + _toon_format_array_header(len(value), key, header_fields))
+            row_indent = "  " * (depth + 1)
+            for row in value:
+                lines.append(row_indent + ",".join(_toon_encode_primitive(row[k]) for k in header_fields))
+            return
+    lines.append(indent + _toon_format_array_header(len(value), key))
+    for item in value:
+        _toon_encode_list_item(item, depth + 1, lines)
+
+
+def _toon_encode_list_item(item: Any, depth: int, lines: List[str]) -> None:
+    indent = "  " * depth
+    if _toon_is_primitive(item):
+        lines.append(f"{indent}- {_toon_encode_primitive(item)}")
+        return
+    if isinstance(item, list):
+        if all(_toon_is_primitive(x) for x in item):
+            header = _toon_format_array_header(len(item))
+            joined = ",".join(_toon_encode_primitive(v) for v in item)
+            lines.append(f"{indent}- {header} {joined}" if item else f"{indent}- {header}")
+            return
+        lines.append(f"{indent}- {_toon_format_array_header(len(item))}")
+        for sub in item:
+            _toon_encode_list_item(sub, depth + 1, lines)
+        return
+    if isinstance(item, dict):
+        if not item:
+            lines.append(f"{indent}-")
+            return
+        entries = list(item.items())
+        first_key, first_value = entries[0]
+        rest = entries[1:]
+        ek = _toon_encode_key(first_key)
+        if isinstance(first_value, list) and all(isinstance(x, dict) for x in first_value):
+            header_fields = _toon_extract_tabular_header(first_value)
+            if header_fields is not None:
+                lines.append(
+                    f"{indent}- "
+                    + _toon_format_array_header(len(first_value), first_key, header_fields)
+                )
+                row_indent = "  " * (depth + 2)
+                for row in first_value:
+                    lines.append(row_indent + ",".join(_toon_encode_primitive(row[k]) for k in header_fields))
+                if rest:
+                    _toon_encode_value(dict(rest), depth + 1, lines)
+                return
+        if _toon_is_primitive(first_value):
+            lines.append(f"{indent}- {ek}: {_toon_encode_primitive(first_value)}")
+        elif isinstance(first_value, list):
+            if len(first_value) == 0:
+                lines.append(f"{indent}- {ek}{_toon_format_array_header(0)}")
+            elif all(_toon_is_primitive(x) for x in first_value):
+                header = _toon_format_array_header(len(first_value))
+                joined = ",".join(_toon_encode_primitive(v) for v in first_value)
+                lines.append(f"{indent}- {ek}{header} {joined}")
+            else:
+                lines.append(f"{indent}- {ek}{_toon_format_array_header(len(first_value))}")
+                for sub in first_value:
+                    _toon_encode_list_item(sub, depth + 2, lines)
+        elif isinstance(first_value, dict):
+            lines.append(f"{indent}- {ek}:")
+            if first_value:
+                _toon_encode_value(first_value, depth + 2, lines)
+        if rest:
+            _toon_encode_value(dict(rest), depth + 1, lines)
+
+
+def _toon_encode(value: Any) -> str:
+    lines: List[str] = []
+    _toon_encode_value(value, 0, lines)
+    return "\n".join(lines)
+
+
+def _ingest_party_name(response: Dict[str, Any]) -> Optional[str]:
+    extracted = response.get("extracted") or {}
+    linked = response.get("linkedEntity") or {}
+    party_key = {
+        "expense": "supplier",
+        "sales_invoice": "customer",
+        "payroll": "employee",
+    }.get(linked.get("type"))
+    if not party_key:
+        return None
+    party = extracted.get(party_key) or {}
+    return party.get("name") or party.get("legalName")
+
+
+_MISSING = object()
+
+
+def _coalesce_js(*candidates: Any) -> Any:
+    """Mirror JS ``a ?? b ?? c``: skip null/undefined, return first defined.
+
+    Python's ``None`` stands in for both JS ``null`` and ``undefined``.
+    Returns ``None`` if every candidate is None — which the TOON encoder
+    serializes as ``null`` exactly as JS ``undefined`` normalizes to.
+    """
+    for c in candidates:
+        if c is _MISSING:
+            continue
+        if c is not None:
+            return c
+    return None
+
+
+def _g(d: Dict[str, Any], k: str) -> Any:
+    return d.get(k, _MISSING)
+
+
+def _omit_if_missing(value: Any) -> Any:
+    """Convert sentinel ``_MISSING`` to None (TOON serializes to ``null``)."""
+    return None if value is _MISSING else value
+
+
+def _build_ingest_invoice_payload(response: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    extracted = response.get("extracted") or {}
+    linked = response.get("linkedEntity") or {}
+    invoice_number = extracted.get("invoiceNumber")
+    line_items = extracted.get("lineItems")
+    party_name = _ingest_party_name(response)
+    ltype = linked.get("type")
+    data = linked.get("data") or {}
+
+    if ltype in ("expense", "sales_invoice"):
+        if (
+            not invoice_number
+            or not isinstance(line_items, list)
+            or not line_items
+            or not party_name
+        ):
+            return None
+
+    if ltype == "expense":
+        invoice: Dict[str, Any] = {
+            "kind": "expense_invoice",
+            "id": data.get("expenseId"),
+            "slug": data.get("slug"),
+            "supplier": {"name": party_name},
+            "invoiceNumber": invoice_number,
+            "invoiceDate": _coalesce_js(_g(extracted, "invoiceDate"), _g(data, "invoiceDate")),
+            "dueDate": _coalesce_js(_g(extracted, "dueDate"), _g(data, "dueDate")),
+            "currency": _coalesce_js(_g(extracted, "currency"), _g(data, "currency")),
+            "totals": _coalesce_js(_g(extracted, "totals"), _g(data, "totals")),
+            "taxLines": _coalesce_js(_g(extracted, "taxLines"), _g(data, "taxLines")),
+            "lineItems": line_items,
+            "category": _coalesce_js(_g(extracted, "category"), _g(data, "category")),
+            "notes": _coalesce_js(_g(extracted, "notes"), _g(data, "notes")),
+            "status": _coalesce_js(_g(extracted, "status"), _g(data, "status")),
+        }
+        return {"label": f"invoice {invoice_number} for {party_name} was ingested", "invoice": invoice}
+
+    if ltype == "sales_invoice":
+        invoice = {
+            "kind": "sales_invoice",
+            "id": data.get("salesInvoiceId"),
+            "slug": data.get("slug"),
+            "customer": {"name": party_name},
+            "invoiceNumber": invoice_number,
+            "issueDate": _coalesce_js(_g(extracted, "issueDate"), _g(data, "issueDate")),
+            "serviceDate": _coalesce_js(_g(extracted, "serviceDate"), _g(data, "serviceDate")),
+            "dueDate": _coalesce_js(_g(extracted, "dueDate"), _g(data, "dueDate")),
+            "currency": _coalesce_js(_g(extracted, "currency"), _g(data, "currency")),
+            "paymentTermsDays": _coalesce_js(_g(extracted, "paymentTermsDays"), _g(data, "paymentTermsDays")),
+            "totals": _coalesce_js(_g(extracted, "totals"), _g(data, "totals")),
+            "lineItems": line_items,
+            "notes": _coalesce_js(_g(extracted, "notes")),
+            "status": _coalesce_js(_g(extracted, "status"), _g(data, "status")),
+        }
+        return {"label": f"invoice {invoice_number} for {party_name} was ingested", "invoice": invoice}
+
+    if ltype == "payroll":
+        period_start = _coalesce_js(_g(extracted, "periodStart"), _g(data, "periodStart"))
+        period_end = _coalesce_js(_g(extracted, "periodEnd"), _g(data, "periodEnd"))
+        if not period_start or not period_end or not party_name:
+            return None
+        invoice = {
+            "kind": "payroll",
+            "id": data.get("payrollId"),
+            "slug": data.get("slug"),
+            "employee": {"name": party_name},
+            "payrollNumber": _coalesce_js(_g(extracted, "payrollNumber"), _g(data, "payrollNumber")),
+            "countryCode": _coalesce_js(_g(extracted, "countryCode"), _g(data, "countryCode")),
+            "periodStart": period_start,
+            "periodEnd": period_end,
+            "paymentDate": _coalesce_js(_g(extracted, "paymentDate"), _g(data, "paymentDate")),
+            "currency": _coalesce_js(_g(extracted, "currency"), _g(data, "currency")),
+            "grossSalary": _coalesce_js(_g(extracted, "grossSalary"), _g(data, "grossSalary")),
+            "netSalary": _coalesce_js(_g(extracted, "netSalary"), _g(data, "netSalary")),
+            "employeeTaxWithheld": _coalesce_js(_g(extracted, "employeeTaxWithheld"), _g(data, "employeeTaxWithheld")),
+            "employeeSocialContributions": _coalesce_js(
+                _g(extracted, "employeeSocialContributions"), _g(data, "employeeSocialContributions")
+            ),
+            "employerSocialContributions": _coalesce_js(
+                _g(extracted, "employerSocialContributions"), _g(data, "employerSocialContributions")
+            ),
+            "otherDeductions": _coalesce_js(_g(extracted, "otherDeductions"), _g(data, "otherDeductions")),
+            "otherEarnings": _coalesce_js(_g(extracted, "otherEarnings"), _g(data, "otherEarnings")),
+            "rawLines": _coalesce_js(_g(extracted, "rawLines"), _g(data, "rawLines")),
+            "notes": _coalesce_js(_g(extracted, "notes"), _g(data, "notes")),
+            "status": _coalesce_js(_g(extracted, "payrollStatus"), _g(data, "status")),
+        }
+        return {"label": f"payroll for {party_name} was ingested", "invoice": invoice}
+
+    return None
+
+
+def format_document_ingest_cli_output(response: Any) -> Optional[str]:
+    if not isinstance(response, dict):
+        return None
+    payload = _build_ingest_invoice_payload(response)
+    if not payload:
+        return None
+    return f"{payload['label']}\n\n```toon\n{_toon_encode(payload['invoice'])}\n```"
 
 
 # ---------------------------------------------------------------------------
@@ -1465,6 +2109,7 @@ SCOPE_HANDLERS: Dict[str, Callable[..., Any]] = {
     "projects": handle_projects,
     "tasks": handle_tasks,
     "comments": handle_comments,
+    "documents": handle_documents,
 }
 
 # Aliases honored locally (mirror src/cli/registry.ts where these are defined).
