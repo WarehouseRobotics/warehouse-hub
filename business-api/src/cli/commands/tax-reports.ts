@@ -6,6 +6,7 @@ import {
 
 import {
   createTaxReportPaymentLink,
+  getSpainTaxPosition,
   getTaxReport,
   listTaxCarryforwards,
   listTaxReportPaymentLinks,
@@ -41,11 +42,13 @@ export const commandDefinitions: CliCommandDefinition[] = [
       commands: [
         "get <id-or-slug>",
         "list [--country-code <code>] [--tax-kind <kind>] [--form-code <code>] [--fiscal-year <year>] [--payment-status <status>] [--similar <text>] [--limit <n>]",
+        "spain-position --company-card-id <id-or-slug> --fiscal-year <year>",
         "suggest-payments <id-or-slug>",
         "attach-receipt <id-or-slug> <file-path> <json>",
       ],
       examples: [
         "tax-reports list --country-code ES --fiscal-year 2026",
+        "tax-reports spain-position --company-card-id comp_000123 --fiscal-year 2026",
         "tax-reports suggest-payments tr_000123",
         'tax-reports attach-receipt tr_000123 ./tax/receipt.pdf \'{"kind":"tax_payment_receipt","source":"authority_portal_download","link":{"amount":"1840.00","currency":"EUR","status":"confirmed","paymentReference":"AEAT-303-Q1"}}\'',
       ],
@@ -68,6 +71,24 @@ export const commandDefinitions: CliCommandDefinition[] = [
               ? Number.parseInt(options["fiscal-year"], 10)
               : undefined,
             paymentStatus: options["payment-status"],
+          }),
+        );
+        return;
+      }
+
+      if (subcommand === "spain-position") {
+        const { options } = parseFlexibleFlagArgs(rest, new Set(["json"]));
+        if (!options["company-card-id"]) {
+          throw new Error("Missing required option: --company-card-id");
+        }
+        if (!options["fiscal-year"]) {
+          throw new Error("Missing required option: --fiscal-year");
+        }
+
+        context.printJson(
+          getSpainTaxPosition({
+            companyCardId: options["company-card-id"],
+            fiscalYear: Number.parseInt(options["fiscal-year"], 10),
           }),
         );
         return;

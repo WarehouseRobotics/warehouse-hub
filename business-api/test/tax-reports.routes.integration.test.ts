@@ -222,6 +222,49 @@ describe("tax report HTTP routes", () => {
     expect((await deletedListResponse.json()) as unknown[]).toEqual([]);
   });
 
+  it("returns the Spanish tax-position summary through the HTTP API", async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument();
+    const createResponse = await fetch(`${baseUrl}/api/v1/tax-reports`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(
+        createRequestBody(company.companyId, document.documentId),
+      ),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as {
+      taxReport: { taxReportId: string };
+    };
+
+    const response = await fetch(
+      `${baseUrl}/api/v1/tax-reports/positions/spain?companyCardId=${company.companyId}&fiscalYear=2026`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({
+        companyCardId: company.companyId,
+        countryCode: "ES",
+        fiscalYear: 2026,
+        vat: expect.objectContaining({
+          latestTaxReportId: created.taxReport.taxReportId,
+          remainingVatCredit: "180.00",
+        }),
+        warnings: [],
+        confidence: "medium",
+      }),
+    );
+  });
+
   it("creates, suggests, confirms, and hydrates tax payment links through HTTP", async () => {
     const company = await createCompanyCard();
     const document = await uploadTaxDocument();

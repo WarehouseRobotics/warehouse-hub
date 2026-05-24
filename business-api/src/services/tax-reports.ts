@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { Decimal } from "decimal.js";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
 
 import { getDatabase, getOrm } from "../db/connection.js";
 import {
@@ -38,6 +38,7 @@ import {
 } from "./shared.js";
 import type {
   TaxCarryforwardCreateInput,
+  SpainTaxPosition,
   TaxReportCreateRequest,
   TaxReportFactCreateInput,
   TaxReportFingerprintInput,
@@ -46,6 +47,7 @@ import type {
   TaxReportPaymentReceiptUpload,
   TaxReportPaymentStatus,
 } from "@warehouse-hub/business-schemas";
+import { spainTaxPositionSchema } from "@warehouse-hub/business-schemas";
 
 type TaxReportRecord = typeof taxReports.$inferSelect;
 type TaxReportFactRecord = typeof taxReportFacts.$inferSelect;
@@ -81,9 +83,21 @@ type TaxReportPaymentLinkListFilters = {
   status?: string;
 };
 
+type SpainTaxPositionInput = {
+  companyCardId: string;
+  fiscalYear: number;
+};
+
 type TaxReportGetOptions = {
   includePaymentEvidence?: boolean;
 };
+
+const SPAIN_TAX_POSITION_ACTIVE_STATUSES = new Set([
+  "draft_extracted",
+  "filed",
+  "amended",
+  "needs_review",
+]);
 
 function normalizeNullable(value: string | null | undefined): string | null {
   const normalized = value?.trim();
@@ -268,6 +282,10 @@ function getTaxReportCarryforwards(taxReportId: string) {
     .map(mapTaxCarryforward);
 }
 
+function isActiveSpainTaxPositionReport(record: TaxReportRecord): boolean {
+  return SPAIN_TAX_POSITION_ACTIVE_STATUSES.has(record.status);
+}
+
 function getTaxReportPaymentLinks(taxReportId: string) {
   return getOrm()
     .select()
@@ -341,6 +359,14 @@ function absMoney(value: string): Decimal {
 
 function formatDecimalMoney(value: Decimal): string {
   return value.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2);
+}
+
+function positiveMoneyOrNull(value: Decimal): string | null {
+  return value.gt(0) ? formatDecimalMoney(value) : null;
+}
+
+function moneyOrZero(value: string | null | undefined): string {
+  return value ? normalizeMoneyString(value) : "0.00";
 }
 
 function sameMoney(left: string, right: string): boolean {
@@ -1370,6 +1396,322 @@ export async function listTaxReports(filters: TaxReportListFilters = {}) {
   }
 
   return items;
+}
+
+function compareTaxReportRecordsDesc(
+  left: TaxReportRecord,
+  right: TaxReportRecord,
+): number {
+  return (
+    compareDateDesc(left.periodEnd, right.periodEnd) ||
+    compareDateDesc(left.filedAt, right.filedAt) ||
+    compareDateDesc(left.createdAt, right.createdAt) ||
+    right.id.localeCompare(left.id)
+  );
+}
+
+function latestReportForForm(
+  records: TaxReportRecord[],
+  formCode: string,
+  taxKind: string,
+): TaxReportRecord | undefined {
+  return records
+    .filter(
+      (record) => record.formCode === formCode && record.taxKind === taxKind,
+    )
+    .sort(compareTaxReportRecordsDesc)[0];
+}
+
+function findMoneyFact(
+  facts: ReturnType<typeof mapTaxReportFact>[],
+  fieldCode: string,
+): string | null {
+  const fact = facts.find(
+    (candidate) =>
+      candidate.fieldSystem === "casilla" &&
+      candidate.fieldCode === fieldCode &&
+      candidate.valueType === "money",
+  );
+  return (
+    normalizeOptionalMoney(
+      normalizeNullable(fact?.normalizedValue) ?? normalizeNullable(fact?.rawValue),
+    ) ?? null
+  );
+}
+
+function carryforwardRemainingSum(
+  carryforwards: ReturnType<typeof mapTaxCarryforward>[],
+  kind: string,
+): Decimal {
+  return carryforwards
+    .filter((carryforward) => carryforward.kind === kind)
+    .filter((carryforward) =>
+      ["active", "needs_review"].includes(carryforward.status),
+    )
+    .reduce(
+      (sum, carryforward) => sum.plus(carryforward.remainingAmount),
+      new Decimal(0),
+    );
+}
+
+function latestReportCarryforwards(report: TaxReportRecord | undefined) {
+  return report ? getTaxReportCarryforwards(report.id) : [];
+}
+
+function getSpainPositionCarryforwards(filters: {
+  companyCardId: string;
+  taxKind: string;
+  kind: string;
+  originFiscalYear?: number;
+  originFiscalYearThrough?: number;
+}) {
+  const conditions = [
+    isNull(taxCarryforwards.deletedAt),
+    eq(taxCarryforwards.companyCardId, filters.companyCardId),
+    eq(taxCarryforwards.countryCode, "ES"),
+    eq(taxCarryforwards.taxKind, filters.taxKind),
+    eq(taxCarryforwards.kind, filters.kind),
+    or(
+      eq(taxCarryforwards.status, "active"),
+      eq(taxCarryforwards.status, "needs_review"),
+    ),
+  ];
+
+  if (filters.originFiscalYear !== undefined) {
+    conditions.push(
+      eq(taxCarryforwards.originFiscalYear, filters.originFiscalYear),
+    );
+  }
+  if (filters.originFiscalYearThrough !== undefined) {
+    conditions.push(
+      lte(
+        taxCarryforwards.originFiscalYear,
+        filters.originFiscalYearThrough,
+      ),
+    );
+  }
+
+  return getOrm()
+    .select()
+    .from(taxCarryforwards)
+    .where(and(...conditions))
+    .all()
+    .map(mapTaxCarryforward);
+}
+
+function buildSpainVatPosition(report: TaxReportRecord | undefined) {
+  if (!report) {
+    return undefined;
+  }
+
+  const mapped = mapTaxReport(report);
+  const carryforwards = latestReportCarryforwards(report);
+  const remainingVatCredit = positiveMoneyOrNull(
+    carryforwardRemainingSum(carryforwards, "vat_credit"),
+  );
+  const refundAmount =
+    mapped.result === "refund_requested" && mapped.resultAmount
+      ? absMoney(mapped.resultAmount)
+      : null;
+  const refundRequested =
+    refundAmount && refundAmount.gt(0)
+      ? formatDecimalMoney(refundAmount)
+      : null;
+
+  return {
+    latestPeriodLabel: mapped.periodLabel,
+    latestTaxReportId: mapped.taxReportId,
+    result: mapped.result,
+    resultAmount: moneyOrZero(mapped.resultAmount),
+    remainingVatCredit,
+    refundRequested,
+    paymentStatus: mapped.paymentStatus,
+  };
+}
+
+function buildSpainAutonomoIrpfPosition(
+  report: TaxReportRecord | undefined,
+  context: { companyCardId: string; fiscalYear: number },
+) {
+  if (!report) {
+    return undefined;
+  }
+
+  const mapped = mapTaxReport(report);
+  const facts = getTaxReportFacts(report.id);
+  const carryforwards = getSpainPositionCarryforwards({
+    companyCardId: context.companyCardId,
+    taxKind: "personal_income",
+    kind: "installment_credit",
+    originFiscalYear: context.fiscalYear,
+  });
+  const negativeToDeductSameYear = positiveMoneyOrNull(
+    carryforwardRemainingSum(carryforwards, "installment_credit"),
+  );
+
+  return {
+    latestPeriodLabel: mapped.periodLabel,
+    latestTaxReportId: mapped.taxReportId,
+    ytdIncome: moneyOrZero(findMoneyFact(facts, "01")),
+    ytdExpenses: moneyOrZero(findMoneyFact(facts, "02")),
+    ytdNetProfitOrLoss: moneyOrZero(
+      findMoneyFact(facts, "03") ?? mapped.profitOrLoss,
+    ),
+    retentions: moneyOrZero(findMoneyFact(facts, "06") ?? mapped.retainedAmount),
+    installmentResult: moneyOrZero(
+      findMoneyFact(facts, "19") ?? mapped.resultAmount,
+    ),
+    negativeToDeductSameYear,
+  };
+}
+
+function buildSpainCorporateIncomePosition(
+  report: TaxReportRecord | undefined,
+  context: { companyCardId: string; fiscalYear: number },
+) {
+  if (!report) {
+    return undefined;
+  }
+
+  const mapped = mapTaxReport(report);
+  const facts = getTaxReportFacts(report.id);
+  const accountingResult = findMoneyFact(facts, "00500");
+  const preCompensationTaxableBase = findMoneyFact(facts, "00550");
+  const taxableBase = findMoneyFact(facts, "00552") ?? mapped.taxableBase;
+  const carryforwards = getSpainPositionCarryforwards({
+    companyCardId: context.companyCardId,
+    taxKind: "corporate_income",
+    kind: "tax_loss",
+    originFiscalYearThrough: context.fiscalYear,
+  });
+  const remainingCompensableNegativeBase = positiveMoneyOrNull(
+    carryforwardRemainingSum(carryforwards, "tax_loss"),
+  );
+
+  return {
+    latestFiscalYear: mapped.fiscalYear,
+    latestTaxReportId: mapped.taxReportId,
+    accountingResult,
+    preCompensationTaxableBase,
+    priorNegativeBaseApplied: findMoneyFact(facts, "00547"),
+    taxableBase,
+    currentYearProfitOrLoss:
+      accountingResult ?? preCompensationTaxableBase ?? mapped.profitOrLoss,
+    remainingCompensableNegativeBase,
+  };
+}
+
+function confidenceForSpainTaxPosition(
+  yearRecords: TaxReportRecord[],
+  selectedReports: TaxReportRecord[],
+  warnings: string[],
+): SpainTaxPosition["confidence"] {
+  if (yearRecords.length === 0) {
+    return "low";
+  }
+
+  if (
+    warnings.length > 0 ||
+    selectedReports.some((report) =>
+      ["draft_extracted", "needs_review"].includes(report.status),
+    ) ||
+    selectedReports.some((report) => report.confidence !== "high")
+  ) {
+    return "medium";
+  }
+
+  return "high";
+}
+
+export function getSpainTaxPosition(
+  input: SpainTaxPositionInput,
+): SpainTaxPosition {
+  if (!Number.isInteger(input.fiscalYear) || input.fiscalYear <= 0) {
+    throw new AppError("fiscalYear must be a positive integer", {
+      statusCode: 400,
+      code: "validation_error",
+    });
+  }
+
+  const company = requireCompanyCardRecord(input.companyCardId);
+  const records = getOrm()
+    .select()
+    .from(taxReports)
+    .where(
+      and(
+        isNull(taxReports.deletedAt),
+        eq(taxReports.companyCardId, company.id),
+        eq(taxReports.countryCode, "ES"),
+      ),
+    )
+    .all()
+    .filter(isActiveSpainTaxPositionReport);
+  const yearRecords = records.filter(
+    (record) => record.fiscalYear === input.fiscalYear,
+  );
+  const latest303 = latestReportForForm(yearRecords, "303", "vat");
+  const latest130 = latestReportForForm(
+    yearRecords,
+    "130",
+    "personal_income",
+  );
+  const latest200 = latestReportForForm(
+    yearRecords,
+    "200",
+    "corporate_income",
+  );
+  const warnings: string[] = [];
+
+  if (!latest303) {
+    warnings.push("missing_model_303_for_vat_position");
+  }
+  if (
+    records.some(
+      (record) =>
+        record.formCode === "130" && record.taxKind === "personal_income",
+    ) &&
+    !latest130
+  ) {
+    warnings.push("missing_model_130_for_autonomo_profile");
+  }
+  if (
+    records.some(
+      (record) =>
+        record.formCode === "200" && record.taxKind === "corporate_income",
+    ) &&
+    !latest200
+  ) {
+    warnings.push("missing_model_200_for_corporate_profile");
+  }
+  if (latest130 && latest200) {
+    warnings.push("mixed_spanish_income_tax_profiles");
+  }
+
+  const selectedReports = [latest303, latest130, latest200].filter(
+    (report): report is TaxReportRecord => Boolean(report),
+  );
+  const position = {
+    companyCardId: company.id,
+    countryCode: "ES" as const,
+    fiscalYear: input.fiscalYear,
+    vat: buildSpainVatPosition(latest303),
+    autonomoIrpf: buildSpainAutonomoIrpfPosition(latest130, {
+      companyCardId: company.id,
+      fiscalYear: input.fiscalYear,
+    }),
+    corporateIncome: buildSpainCorporateIncomePosition(latest200, {
+      companyCardId: company.id,
+      fiscalYear: input.fiscalYear,
+    }),
+    warnings: Array.from(new Set(warnings)),
+    confidence: confidenceForSpainTaxPosition(
+      yearRecords,
+      selectedReports,
+      warnings,
+    ),
+  };
+
+  return spainTaxPositionSchema.parse(position);
 }
 
 function getTaxReportPaymentEvidence(taxReportId: string) {

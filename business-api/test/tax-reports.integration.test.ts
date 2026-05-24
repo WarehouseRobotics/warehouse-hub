@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
+import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 const testDataDir = path.resolve(process.cwd(), "test-data");
@@ -58,7 +59,7 @@ async function createCompanyCard() {
   });
 }
 
-async function uploadTaxDocument(contents = "modelo 303") {
+async function uploadTaxDocument(contents = "modelo 303", companyCardId?: string) {
   const { uploadDocument } = await import("../src/services/documents.js");
   return uploadDocument(
     {
@@ -75,9 +76,45 @@ async function uploadTaxDocument(contents = "modelo 303") {
     },
     {
       kind: "tax_declaration",
+      companyCardId,
       source: "accountant_upload",
     },
   );
+}
+
+async function createAdditionalCompanyCard() {
+  const { getOrm } = await import("../src/db/connection.js");
+  const { companyCard } = await import("../src/db/schema/index.js");
+  const now = new Date().toISOString();
+  getOrm()
+    .insert(companyCard)
+    .values({
+      id: "comp_other_001",
+      slug: "other-company-card",
+      legalName: "Other Robotics SL",
+      displayName: "Other Robotics",
+      taxId: "B87654321",
+      vatId: null,
+      email: null,
+      phone: null,
+      website: null,
+      addressStreet1: "Calle Mayor 1",
+      addressStreet2: null,
+      addressCity: "Madrid",
+      addressPostalCode: "28013",
+      addressCountryCode: "ES",
+      currency: "EUR",
+      paymentTermsDays: 30,
+      vatMode: "standard",
+      bankIbanMasked: null,
+      bankBic: null,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    })
+    .run();
+
+  return { companyId: "comp_other_001" };
 }
 
 async function uploadTaxReceipt(contents = "AEAT payment receipt") {
@@ -187,6 +224,192 @@ function payableTaxReportInput(companyCardId: string, documentId: string) {
       },
     ],
     carryforwards: [],
+  };
+}
+
+function fact(fieldCode: string, rawValue: string, direction = "informational") {
+  return {
+    fieldCode,
+    fieldSystem: "casilla" as const,
+    label: `Casilla ${fieldCode}`,
+    valueType: "money" as const,
+    rawValue,
+    normalizedValue: rawValue,
+    currency: "EUR",
+    direction: direction as
+      | "payable"
+      | "deductible"
+      | "credit"
+      | "refund"
+      | "informational",
+    confidence: "high" as const,
+  };
+}
+
+function modelo130TaxReportInput(
+  companyCardId: string,
+  documentId: string,
+  options: {
+    periodLabel?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    fiscalYear?: number;
+    income?: string;
+    expenses?: string;
+    net?: string;
+    retentions?: string;
+    resultAmount?: string;
+    carryforwardAmount?: string;
+  } = {},
+) {
+  const periodLabel = options.periodLabel ?? "2026-Q2";
+  const resultAmount = options.resultAmount ?? "1200.00";
+
+  return {
+    companyCardId,
+    documentId,
+    countryCode: "ES",
+    taxKind: "personal_income" as const,
+    formCode: "130",
+    formName: "Modelo 130",
+    formVersion: null,
+    fiscalYear: options.fiscalYear ?? 2026,
+    periodGranularity: "quarter" as const,
+    periodLabel,
+    periodStart: options.periodStart ?? "2026-04-01",
+    periodEnd: options.periodEnd ?? "2026-06-30",
+    taxpayerTaxId: "B12345678",
+    authoritySubmissionId: `AEAT-130-${periodLabel}-${documentId}`,
+    authorityReceiptNumber: null,
+    filedAt: "2026-07-15T10:30:00.000Z",
+    dueDate: "2026-07-20",
+    paymentDueDate: "2026-07-20",
+    status: "filed" as const,
+    result: Number.parseFloat(resultAmount) > 0 ? "payable" as const : "compensate" as const,
+    paymentStatus: Number.parseFloat(resultAmount) > 0 ? "unpaid" as const : "not_required" as const,
+    currency: "EUR",
+    taxableBase: null,
+    taxDue: null,
+    taxDeductible: null,
+    resultAmount,
+    retainedAmount: options.retentions ?? "400.00",
+    profitOrLoss: options.net ?? "8000.00",
+    confidence: "high" as const,
+    extractedData: {
+      casillas: {
+        "01": options.income ?? "24000.00",
+        "02": options.expenses ?? "16000.00",
+        "03": options.net ?? "8000.00",
+        "06": options.retentions ?? "400.00",
+        "19": resultAmount,
+      },
+    },
+    warnings: [],
+    correctionOfTaxReportId: null,
+    facts: [
+      fact("01", options.income ?? "24000.00"),
+      fact("02", options.expenses ?? "16000.00", "deductible"),
+      fact("03", options.net ?? "8000.00"),
+      fact("06", options.retentions ?? "400.00", "credit"),
+      fact("19", resultAmount, Number.parseFloat(resultAmount) > 0 ? "payable" : "credit"),
+    ],
+    carryforwards: options.carryforwardAmount
+      ? [
+          {
+            kind: "installment_credit" as const,
+            currency: "EUR",
+            originalAmount: options.carryforwardAmount,
+            usedAmount: "0.00",
+            remainingAmount: options.carryforwardAmount,
+            expiresAt: "2026-12-31",
+            status: "active" as const,
+            notes: "Modelo 130 same-year negative payment result to deduct",
+          },
+        ]
+      : [],
+  };
+}
+
+function modelo200TaxReportInput(
+  companyCardId: string,
+  documentId: string,
+  options: {
+    accountingResult?: string;
+    preCompensationTaxableBase?: string;
+    priorNegativeBaseApplied?: string;
+    taxableBase?: string;
+    resultAmount?: string;
+    taxLossRemaining?: string;
+    fiscalYear?: number;
+    status?: "filed" | "needs_review";
+  } = {},
+) {
+  const fiscalYear = options.fiscalYear ?? 2026;
+  const taxableBase = options.taxableBase ?? "9000.00";
+  const resultAmount = options.resultAmount ?? "1800.00";
+
+  return {
+    companyCardId,
+    documentId,
+    countryCode: "ES",
+    taxKind: "corporate_income" as const,
+    formCode: "200",
+    formName: "Modelo 200",
+    formVersion: null,
+    fiscalYear,
+    periodGranularity: "year" as const,
+    periodLabel: String(fiscalYear),
+    periodStart: `${fiscalYear}-01-01`,
+    periodEnd: `${fiscalYear}-12-31`,
+    taxpayerTaxId: "B12345678",
+    authoritySubmissionId: `AEAT-200-${fiscalYear}-${documentId}`,
+    authorityReceiptNumber: null,
+    filedAt: `${fiscalYear + 1}-07-15T10:30:00.000Z`,
+    dueDate: `${fiscalYear + 1}-07-25`,
+    paymentDueDate: `${fiscalYear + 1}-07-25`,
+    status: options.status ?? "filed",
+    result: Number.parseFloat(resultAmount) > 0 ? "payable" as const : "zero" as const,
+    paymentStatus: Number.parseFloat(resultAmount) > 0 ? "unpaid" as const : "not_required" as const,
+    currency: "EUR",
+    taxableBase,
+    taxDue: null,
+    taxDeductible: null,
+    resultAmount,
+    retainedAmount: null,
+    profitOrLoss: taxableBase,
+    confidence: options.status === "needs_review" ? "medium" as const : "high" as const,
+    extractedData: {
+      casillas: {
+        "00500": options.accountingResult ?? "10000.00",
+        "00550": options.preCompensationTaxableBase ?? "10000.00",
+        "00547": options.priorNegativeBaseApplied ?? "1000.00",
+        "00552": taxableBase,
+        "01586": resultAmount,
+      },
+    },
+    warnings: options.status === "needs_review" ? ["model_200_negative_base_detail_missing"] : [],
+    correctionOfTaxReportId: null,
+    facts: [
+      fact("00500", options.accountingResult ?? "10000.00"),
+      fact("00550", options.preCompensationTaxableBase ?? "10000.00"),
+      fact("00547", options.priorNegativeBaseApplied ?? "1000.00", "credit"),
+      fact("00552", taxableBase),
+      fact("01586", resultAmount, Number.parseFloat(resultAmount) > 0 ? "payable" : "informational"),
+    ],
+    carryforwards: options.taxLossRemaining
+      ? [
+          {
+            kind: "tax_loss" as const,
+            currency: "EUR",
+            originalAmount: options.taxLossRemaining,
+            usedAmount: options.priorNegativeBaseApplied ?? "0.00",
+            remainingAmount: options.taxLossRemaining,
+            expiresAt: null,
+            status: options.status === "needs_review" ? "needs_review" as const : "active" as const,
+            notes: "Modelo 200 negative taxable base detail",
+          },
+        ]
+      : [],
   };
 }
 
@@ -395,6 +618,477 @@ describe("tax report service flows", () => {
     expect(await listTaxReports()).toEqual([
       expect.objectContaining({ taxReportId: first.taxReport.taxReportId }),
     ]);
+  });
+
+  it("builds the latest Spanish VAT position without summing stale period carryforwards", async () => {
+    const company = await createCompanyCard();
+    const q1Document = await uploadTaxDocument("q1 vat position");
+    const q2Document = await uploadTaxDocument("q2 vat position");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    createTaxReport(
+      baseTaxReportInput(company.companyId, q1Document.documentId),
+    );
+    const q2 = createTaxReport({
+      ...baseTaxReportInput(company.companyId, q2Document.documentId),
+      periodLabel: "2026-Q2",
+      periodStart: "2026-04-01",
+      periodEnd: "2026-06-30",
+      authoritySubmissionId: "AEAT-303-Q2-POSITION",
+      resultAmount: "-220.00",
+      carryforwards: [
+        {
+          kind: "vat_credit",
+          currency: "EUR",
+          originalAmount: "220.00",
+          usedAmount: "0.00",
+          remainingAmount: "220.00",
+          expiresAt: null,
+          status: "active",
+          notes: "Latest Modelo 303 compensation balance",
+        },
+      ],
+    });
+
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2026,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        vat: expect.objectContaining({
+          latestPeriodLabel: "2026-Q2",
+          latestTaxReportId: q2.taxReport.taxReportId,
+          remainingVatCredit: "220.00",
+        }),
+        warnings: [],
+        confidence: "high",
+      }),
+    );
+  });
+
+  it("does not expose a zero refund request as pending Spanish VAT money", async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument("zero refund vat position");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    const report = createTaxReport({
+      ...baseTaxReportInput(company.companyId, document.documentId),
+      result: "refund_requested",
+      paymentStatus: "not_required",
+      resultAmount: "0.00",
+      authoritySubmissionId: "AEAT-303-Q1-ZERO-REFUND",
+      carryforwards: [],
+    });
+
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2026,
+      }).vat,
+    ).toEqual(
+      expect.objectContaining({
+        latestTaxReportId: report.taxReport.taxReportId,
+        refundRequested: null,
+      }),
+    );
+  });
+
+  it("includes draft extracted Spanish VAT reports with reduced confidence", async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument("draft extracted vat position");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    const report = createTaxReport({
+      ...baseTaxReportInput(company.companyId, document.documentId),
+      status: "draft_extracted",
+      confidence: "medium",
+      authoritySubmissionId: "AEAT-303-Q1-DRAFT-EXTRACTED",
+    });
+    const position = getSpainTaxPosition({
+      companyCardId: company.companyId,
+      fiscalYear: 2026,
+    });
+
+    expect(position.vat).toEqual(
+      expect.objectContaining({
+        latestTaxReportId: report.taxReport.taxReportId,
+      }),
+    );
+    expect(position.warnings).not.toContain("missing_model_303_for_vat_position");
+    expect(position.confidence).toEqual("medium");
+  });
+
+  it("ignores same-form Spanish reports with the wrong tax kind", async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument("misclassified 303 position");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    createTaxReport({
+      ...baseTaxReportInput(company.companyId, document.documentId),
+      taxKind: "other",
+      authoritySubmissionId: "AEAT-303-Q1-MISCLASSIFIED",
+    });
+    const position = getSpainTaxPosition({
+      companyCardId: company.companyId,
+      fiscalYear: 2026,
+    });
+
+    expect(position.vat).toBeUndefined();
+    expect(position.warnings).toContain("missing_model_303_for_vat_position");
+  });
+
+  it("prints the Spanish tax-position summary from the CLI", { timeout: 15000 }, async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument("cli spain position");
+    const { createTaxReport } = await import("../src/services/tax-reports.js");
+
+    const report = createTaxReport(
+      payableTaxReportInput(company.companyId, document.documentId),
+    );
+    const position = JSON.parse(
+      runCli([
+        "tax-reports",
+        "spain-position",
+        "--company-card-id",
+        company.companyId,
+        "--fiscal-year",
+        "2026",
+      ]),
+    ) as { vat: { latestTaxReportId: string; resultAmount: string } };
+
+    expect(position.vat).toEqual(
+      expect.objectContaining({
+        latestTaxReportId: report.taxReport.taxReportId,
+        resultAmount: "120.00",
+      }),
+    );
+  });
+
+  it("summarizes Modelo 130 profit/loss without creating future-year tax loss carryforwards", async () => {
+    const company = await createCompanyCard();
+    const positiveDocument = await uploadTaxDocument("modelo 130 positive result");
+    const negativeDocument = await uploadTaxDocument("modelo 130 negative result");
+    const { createTaxReport, getSpainTaxPosition, listTaxCarryforwards } =
+      await import("../src/services/tax-reports.js");
+
+    createTaxReport(
+      modelo130TaxReportInput(company.companyId, positiveDocument.documentId, {
+        periodLabel: "2026-Q1",
+        periodStart: "2026-01-01",
+        periodEnd: "2026-03-31",
+      }),
+    );
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2026,
+      }).autonomoIrpf,
+    ).toEqual(
+      expect.objectContaining({
+        ytdNetProfitOrLoss: "8000.00",
+        installmentResult: "1200.00",
+        negativeToDeductSameYear: null,
+      }),
+    );
+
+    const report = createTaxReport(
+      modelo130TaxReportInput(company.companyId, negativeDocument.documentId, {
+        income: "9000.00",
+        expenses: "10500.00",
+        net: "-1500.00",
+        retentions: "300.00",
+        resultAmount: "-300.00",
+        carryforwardAmount: "300.00",
+      }),
+    );
+    const position = getSpainTaxPosition({
+      companyCardId: company.companyId,
+      fiscalYear: 2026,
+    });
+
+    expect(position.autonomoIrpf).toEqual(
+      expect.objectContaining({
+        latestTaxReportId: report.taxReport.taxReportId,
+        ytdIncome: "9000.00",
+        ytdExpenses: "10500.00",
+        ytdNetProfitOrLoss: "-1500.00",
+        retentions: "300.00",
+        installmentResult: "-300.00",
+        negativeToDeductSameYear: "300.00",
+      }),
+    );
+    expect(listTaxCarryforwards({ kind: "tax_loss" })).toEqual([]);
+  });
+
+  it("keeps earlier same-year Modelo 130 installment credits visible", async () => {
+    const company = await createCompanyCard();
+    const q1Document = await uploadTaxDocument("modelo 130 q1 credit");
+    const q2Document = await uploadTaxDocument("modelo 130 q2 payable");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    createTaxReport(
+      modelo130TaxReportInput(company.companyId, q1Document.documentId, {
+        periodLabel: "2026-Q1",
+        periodStart: "2026-01-01",
+        periodEnd: "2026-03-31",
+        income: "9000.00",
+        expenses: "10500.00",
+        net: "-1500.00",
+        resultAmount: "-300.00",
+        carryforwardAmount: "300.00",
+      }),
+    );
+    const q2 = createTaxReport(
+      modelo130TaxReportInput(company.companyId, q2Document.documentId, {
+        periodLabel: "2026-Q2",
+        periodStart: "2026-04-01",
+        periodEnd: "2026-06-30",
+        resultAmount: "500.00",
+      }),
+    );
+
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2026,
+      }).autonomoIrpf,
+    ).toEqual(
+      expect.objectContaining({
+        latestTaxReportId: q2.taxReport.taxReportId,
+        installmentResult: "500.00",
+        negativeToDeductSameYear: "300.00",
+      }),
+    );
+  });
+
+  it("falls back to raw money facts when legacy normalized values are empty", async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument("modelo 130 legacy empty fact");
+    const { getOrm } = await import("../src/db/connection.js");
+    const { taxReportFacts } = await import("../src/db/schema/index.js");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    const report = createTaxReport(
+      modelo130TaxReportInput(company.companyId, document.documentId),
+    );
+    getOrm()
+      .update(taxReportFacts)
+      .set({ normalizedValue: "" })
+      .where(
+        and(
+          eq(taxReportFacts.taxReportId, report.taxReport.taxReportId),
+          eq(taxReportFacts.fieldCode, "01"),
+        ),
+      )
+      .run();
+
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2026,
+      }).autonomoIrpf,
+    ).toEqual(
+      expect.objectContaining({
+        ytdIncome: "24000.00",
+      }),
+    );
+  });
+
+  it("warns when Spanish personal and corporate income profiles coexist in the same year", async () => {
+    const company = await createCompanyCard();
+    const modelo130Document = await uploadTaxDocument("modelo 130 mixed");
+    const modelo200Document = await uploadTaxDocument("modelo 200 mixed");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    createTaxReport(
+      modelo130TaxReportInput(company.companyId, modelo130Document.documentId),
+    );
+    createTaxReport(
+      modelo200TaxReportInput(company.companyId, modelo200Document.documentId),
+    );
+
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2026,
+      }).warnings,
+    ).toContain("mixed_spanish_income_tax_profiles");
+  });
+
+  it("summarizes Modelo 200 taxable-base position and compensable tax losses", async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument("modelo 200 corporate position");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    const report = createTaxReport(
+      modelo200TaxReportInput(company.companyId, document.documentId, {
+        accountingResult: "12000.00",
+        preCompensationTaxableBase: "11000.00",
+        priorNegativeBaseApplied: "2000.00",
+        taxableBase: "9000.00",
+        taxLossRemaining: "4000.00",
+      }),
+    );
+
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2026,
+      }).corporateIncome,
+    ).toEqual(
+      expect.objectContaining({
+        latestFiscalYear: 2026,
+        latestTaxReportId: report.taxReport.taxReportId,
+        accountingResult: "12000.00",
+        preCompensationTaxableBase: "11000.00",
+        priorNegativeBaseApplied: "2000.00",
+        taxableBase: "9000.00",
+        currentYearProfitOrLoss: "12000.00",
+        remainingCompensableNegativeBase: "4000.00",
+      }),
+    );
+  });
+
+  it("carries prior-year Modelo 200 tax losses into later Spanish positions", async () => {
+    const company = await createCompanyCard();
+    const lossDocument = await uploadTaxDocument("modelo 200 prior loss");
+    const profitDocument = await uploadTaxDocument("modelo 200 later profit");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    createTaxReport(
+      modelo200TaxReportInput(company.companyId, lossDocument.documentId, {
+        fiscalYear: 2024,
+        accountingResult: "-10000.00",
+        preCompensationTaxableBase: "-10000.00",
+        priorNegativeBaseApplied: "0.00",
+        taxableBase: "-10000.00",
+        resultAmount: "0.00",
+        taxLossRemaining: "10000.00",
+      }),
+    );
+    const profitReport = createTaxReport(
+      modelo200TaxReportInput(company.companyId, profitDocument.documentId, {
+        fiscalYear: 2025,
+        accountingResult: "12000.00",
+        preCompensationTaxableBase: "12000.00",
+        priorNegativeBaseApplied: "0.00",
+        taxableBase: "12000.00",
+      }),
+    );
+
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2025,
+      }).corporateIncome,
+    ).toEqual(
+      expect.objectContaining({
+        latestTaxReportId: profitReport.taxReport.taxReportId,
+        currentYearProfitOrLoss: "12000.00",
+        remainingCompensableNegativeBase: "10000.00",
+      }),
+    );
+  });
+
+  it("reports evidence-based Spanish tax-position warnings and confidence", async () => {
+    const company = await createCompanyCard();
+    const modelo130Document = await uploadTaxDocument("modelo 130 history");
+    const modelo200Document = await uploadTaxDocument("modelo 200 current");
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    createTaxReport(
+      modelo130TaxReportInput(company.companyId, modelo130Document.documentId, {
+        periodLabel: "2025-Q4",
+        periodStart: "2025-10-01",
+        periodEnd: "2025-12-31",
+        fiscalYear: 2025,
+      }),
+    );
+    createTaxReport(
+      modelo200TaxReportInput(company.companyId, modelo200Document.documentId, {
+        taxableBase: "-5000.00",
+        resultAmount: "0.00",
+        taxLossRemaining: "5000.00",
+        status: "needs_review",
+      }),
+    );
+
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2026,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        corporateIncome: expect.objectContaining({
+          taxableBase: "-5000.00",
+          remainingCompensableNegativeBase: "5000.00",
+        }),
+        warnings: [
+          "missing_model_303_for_vat_position",
+          "missing_model_130_for_autonomo_profile",
+        ],
+        confidence: "medium",
+      }),
+    );
+  });
+
+  it("keeps Spanish tax positions scoped to the requested company card", async () => {
+    const company = await createCompanyCard();
+    const otherCompany = await createAdditionalCompanyCard();
+    const companyDocument = await uploadTaxDocument("company q1", company.companyId);
+    const otherDocument = await uploadTaxDocument("other q4", otherCompany.companyId);
+    const { createTaxReport, getSpainTaxPosition } =
+      await import("../src/services/tax-reports.js");
+
+    const companyReport = createTaxReport(
+      baseTaxReportInput(company.companyId, companyDocument.documentId),
+    );
+    createTaxReport({
+      ...baseTaxReportInput(otherCompany.companyId, otherDocument.documentId),
+      periodLabel: "2026-Q4",
+      periodStart: "2026-10-01",
+      periodEnd: "2026-12-31",
+      taxpayerTaxId: "B87654321",
+      authoritySubmissionId: "AEAT-303-Q4-OTHER-COMPANY",
+      resultAmount: "-999.00",
+      carryforwards: [
+        {
+          kind: "vat_credit",
+          currency: "EUR",
+          originalAmount: "999.00",
+          usedAmount: "0.00",
+          remainingAmount: "999.00",
+          expiresAt: null,
+          status: "active",
+          notes: "Other company balance",
+        },
+      ],
+    });
+
+    expect(
+      getSpainTaxPosition({
+        companyCardId: company.companyId,
+        fiscalYear: 2026,
+      }).vat,
+    ).toEqual(
+      expect.objectContaining({
+        latestTaxReportId: companyReport.taxReport.taxReportId,
+        remainingVatCredit: "180.00",
+      }),
+    );
   });
 
   it("recomputes payable payment status from confirmed payment links only", async () => {

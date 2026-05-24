@@ -245,6 +245,54 @@ export const taxCarryforwardSchema = z
   })
   .strict();
 
+export const spainTaxPositionSchema = z
+  .object({
+    companyCardId: z.string().min(1),
+    countryCode: z.literal("ES"),
+    fiscalYear: z.number().int().positive(),
+    vat: z
+      .object({
+        latestPeriodLabel: z.string().min(1),
+        latestTaxReportId: z.string().min(1),
+        result: taxReportResultSchema,
+        resultAmount: z.string().min(1),
+        remainingVatCredit: z.union([z.string().min(1), z.null()]).optional(),
+        refundRequested: z.union([z.string().min(1), z.null()]).optional(),
+        paymentStatus: taxReportPaymentStatusSchema,
+      })
+      .strict()
+      .optional(),
+    autonomoIrpf: z
+      .object({
+        latestPeriodLabel: z.string().min(1),
+        latestTaxReportId: z.string().min(1),
+        ytdIncome: z.string().min(1),
+        ytdExpenses: z.string().min(1),
+        ytdNetProfitOrLoss: z.string().min(1),
+        retentions: z.string().min(1),
+        installmentResult: z.string().min(1),
+        negativeToDeductSameYear: z.union([z.string().min(1), z.null()]).optional(),
+      })
+      .strict()
+      .optional(),
+    corporateIncome: z
+      .object({
+        latestFiscalYear: z.number().int().positive(),
+        latestTaxReportId: z.string().min(1),
+        accountingResult: z.union([z.string().min(1), z.null()]).optional(),
+        preCompensationTaxableBase: z.union([z.string().min(1), z.null()]).optional(),
+        priorNegativeBaseApplied: z.union([z.string().min(1), z.null()]).optional(),
+        taxableBase: z.union([z.string().min(1), z.null()]).optional(),
+        currentYearProfitOrLoss: z.union([z.string().min(1), z.null()]).optional(),
+        remainingCompensableNegativeBase: z.union([z.string().min(1), z.null()]).optional(),
+      })
+      .strict()
+      .optional(),
+    warnings: z.array(z.string()),
+    confidence: taxConfidenceSchema,
+  })
+  .strict();
+
 export const taxCarryforwardInputSchema = taxCarryforwardSchema
   .omit({
     taxCarryforwardId: true,
@@ -431,6 +479,7 @@ export type TaxReportFactCreateInput = z.infer<
   typeof taxReportFactCreateInputSchema
 >;
 export type TaxCarryforward = z.infer<typeof taxCarryforwardSchema>;
+export type SpainTaxPosition = z.infer<typeof spainTaxPositionSchema>;
 export type TaxCarryforwardInput = z.infer<typeof taxCarryforwardInputSchema>;
 export type TaxCarryforwardCreateInput = z.infer<
   typeof taxCarryforwardCreateInputSchema

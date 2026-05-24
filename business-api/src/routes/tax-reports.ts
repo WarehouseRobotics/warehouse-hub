@@ -10,6 +10,7 @@ import { ingestTaxReport } from "../services/tax-report-ingestion.js";
 import {
   createTaxReport,
   createTaxReportPaymentLink,
+  getSpainTaxPosition,
   getTaxReport,
   listTaxCarryforwards,
   listTaxReportPaymentLinks,
@@ -52,6 +53,18 @@ function parseOptionalInteger(
   }
 
   return Number.parseInt(value, 10);
+}
+
+function parseRequiredInteger(value: unknown, label: string): number {
+  const parsed = parseOptionalInteger(value, label);
+  if (parsed === undefined) {
+    throw new AppError(`${label} is required`, {
+      statusCode: 400,
+      code: "validation_error",
+    });
+  }
+
+  return parsed;
 }
 
 taxReportsRouter.get("/", requireScope("read"), async (request, response, next) => {
@@ -187,6 +200,26 @@ taxReportsRouter.post("/:id/payment-links/suggest", requireScope("write"), (requ
     },
   };
   response.json(result);
+});
+
+taxReportsRouter.get("/positions/spain", requireScope("read"), (request, response, next) => {
+  try {
+    if (typeof request.query.companyCardId !== "string") {
+      throw new AppError("companyCardId is required", {
+        statusCode: 400,
+        code: "validation_error",
+      });
+    }
+
+    response.json(
+      getSpainTaxPosition({
+        companyCardId: request.query.companyCardId,
+        fiscalYear: parseRequiredInteger(request.query.fiscalYear, "fiscalYear"),
+      }),
+    );
+  } catch (error) {
+    next(error);
+  }
 });
 
 taxReportsRouter.post(

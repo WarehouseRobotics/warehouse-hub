@@ -575,6 +575,17 @@ Payment status rules:
 * `refund_pending` for refund-requested reports without confirmed refund bank transaction
 * `refunded` when a confirmed bank transaction proves refund receipt
 
+## Position Summaries
+
+Country-specific summary endpoints may aggregate declared reports, facts, and carryforwards for agent workflows without recalculating taxes from operational records.
+
+Implemented summary:
+
+* Spain: `GET /api/v1/tax-reports/positions/spain?companyCardId=<id-or-slug>&fiscalYear=<year>`
+* CLI: `tax-reports spain-position --company-card-id <id-or-slug> --fiscal-year <year>`
+
+The Spanish summary is scoped by `companyCardId` and `countryCode = "ES"`. It derives VAT from the latest `303`, autónomo YTD profit/loss from the latest `130`, corporate taxable-base position from the latest `200`, and future-effect balances from `tax_carryforwards`.
+
 ## Service Boundaries
 
 Keep routes thin:
