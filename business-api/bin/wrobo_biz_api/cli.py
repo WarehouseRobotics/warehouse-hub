@@ -22,6 +22,11 @@ from .scopes.banking import (
     handle_bank_imports,
     handle_bank_transactions,
 )
+from .scopes.bookings import (
+    handle_booking_assignment_profiles,
+    handle_booking_availability_exceptions,
+    handle_bookings,
+)
 from .scopes.crm import (
     handle_comments,
     handle_contacts,
@@ -59,6 +64,9 @@ SCOPE_HANDLERS: Dict[str, Callable[..., Any]] = {
     "bank-transactions": handle_bank_transactions,
     "bank-balances": handle_bank_balances,
     "bank-imports": handle_bank_imports,
+    "bookings": handle_bookings,
+    "booking-assignment-profiles": handle_booking_assignment_profiles,
+    "booking-availability-exceptions": handle_booking_availability_exceptions,
 }
 
 # Aliases honored locally (mirror src/cli/registry.ts where these are defined).

@@ -62,13 +62,45 @@ Scopes implemented in this build:
                 | list [--bank-account-id
                         --limit --since --before --after]
   bank-imports csv <bank-account-id> <file> <json>
+  bookings      create <json-or-flags> | get <id> | update <id> <json>
+                | complete <id> [--completion-notes --create-follow-up-task
+                                  --follow-up-task-title]
+                | cancel <id> --reason <text>
+                | delete <id>
+                | check-assignment-conflicts <json-or-flags>
+                | list [--from --to --status --customer-contact-id
+                         --assigned-contact-id --project-id --deal-id]
+                Flag-driven create/check-assignment-conflicts flags:
+                  --customer-contact-id --project-id --deal-id --task-id
+                  --sales-invoice-id --title --service-type --status
+                  --start --end --timezone --notes
+                  --assigned-contact-id (repeatable)
+                  --location-kind --location-label --street1 --street2
+                  --city --postal-code --country --remote-url
+                  --location-notes
+  booking-assignment-profiles
+                list | get <contact-id>
+                | set <contact-id> <json-or-flags>
+                | delete <contact-id>
+                Flag-driven set flags:
+                  --timezone --not-bookable --buffer-before-minutes
+                  --buffer-after-minutes --max-bookings-per-day
+                  --effective-from --effective-to --notes
+                  --availability (repeatable, "day|HH:MM|HH:MM")
+                  --booking-type (repeatable)
+  booking-availability-exceptions
+                create <json-or-flags> | get <id> | update <id> <json>
+                | delete <id>
+                | list [--contact-id --kind]
+                Flag-driven create flags:
+                  --contact-id --kind --start --end --reason --notes
                 * = wrapper-only extension (forwarded to the server route but
                     not exposed by the local `wrobo-biz` CLI)
 
 Host-only scopes (rejected with exit 2):
   serve, db init, db migrate, db ...
 
-Other scopes (bookings, tax-*, data-cache) will be added in
+Other scopes (tax-*, data-cache) will be added in
 subsequent tasks of the wrobo-biz-api umbrella.
 
 Exit codes:
