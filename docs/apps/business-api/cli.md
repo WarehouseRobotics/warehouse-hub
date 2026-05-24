@@ -56,7 +56,7 @@ When you run the raw CLI directly inside the repo container, examples keep the e
 
 ## Remote API wrapper (`wrobo-biz-api`)
 
-For driving a deployed business-api instance from a host that must **not** run Node.js (e.g. operators, scheduled jobs, agents on a hardened box), use the companion wrapper [business-api/bin/wrobo-biz-api](/Users/denis/src/warehouse-hub/business-api/bin/wrobo-biz-api). It is a single-file Python 3 script that depends only on the standard library and mirrors the `wrobo-biz` command shape, but speaks HTTP only — no Docker, no Node, no container.
+For driving a deployed business-api instance from a host that must **not** run Node.js (e.g. operators, scheduled jobs, agents on a hardened box), use the companion wrapper [business-api/bin/wrobo-biz-api](/Users/denis/src/warehouse-hub/business-api/bin/wrobo-biz-api). It is an executable Python 3 shim that loads the sibling [business-api/bin/wrobo_biz_api/](/Users/denis/src/warehouse-hub/business-api/bin/wrobo_biz_api/) stdlib-only package and mirrors the `wrobo-biz` command shape, but speaks HTTP only — no Docker, no Node, no container. New scopes are added by dropping a file under `bin/wrobo_biz_api/scopes/<scope>.py` exposing `handle_<scope>(subcommand, rest, *, globals_)` and registering it in `SCOPE_HANDLERS` in `bin/wrobo_biz_api/cli.py`.
 
 Supported scopes today:
 

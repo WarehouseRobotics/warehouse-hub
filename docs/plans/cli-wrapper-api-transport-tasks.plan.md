@@ -94,6 +94,8 @@ Constraints driving the breakdown:
 - **Labels:** `cli`, `documents`, `python`
 - **Column:** `backlog`
 
+> **Note on file layout (Tasks 3–7):** the wrapper was refactored from a single file into a sibling Python package (see task `wrobo-biz-api-refactor-9sty1y`). Each new scope handler now lives in its own module at `business-api/bin/wrobo_biz_api/scopes/<scope>.py` exposing `handle_<scope>(subcommand, rest, *, globals_)`, and is registered in `SCOPE_HANDLERS` in `business-api/bin/wrobo_biz_api/cli.py`. Shared helpers (`parse_json_positional`, `list_query_from_options`) live in `scopes/_common.py`; HTTP/multipart/binary-download helpers are imported from `wrobo_biz_api.http` / `wrobo_biz_api.multipart` / `wrobo_biz_api.output`. Remove the scope's entry from `PENDING_SCOPES` in `cli.py` once it ships. No behavior change vs. the original single-file plan — only the file you drop is different.
+
 ### Task 3 — Accounting scopes: expenses, payrolls, sales-invoices
 
 - **Title:** `wrobo-biz-api: expenses, payrolls, sales-invoices (with invoice aliases)`

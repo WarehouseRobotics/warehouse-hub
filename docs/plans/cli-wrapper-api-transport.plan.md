@@ -83,9 +83,13 @@ Header injection (matches [src/middleware/auth.ts](business-api/src/middleware/a
 
 ## File layout
 
-One new file:
+The wrapper ships as an executable shim plus a sibling Python package:
 
-- `business-api/bin/wrobo-biz-api` — single Python 3 script, executable.
+- `business-api/bin/wrobo-biz-api` — executable shim (sys.path bootstrap + call `wrobo_biz_api.main`).
+- `business-api/bin/wrobo_biz_api/` — stdlib-only package: `config`, `errors`, `flags`, `session`, `auth`, `http`, `multipart`, `output`, `help_text`, `toon`, `ingest_format`, `cli` (dispatcher with `SCOPE_HANDLERS`), and `scopes/` (one module per scope family).
+- `business-api/bin/wrobo_biz_api/scopes/<scope>.py` — each scope handler exposes `handle_<scope>(subcommand, rest, *, globals_)` and is registered in `SCOPE_HANDLERS` in `cli.py`. Shared helpers (`parse_json_positional`, `list_query_from_options`) live in `scopes/_common.py`.
+
+> The original single-file `business-api/bin/wrobo-biz-api` was refactored into the package layout above after Task 1a/1b/2 landed (see task `wrobo-biz-api-refactor-9sty1y`). Behavior, CLI surface, and exit codes are unchanged. Adding a new scope is still a one-file change.
 
 No other source changes are required on the business-api side; the HTTP surface already covers every CLI scope (see route mounts in [src/app.ts](business-api/src/app.ts), one router per CLI scope).
 
