@@ -9,3 +9,4 @@ data/uploads/*
 .DS_Store
 uploads/*
 !uploads/.gitkeep
+bin/__pycache__/

@@ -31,6 +31,8 @@ Constraints driving the breakdown:
 
 ### Task 1a — Foundation: script skeleton, dispatcher, auth, identity scopes
 
+> **Status:** ✅ Complete. Shipped as [business-api/bin/wrobo-biz-api](business-api/bin/wrobo-biz-api) — single-file Python 3 stdlib script with the foundation dispatcher, auth resolution, error rendering, host-only rejection, and the five identity scopes (`auth`, `tokens`, `users`, `workspace`, `company-card`). Multipart-upload and binary-download helpers are stubs awaiting Task 2.
+
 - **Title:** `wrobo-biz-api: skeleton, dispatcher, auth, identity scopes`
 - **Description:**
   - Umbrella: `<umbrella-task-id>`.

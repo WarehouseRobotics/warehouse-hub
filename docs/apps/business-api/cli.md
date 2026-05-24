@@ -54,6 +54,39 @@ When you run the raw CLI directly inside the repo container, examples keep the e
 ./container.sh exec npm run cli -- help documents
 ```
 
+## Remote API wrapper (`wrobo-biz-api`)
+
+For driving a deployed business-api instance from a host that must **not** run Node.js (e.g. operators, scheduled jobs, agents on a hardened box), use the companion wrapper [business-api/bin/wrobo-biz-api](/Users/denis/src/warehouse-hub/business-api/bin/wrobo-biz-api). It is a single-file Python 3 script that depends only on the standard library and mirrors the `wrobo-biz` command shape, but speaks HTTP only — no Docker, no Node, no container.
+
+Supported scopes today (identity-only foundation): `auth` (login/logout/whoami/magic-link request/consume), `tokens` (create/list/revoke), `users` (list/set-role/delete/invite/revoke-invite), `workspace` (get/set), `company-card` (get/set). Remaining scopes (`contacts`, `deals`, `projects`, `tasks`, `comments`, `documents`, `expenses`, `payrolls`, `sales-invoices`, `bookings`, `bank-*`, `tax-*`, `data-cache`, plus the `invoices` / `bills` / `purchase-invoices` / `expense-invoices` aliases) are reserved and reject with a `scope_not_implemented` Markdown error until their follow-up tasks land — see [docs/plans/cli-wrapper-api-transport-tasks.plan.md](/Users/denis/src/warehouse-hub/docs/plans/cli-wrapper-api-transport-tasks.plan.md).
+
+Host-only commands are explicitly rejected with a Markdown error and exit code 2 — `serve` and `db *` cannot be driven over HTTP and the wrapper says so:
+
+```bash
+wrobo-biz-api serve         # exit 2, host_only_command error
+wrobo-biz-api db init       # exit 2, host_only_command error
+```
+
+Configuration:
+
+- `WROBO_API_BASE_URL` — remote base URL (without `/api/v1`); overridable with `--base-url`.
+- `WROBO_API_TIMEOUT_SECS` — request timeout in seconds (default 60).
+- `WROBO_API_CA_BUNDLE` — path to a custom CA bundle for self-signed certs (validated on startup; a missing path raises `ca_bundle_not_found`).
+- Per-call global flags: `--base-url`, `--token`, `--json` (raw JSON error envelope on stderr instead of Markdown), `--verbose`, `--help`.
+
+Auth resolution order (matches `auth-session.ts:173–215` of the local CLI): `--token` → `WROBO_API_TOKEN` env → `~/.config/wrobo-api/session.json` (created mode 0600 atomically via `O_CREAT|O_EXCL`-style open) → fail with `unauthorized` (exit 2). The session file path is deliberately different from the local CLI's `~/.config/wrobo/session.json` so both wrappers can coexist on the same host. Header injection follows the token prefix per [middleware/auth.ts](/Users/denis/src/warehouse-hub/business-api/src/middleware/auth.ts): `sess_*` → `Cookie: wh_session=...`, `wpat_*` → `Authorization: Bearer ...`, anything else → `x-api-key`.
+
+```bash
+export WROBO_API_BASE_URL=https://hub.example.com
+wrobo-biz-api auth login --email owner@example.com --password '...'   # writes session file
+wrobo-biz-api auth whoami --json
+wrobo-biz-api workspace get --json
+wrobo-biz-api company-card get
+wrobo-biz-api auth logout
+```
+
+Error rendering uses the same Markdown shape documented below for `wrobo-biz`; pass `--json` to flip to `{"error": {...}}` on stderr for machine consumption. Exit codes: `0` success, `1` HTTP/network failure, `2` argument-shape / configuration / host-only failure.
+
 When a command fails through `wrobo-biz`, the wrapper-facing stderr output is rendered as Markdown instead of a raw Winston JSON log record. This applies regardless of `--verbose` so LLM-driven tooling gets a stable, readable failure shape:
 
 ~~~md
