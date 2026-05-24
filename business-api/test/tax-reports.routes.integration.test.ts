@@ -222,6 +222,231 @@ describe("tax report HTTP routes", () => {
     expect((await deletedListResponse.json()) as unknown[]).toEqual([]);
   });
 
+  it("creates, suggests, confirms, and hydrates tax payment links through HTTP", async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument();
+    const createResponse = await fetch(`${baseUrl}/api/v1/tax-reports`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        ...createRequestBody(company.companyId, document.documentId),
+        result: "payable",
+        paymentStatus: "unpaid",
+        resultAmount: "120.00",
+        authoritySubmissionId: "AEAT-303-Q1-PAYABLE",
+        carryforwards: [],
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as {
+      taxReport: { taxReportId: string };
+    };
+    const { createBankAccount, upsertBankTransaction } =
+      await import("../src/services/bank.js");
+    const account = createBankAccount({
+      bankName: "BBVA",
+      displayName: "Main EUR account",
+      currency: "EUR",
+      status: "active",
+    });
+    const transaction = upsertBankTransaction({
+      bankAccountId: account.bankAccountId,
+      transactionDate: "2026-04-20",
+      amount: "-120.00",
+      currency: "EUR",
+      description: "AEAT Modelo 303 2026-Q1",
+      reference: "AEAT-303-Q1-PAYABLE",
+      confidence: "high",
+      kind: "bank_transaction",
+      status: "recorded",
+    }).transaction;
+
+    const suggestResponse = await fetch(
+      `${baseUrl}/api/v1/tax-reports/${created.taxReport.taxReportId}/payment-links/suggest`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test-api-key" },
+      },
+    );
+    expect(suggestResponse.status).toBe(200);
+    const suggested = (await suggestResponse.json()) as {
+      matches: Array<{ taxReportPaymentLinkId: string; status: string }>;
+    };
+    expect(suggested.matches).toEqual([
+      expect.objectContaining({ status: "suggested" }),
+    ]);
+
+    const listResponse = await fetch(
+      `${baseUrl}/api/v1/tax-report-payment-links?taxReportId=${created.taxReport.taxReportId}&status=suggested`,
+      { headers: { authorization: "Bearer test-api-key" } },
+    );
+    expect(listResponse.status).toBe(200);
+    expect((await listResponse.json()) as unknown[]).toHaveLength(1);
+
+    const patchResponse = await fetch(
+      `${baseUrl}/api/v1/tax-report-payment-links/${suggested.matches[0]?.taxReportPaymentLinkId}`,
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer test-api-key",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ status: "confirmed" }),
+      },
+    );
+    expect(patchResponse.status).toBe(200);
+
+    const getResponse = await fetch(
+      `${baseUrl}/api/v1/tax-reports/${created.taxReport.taxReportId}?include=paymentEvidence`,
+      { headers: { authorization: "Bearer test-api-key" } },
+    );
+    expect(getResponse.status).toBe(200);
+    expect(
+      (await getResponse.json()) as {
+        taxReport: { paymentStatus: string };
+        paymentEvidence: { bankTransactions: Array<{ bankTransactionId: string }> };
+      },
+    ).toEqual(
+      expect.objectContaining({
+        taxReport: expect.objectContaining({ paymentStatus: "paid" }),
+        paymentEvidence: expect.objectContaining({
+          bankTransactions: [
+            expect.objectContaining({
+              bankTransactionId: transaction.bankTransactionId,
+            }),
+          ],
+        }),
+      }),
+    );
+
+    const { softDeleteBankTransaction } = await import("../src/services/bank.js");
+    softDeleteBankTransaction(transaction.bankTransactionId);
+    const deletedEvidenceResponse = await fetch(
+      `${baseUrl}/api/v1/tax-reports/${created.taxReport.taxReportId}?include=paymentEvidence`,
+      { headers: { authorization: "Bearer test-api-key" } },
+    );
+    expect(deletedEvidenceResponse.status).toBe(200);
+    expect(
+      (await deletedEvidenceResponse.json()) as {
+        paymentEvidence: { bankTransactions: Array<{ bankTransactionId: string }> };
+      },
+    ).toEqual(
+      expect.objectContaining({
+        paymentEvidence: expect.objectContaining({
+          bankTransactions: [],
+        }),
+      }),
+    );
+  });
+
+  it("uploads tax payment receipt evidence through HTTP", async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument();
+    const createResponse = await fetch(`${baseUrl}/api/v1/tax-reports`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        ...createRequestBody(company.companyId, document.documentId),
+        result: "payable",
+        paymentStatus: "unpaid",
+        resultAmount: "50.00",
+        authoritySubmissionId: "AEAT-303-Q1-RECEIPT-ONLY",
+        carryforwards: [],
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as {
+      taxReport: { taxReportId: string };
+    };
+
+    const formData = new FormData();
+    formData.set("kind", "tax_payment_receipt");
+    formData.set("source", "authority_portal_download");
+    formData.set(
+      "link",
+      JSON.stringify({
+        amount: "50.00",
+        currency: "EUR",
+        paidAt: "2026-04-20",
+        paymentReference: "AEAT-303-Q1-RECEIPT-ONLY",
+        status: "confirmed",
+        confidence: "high",
+      }),
+    );
+    formData.set(
+      "file",
+      new File([Buffer.from("AEAT tax payment receipt")], "receipt.pdf", {
+        type: "application/pdf",
+      }),
+    );
+
+    const receiptResponse = await fetch(
+      `${baseUrl}/api/v1/tax-reports/${created.taxReport.taxReportId}/payment-receipts`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test-api-key" },
+        body: formData,
+      },
+    );
+    expect(receiptResponse.status).toBe(201);
+    const receipt = (await receiptResponse.json()) as {
+      document: { documentId: string; kind: string };
+      paymentLink: { status: string };
+      taxReport: { paymentStatus: string };
+    };
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        document: expect.objectContaining({ kind: "tax_payment_receipt" }),
+        paymentLink: expect.objectContaining({ status: "confirmed" }),
+        taxReport: expect.objectContaining({ paymentStatus: "paid" }),
+      }),
+    );
+
+    const getResponse = await fetch(
+      `${baseUrl}/api/v1/tax-reports/${created.taxReport.taxReportId}?include=paymentEvidence`,
+      { headers: { authorization: "Bearer test-api-key" } },
+    );
+    expect(getResponse.status).toBe(200);
+    expect(
+      (await getResponse.json()) as {
+        paymentEvidence: { documents: Array<{ documentId: string }> };
+      },
+    ).toEqual(
+      expect.objectContaining({
+        paymentEvidence: expect.objectContaining({
+          documents: [
+            expect.objectContaining({ documentId: receipt.document.documentId }),
+          ],
+        }),
+      }),
+    );
+
+    const { softDeleteDocument } = await import("../src/services/documents.js");
+    softDeleteDocument(receipt.document.documentId);
+    const deletedEvidenceResponse = await fetch(
+      `${baseUrl}/api/v1/tax-reports/${created.taxReport.taxReportId}?include=paymentEvidence`,
+      { headers: { authorization: "Bearer test-api-key" } },
+    );
+    expect(deletedEvidenceResponse.status).toBe(200);
+    expect(
+      (await deletedEvidenceResponse.json()) as {
+        paymentEvidence: { documents: Array<{ documentId: string }> };
+      },
+    ).toEqual(
+      expect.objectContaining({
+        paymentEvidence: expect.objectContaining({
+          documents: [],
+        }),
+      }),
+    );
+  });
+
   it("ingests tax reports through the multipart HTTP API", async () => {
     const company = await createCompanyCard();
     const formData = new FormData();

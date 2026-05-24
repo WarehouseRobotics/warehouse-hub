@@ -410,6 +410,79 @@ Bank transaction notes:
 * `runningBalance` and `bank-balances` records are reconciliation evidence, not the source of transaction truth
 * supported transaction kinds are `bank_transaction`, `opening_balance`, `balance_adjustment`, and `transfer`
 
+## Tax Reports
+
+Tax reports track filed declarations, carryforwards, and explicit payment evidence. Payment suggestions are reviewable records; only confirmed tax report payment links update a report's `paymentStatus`.
+
+List tax reports by country, fiscal year, or payment status:
+
+```bash
+./container.sh exec npm run cli -- tax-reports list --country-code ES --fiscal-year 2026
+./container.sh exec npm run cli -- tax-reports list --payment-status unpaid
+```
+
+Inspect a report, including its facts, carryforwards, and payment links:
+
+```bash
+./container.sh exec npm run cli -- tax-reports get tr_000123
+```
+
+Suggest bank transaction links for a payable or refund-requested report. Suggestions are never auto-confirmed:
+
+```bash
+./container.sh exec npm run cli -- tax-reports suggest-payments tr_000123
+```
+
+Attach a payment receipt or authority notice to a report. The receipt proves payment only when the created link is confirmed:
+
+```bash
+./container.sh exec npm run cli -- tax-reports attach-receipt tr_000123 ./tax/aeat-receipt.pdf '{
+  "kind": "tax_payment_receipt",
+  "source": "authority_portal_download",
+  "link": {
+    "amount": "1840.00",
+    "currency": "EUR",
+    "paidAt": "2026-04-20",
+    "paymentReference": "AEAT-303-Q1",
+    "status": "confirmed",
+    "confidence": "high"
+  }
+}'
+```
+
+Review, create, confirm, or reject payment links:
+
+```bash
+./container.sh exec npm run cli -- tax-report-payment-links list --tax-report-id tr_000123
+
+./container.sh exec npm run cli -- tax-report-payment-links create '{
+  "taxReportId": "tr_000123",
+  "bankTransactionId": "btx_000041",
+  "amount": "1840.00",
+  "currency": "EUR",
+  "paidAt": "2026-04-20",
+  "paymentReference": "AEAT-303-Q1",
+  "status": "suggested",
+  "confidence": "high"
+}'
+
+./container.sh exec npm run cli -- tax-report-payment-links update trpl_000123 '{
+  "status": "confirmed"
+}'
+
+./container.sh exec npm run cli -- tax-report-payment-links update trpl_000124 '{
+  "status": "rejected",
+  "reason": "Wrong declaration period"
+}'
+```
+
+List active or superseded carryforward balances:
+
+```bash
+./container.sh exec npm run cli -- tax-carryforwards list --country-code ES --status active
+./container.sh exec npm run cli -- tax-carryforwards list --include-superseded
+```
+
 ## Expenses
 
 Create an expense manually:

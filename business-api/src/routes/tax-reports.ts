@@ -9,18 +9,27 @@ import { validateBody } from "../middleware/validate.js";
 import { ingestTaxReport } from "../services/tax-report-ingestion.js";
 import {
   createTaxReport,
+  createTaxReportPaymentLink,
   getTaxReport,
   listTaxCarryforwards,
+  listTaxReportPaymentLinks,
   listTaxReports,
   softDeleteTaxReport,
+  suggestTaxReportPaymentLinks,
+  updateTaxReportPaymentLink,
+  uploadTaxReportPaymentReceipt,
 } from "../services/tax-reports.js";
 import {
+  taxReportPaymentLinkCreateInputSchema,
+  taxReportPaymentLinkPatchSchema,
+  taxReportPaymentReceiptUploadSchema,
   taxReportCreateRequestSchema,
   taxReportIngestSchema,
 } from "@warehouse-hub/business-schemas";
 
 export const taxReportsRouter = Router();
 export const taxCarryforwardsRouter = Router();
+export const taxReportPaymentLinksRouter = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 function getRouteParam(value: string | string[]): string {
@@ -167,8 +176,71 @@ taxReportsRouter.post(
   },
 );
 
+taxReportsRouter.post("/:id/payment-links/suggest", requireScope("write"), (request, response) => {
+  const result = suggestTaxReportPaymentLinks(getRouteParam(request.params.id));
+  response.locals.audit = {
+    action: "tax_report_payment_link.suggest",
+    objectType: "tax_report",
+    objectId: result.taxReportId,
+    metadata: {
+      matchCount: result.matches.length,
+    },
+  };
+  response.json(result);
+});
+
+taxReportsRouter.post(
+  "/:id/payment-receipts",
+  requireScope("write"),
+  upload.single("file"),
+  (request, response, next) => {
+    try {
+      if (!request.file) {
+        response.status(400).json({
+          error: {
+            code: "validation_error",
+            message: "Missing uploaded file",
+          },
+        });
+        return;
+      }
+
+      const input = taxReportPaymentReceiptUploadSchema.parse({
+        kind: request.body.kind,
+        source: request.body.source,
+        link: parseMultipartJson(request.body.link, "link"),
+      });
+      const result = uploadTaxReportPaymentReceipt(
+        getRouteParam(request.params.id),
+        request.file,
+        input,
+      );
+      response.locals.audit = {
+        action: "tax_report_payment_receipt.upload",
+        objectType: "tax_report_payment_link",
+        objectId: result.paymentLink.taxReportPaymentLinkId,
+        metadata: {
+          documentId: result.document.documentId,
+          taxReportId: result.taxReport.taxReportId,
+        },
+      };
+      response.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 taxReportsRouter.get("/:id", requireScope("read"), (request, response) => {
-  response.json(getTaxReport(getRouteParam(request.params.id)));
+  const include =
+    typeof request.query.include === "string"
+      ? request.query.include.split(",").map((value) => value.trim())
+      : [];
+  response.json(
+    getTaxReport(getRouteParam(request.params.id), {
+      includePaymentEvidence: include.includes("paymentEvidence"),
+    }),
+  );
 });
 
 taxReportsRouter.delete("/:id", requireScope("write"), (request, response) => {
@@ -214,3 +286,59 @@ taxCarryforwardsRouter.get("/", requireScope("read"), (request, response, next) 
     next(error);
   }
 });
+
+taxReportPaymentLinksRouter.get("/", requireScope("read"), (request, response) => {
+  response.json(
+    listTaxReportPaymentLinks({
+      taxReportId:
+        typeof request.query.taxReportId === "string"
+          ? request.query.taxReportId
+          : undefined,
+      status:
+        typeof request.query.status === "string"
+          ? request.query.status
+          : undefined,
+    }),
+  );
+});
+
+taxReportPaymentLinksRouter.post(
+  "/",
+  requireScope("write"),
+  validateBody(taxReportPaymentLinkCreateInputSchema),
+  (request, response) => {
+    const paymentLink = createTaxReportPaymentLink(request.body);
+    response.locals.audit = {
+      action: "tax_report_payment_link.create",
+      objectType: "tax_report_payment_link",
+      objectId: paymentLink.taxReportPaymentLinkId,
+      metadata: {
+        taxReportId: paymentLink.taxReportId,
+        status: paymentLink.status,
+      },
+    };
+    response.status(201).json(paymentLink);
+  },
+);
+
+taxReportPaymentLinksRouter.patch(
+  "/:id",
+  requireScope("write"),
+  validateBody(taxReportPaymentLinkPatchSchema),
+  (request, response) => {
+    const paymentLink = updateTaxReportPaymentLink(
+      getRouteParam(request.params.id),
+      request.body,
+    );
+    response.locals.audit = {
+      action: "tax_report_payment_link.update",
+      objectType: "tax_report_payment_link",
+      objectId: paymentLink.taxReportPaymentLinkId,
+      metadata: {
+        taxReportId: paymentLink.taxReportId,
+        status: paymentLink.status,
+      },
+    };
+    response.json(paymentLink);
+  },
+);

@@ -6,6 +6,7 @@ import { commandDefinitions as coreCommandDefinitions } from "./commands/core.js
 import { commandDefinitions as crmCommandDefinitions } from "./commands/crm.js";
 import { commandDefinitions as dataCacheCommandDefinitions } from "./commands/data-cache.js";
 import { commandDefinitions as documentCommandDefinitions } from "./commands/documents.js";
+import { commandDefinitions as taxReportCommandDefinitions } from "./commands/tax-reports.js";
 import { commandDefinitions as tokenCommandDefinitions } from "./commands/tokens.js";
 import { commandDefinitions as userCommandDefinitions } from "./commands/users.js";
 import { commandDefinitions as workspaceCommandDefinitions } from "./commands/workspace.js";
@@ -42,6 +43,9 @@ const COMMAND_SCOPE_ORDER = [
   "contacts",
   "data-cache",
   "documents",
+  "tax-reports",
+  "tax-report-payment-links",
+  "tax-carryforwards",
   "expenses",
   "payrolls",
   "deals",
@@ -61,6 +65,7 @@ export const commandDefinitions: CliCommandDefinition[] = [
   ...crmCommandDefinitions,
   ...dataCacheCommandDefinitions,
   ...documentCommandDefinitions,
+  ...taxReportCommandDefinitions,
   ...accountingCommandDefinitions,
 ].sort(
   (left, right) =>
@@ -111,6 +116,8 @@ const writeSubcommands = new Set([
   "revoke-invite",
   "set",
   "set-role",
+  "attach-receipt",
+  "suggest-payments",
   "update",
   "upload",
   "upsert",

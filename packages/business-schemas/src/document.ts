@@ -23,6 +23,7 @@ export const documentKindSchema = z.enum([
 export const documentUploadSchema = z
   .object({
     kind: documentKindSchema,
+    companyCardId: z.string().min(1).optional(),
     source: z.string().optional(),
   })
   .strict();

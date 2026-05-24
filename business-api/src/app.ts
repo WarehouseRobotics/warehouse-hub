@@ -29,6 +29,7 @@ import { salesInvoicesRouter } from "./routes/sales-invoices.js";
 import { tasksRouter } from "./routes/tasks.js";
 import {
   taxCarryforwardsRouter,
+  taxReportPaymentLinksRouter,
   taxReportsRouter,
 } from "./routes/tax-reports.js";
 import { tokensRouter } from "./routes/tokens.js";
@@ -103,6 +104,7 @@ export function createApp() {
   app.use("/api/v1/tasks", tasksRouter);
   app.use("/api/v1/tax-reports", taxReportsRouter);
   app.use("/api/v1/tax-carryforwards", taxCarryforwardsRouter);
+  app.use("/api/v1/tax-report-payment-links", taxReportPaymentLinksRouter);
   app.use("/api/v1/tokens", tokensRouter);
   app.use("/api/v1/users", usersRouter);
   app.use("/api/v1/workspace", workspaceRouter);

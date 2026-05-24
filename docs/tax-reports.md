@@ -418,6 +418,86 @@ Returns:
 * payment links
 * linked bank transactions and payment receipt documents when requested by include params
 
+Use `GET /api/v1/tax-reports/:idOrSlug?include=paymentEvidence` to hydrate linked bank transactions and receipt document metadata under `paymentEvidence`.
+
+### Tax Report Payment Links
+
+`GET /api/v1/tax-report-payment-links`
+
+Supported query params:
+
+* `taxReportId`
+* `status`
+
+`POST /api/v1/tax-report-payment-links`
+
+Creates or updates an explicit payment evidence link. At least one evidence field is required: `bankTransactionId`, `documentId`, or `paymentReference`.
+
+```json
+{
+  "taxReportId": "tr_000123",
+  "bankTransactionId": "btx_000041",
+  "amount": "1840.00",
+  "currency": "EUR",
+  "paidAt": "2026-04-20",
+  "paymentReference": "AEAT-303-Q1",
+  "status": "suggested",
+  "confidence": "high",
+  "reason": "Amount and tax reference matched"
+}
+```
+
+`PATCH /api/v1/tax-report-payment-links/:idOrSlug`
+
+Updates review state and reviewer notes:
+
+```json
+{
+  "status": "confirmed",
+  "confidence": "high",
+  "reason": "Matched against AEAT payment receipt"
+}
+```
+
+Payment link rules:
+
+* suggested and rejected links never change `tax_reports.paymentStatus`
+* confirmed links recompute payable reports to `partially_paid` or `paid`
+* confirmed refund bank transactions recompute refund-requested reports to `refunded`
+* changing a confirmed link back to `rejected` recomputes the report status downward
+
+### Suggest Payment Links
+
+`POST /api/v1/tax-reports/:idOrSlug/payment-links/suggest`
+
+Scans recorded bank transactions for same-company tax payment or refund candidates by amount, currency, date window, authority/form/period text, and payment reference. Suggestions are stored as explicit `suggested` payment links and are not auto-confirmed.
+
+### Upload Payment Receipt
+
+`POST /api/v1/tax-reports/:idOrSlug/payment-receipts`
+
+Multipart fields:
+
+* `file`: required receipt or notice file
+* `kind`: optional, `tax_payment_receipt` by default; `tax_authority_notice` is also accepted
+* `source`: optional, for example `authority_portal_download` or `accountant_upload`
+* `link`: required JSON payment-link payload without `taxReportId` or `documentId`
+
+Example `link` field:
+
+```json
+{
+  "amount": "1840.00",
+  "currency": "EUR",
+  "paidAt": "2026-04-20",
+  "paymentReference": "AEAT-303-Q1",
+  "status": "confirmed",
+  "confidence": "high"
+}
+```
+
+Receipt documents are stored as tax evidence and linked to the report. They prove payment only after the associated payment link is confirmed.
+
 ### List Carryforwards
 
 `GET /api/v1/tax-carryforwards`
@@ -435,27 +515,20 @@ Default behavior should return active carryforwards only.
 
 ## CLI
 
-Add a tax reports command group:
+Implemented tax report commands:
 
 ```bash
-wrobo biz tax-reports ingest ./tax/ES-303-2026-Q1.pdf '{
-  "countryCode": "ES",
-  "taxKind": "vat",
-  "formCode": "303",
-  "periodLabel": "2026-Q1",
-  "source": "accountant_upload"
-}'
+wrobo-biz tax-reports list --country-code ES --fiscal-year 2026
+wrobo-biz tax-reports get tr_000123
+wrobo-biz tax-reports suggest-payments tr_000123
+wrobo-biz tax-reports attach-receipt tr_000123 ./tax/aeat-receipt.pdf '{"kind":"tax_payment_receipt","link":{"amount":"1840.00","currency":"EUR","paymentReference":"AEAT-303-Q1","status":"confirmed"}}'
+wrobo-biz tax-report-payment-links list --tax-report-id tr_000123
+wrobo-biz tax-report-payment-links create '{"taxReportId":"tr_000123","bankTransactionId":"btx_000041","amount":"1840.00","currency":"EUR","status":"suggested"}'
+wrobo-biz tax-report-payment-links update trpl_000123 '{"status":"confirmed"}'
+wrobo-biz tax-carryforwards list --country-code ES --status active
 ```
 
-Additional commands:
-
-```bash
-wrobo biz tax-reports list --country ES --year 2026
-wrobo biz tax-reports get tr_000123
-wrobo biz tax-carryforwards list --country ES --status active
-```
-
-CLI output should follow the existing readable TOON-style summaries and include the stable IDs needed by agents.
+CLI output is JSON by default and includes stable IDs needed by agents.
 
 ## Country Module Design
 

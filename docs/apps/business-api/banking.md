@@ -300,6 +300,8 @@ Status updates are delegated to the existing accounting services:
 * `payroll: recorded -> paid`
 * `sales_invoice: finalized -> paid`
 
+Tax report payment reconciliation uses separate `tax_report_payment_links` records rather than generic `bank_transaction_matches`. Tax payment suggestions can link bank transactions or receipt documents to filed declarations, and only confirmed tax payment links update `tax_reports.paymentStatus`.
+
 ## REST API
 
 Implemented routes:

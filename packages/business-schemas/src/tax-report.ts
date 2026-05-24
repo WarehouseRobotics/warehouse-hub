@@ -298,7 +298,7 @@ export const taxReportPaymentLinkSchema = z
   })
   .strict();
 
-export const taxReportPaymentLinkInputSchema = taxReportPaymentLinkSchema
+const taxReportPaymentLinkInputObjectSchema = taxReportPaymentLinkSchema
   .omit({
     taxReportPaymentLinkId: true,
     slug: true,
@@ -309,6 +309,41 @@ export const taxReportPaymentLinkInputSchema = taxReportPaymentLinkSchema
   .extend({
     status: taxReportPaymentLinkStatusSchema.default("suggested"),
     confidence: taxConfidenceSchema.default("medium"),
+  })
+  .strict();
+
+export const taxReportPaymentLinkInputSchema =
+  taxReportPaymentLinkInputObjectSchema.superRefine((input, context) => {
+    if (!input.bankTransactionId && !input.documentId && !input.paymentReference) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "At least one of bankTransactionId, documentId, or paymentReference is required",
+      });
+    }
+  });
+
+export const taxReportPaymentLinkCreateInputSchema =
+  taxReportPaymentLinkInputSchema;
+
+export const taxReportPaymentLinkPatchSchema = z
+  .object({
+    status: taxReportPaymentLinkStatusSchema.optional(),
+    confidence: taxConfidenceSchema.optional(),
+    reason: z.union([z.string().min(1), z.null()]).optional(),
+  })
+  .strict();
+
+export const taxReportPaymentReceiptUploadSchema = z
+  .object({
+    kind: z
+      .enum(["tax_payment_receipt", "tax_authority_notice"])
+      .default("tax_payment_receipt"),
+    source: z.string().min(1).optional(),
+    link: taxReportPaymentLinkInputObjectSchema.omit({
+      taxReportId: true,
+      documentId: true,
+    }),
   })
   .strict();
 
@@ -403,6 +438,15 @@ export type TaxCarryforwardCreateInput = z.infer<
 export type TaxReportPaymentLink = z.infer<typeof taxReportPaymentLinkSchema>;
 export type TaxReportPaymentLinkInput = z.infer<
   typeof taxReportPaymentLinkInputSchema
+>;
+export type TaxReportPaymentLinkCreateInput = z.infer<
+  typeof taxReportPaymentLinkCreateInputSchema
+>;
+export type TaxReportPaymentLinkPatch = z.infer<
+  typeof taxReportPaymentLinkPatchSchema
+>;
+export type TaxReportPaymentReceiptUpload = z.infer<
+  typeof taxReportPaymentReceiptUploadSchema
 >;
 export type TaxReportIngestKind = z.infer<typeof taxReportIngestKindSchema>;
 export type TaxReportIngestOverrides = z.infer<
