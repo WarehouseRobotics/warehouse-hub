@@ -341,7 +341,7 @@ Do not use the CLI as your first tool when:
 
 ## Skill Summary
 
-For Openclaw agents, the safe default is:
+For AI agents, the safe default is:
 
 1. Run `wrobo-biz ...`
 2. Use `wrobo-biz help` or `wrobo-biz help <scope>` when syntax is uncertain
