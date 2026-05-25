@@ -94,13 +94,25 @@ Scopes implemented in this build:
                 | list [--contact-id --kind]
                 Flag-driven create flags:
                   --contact-id --kind --start --end --reason --notes
+  tax-reports   get <id> | spain-position --company-card-id <id> --fiscal-year <year>
+                | suggest-payments <id>
+                | attach-receipt <id> <file> <json>
+                | list [--country-code --tax-kind --form-code --fiscal-year
+                        --payment-status
+                        --similar --limit --since --before --after]
+  tax-report-payment-links
+                create <json> | update <id> <json>
+                | list [--tax-report-id --status]
+  tax-carryforwards
+                list [--country-code --tax-kind --kind --status
+                       --origin-fiscal-year --include-superseded]
                 * = wrapper-only extension (forwarded to the server route but
                     not exposed by the local `wrobo-biz` CLI)
 
 Host-only scopes (rejected with exit 2):
   serve, db init, db migrate, db ...
 
-Other scopes (tax-*, data-cache) will be added in
+Other scopes (data-cache) will be added in
 subsequent tasks of the wrobo-biz-api umbrella.
 
 Exit codes:

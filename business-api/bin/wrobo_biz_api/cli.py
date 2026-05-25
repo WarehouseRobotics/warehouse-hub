@@ -43,6 +43,11 @@ from .scopes.identity import (
     handle_users,
     handle_workspace,
 )
+from .scopes.tax import (
+    handle_tax_carryforwards,
+    handle_tax_report_payment_links,
+    handle_tax_reports,
+)
 
 
 SCOPE_HANDLERS: Dict[str, Callable[..., Any]] = {
@@ -67,6 +72,9 @@ SCOPE_HANDLERS: Dict[str, Callable[..., Any]] = {
     "bookings": handle_bookings,
     "booking-assignment-profiles": handle_booking_assignment_profiles,
     "booking-availability-exceptions": handle_booking_availability_exceptions,
+    "tax-reports": handle_tax_reports,
+    "tax-report-payment-links": handle_tax_report_payment_links,
+    "tax-carryforwards": handle_tax_carryforwards,
 }
 
 # Aliases honored locally (mirror src/cli/registry.ts where these are defined).

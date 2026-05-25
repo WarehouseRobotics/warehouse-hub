@@ -34,7 +34,6 @@ def handle_host_only(scope: str) -> None:
 
 
 PENDING_SCOPES = {
-    "tax-reports", "tax-report-payment-links", "tax-carryforwards",
     "data-cache",
 }
 
