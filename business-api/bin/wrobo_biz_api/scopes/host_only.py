@@ -1,13 +1,14 @@
-"""Host-only and not-yet-wired scope rejections.
+"""Host-only scope rejections.
 
 ``serve`` and ``db *`` are host-only: they touch the local SQLite database
-in-process and have no HTTP equivalent. The remaining scopes listed in
-``PENDING_SCOPES`` will be added in subsequent tasks of the wrobo-biz-api
-umbrella; until then the dispatcher rejects them with a stable error code
-so callers can distinguish "not implemented yet" from "typo".
+in-process and have no HTTP equivalent. All other scopes are wired in this
+build (the wrobo-biz-api umbrella has closed); ``PENDING_SCOPES`` is kept
+as an empty set so the dispatcher's scope/typo distinction stays uniform.
 """
 
 from __future__ import annotations
+
+from typing import Set
 
 from ..errors import CliError
 
@@ -33,14 +34,11 @@ def handle_host_only(scope: str) -> None:
     raise CliError(message, code="host_only_command")
 
 
-PENDING_SCOPES = {
-    "data-cache",
-}
+PENDING_SCOPES: Set[str] = set()
 
 
 def handle_pending(scope: str) -> None:
     raise CliError(
-        f"Scope `{scope}` is not yet wired in this build of wrobo-biz-api. "
-        "It will be added in a follow-up task of the wrobo-biz-api umbrella.",
+        f"Scope `{scope}` is not yet wired in this build of wrobo-biz-api.",
         code="scope_not_implemented",
     )

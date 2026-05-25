@@ -67,8 +67,9 @@ Supported scopes today:
 - **Banking** (Task 4): `bank-accounts` (CRUD; `list --status`), `bank-transactions` (create/upsert/get/list/update plus action `match <id>`; list filters `--bank-account-id`, `--status`, `--kind`, plus shared list filters), `bank-balances` (record/list; list filter `--bank-account-id`), `bank-imports csv <bank-account-id> <file> <json>`. Two implementation notes: (1) `bank-balances` maps to the server resource at `/api/v1/bank-balance-snapshots` — the CLI scope name and the route are deliberately not 1:1. (2) `bank-imports csv` is **client-side**: there is no `/bank-imports/csv` endpoint. The wrapper mirrors the local CLI flow exactly — upload the file to `/api/v1/documents` as a `kind=bank_csv` multipart upload, parse the rows in Python (stdlib-only ports of [lib/bank-csv.ts](/Users/denis/src/warehouse-hub/business-api/src/lib/bank-csv.ts) and [lib/money.ts](/Users/denis/src/warehouse-hub/business-api/src/lib/money.ts) covering European decimal commas, US thousands, Swiss apostrophes, dot-thousands, and Unicode whitespace), then POST each row to `/api/v1/bank-transactions/upsert`. The aggregated `{created, updated, needsReview, transactions}` response mirrors `importBankTransactionsFromRows` in `src/services/bank.ts`. One known gap: `--similar` is **not** advertised on `bank-transactions list` or `bank-balances list` because the server routes in [routes/bank.ts](/Users/denis/src/warehouse-hub/business-api/src/routes/bank.ts) do not forward it.
 - **Bookings** (Task 5): `bookings` (create/get/update/delete/complete/cancel/check-assignment-conflicts/list; list filters `--from`, `--to`, `--status`, `--customer-contact-id`, `--assigned-contact-id`, `--project-id`, `--deal-id`), `booking-assignment-profiles` (list/get/set/delete), `booking-availability-exceptions` (CRUD; list filters `--contact-id`, `--kind`). This is the first scope family to use a **flag-driven body mode** that coexists with the positional-JSON mode every prior scope uses: each subcommand checks whether `args[0]` looks like a JSON blob (`{...}`) and falls through to the JSON path if so; otherwise the body is assembled from flags. The `--availability` flag on `booking-assignment-profiles set` is **repeatable** (handled through the existing `repeatable_keys` parameter of `parse_flexible_flag_args`) — pipe-delimited `day|HH:MM|HH:MM` tuples are grouped by first-seen day order into the `weeklyAvailability: [{dayOfWeek, windows: [...]}]` shape, a byte-for-byte port of `parseBookingAvailabilityEntries` in [src/cli/commands/bookings.ts](/Users/denis/src/warehouse-hub/business-api/src/cli/commands/bookings.ts). Two routing notes worth calling out: (1) `booking-assignment-profiles set` is **PUT** to `/api/v1/booking-assignment-profiles/<contactId>` (not POST — matches [src/routes/bookings.ts](/Users/denis/src/warehouse-hub/business-api/src/routes/bookings.ts)); (2) `bookings check-assignment-conflicts` is a **global** action endpoint at `/api/v1/bookings/check-assignment-conflicts` (not per-booking), unlike `complete` and `cancel` which are per-id sub-resources.
 - **Tax Reports** (Task 6): `tax-reports` (list/get plus action endpoints `spain-position`, `suggest-payments`, `attach-receipt`; list filters `--country-code`, `--tax-kind`, `--form-code`, `--fiscal-year`, `--payment-status`, plus shared list filters), `tax-report-payment-links` (create/list/update; list filters `--tax-report-id`, `--status`), `tax-carryforwards` (list; filters `--country-code`, `--tax-kind`, `--kind`, `--status`, `--origin-fiscal-year`, `--include-superseded`). Four routing notes worth calling out: (1) `tax-reports suggest-payments <id>` → `POST /api/v1/tax-reports/<id>/payment-links/suggest`; (2) `tax-reports spain-position --company-card-id <id> --fiscal-year <year>` → `GET /api/v1/tax-reports/positions/spain?companyCardId=…&fiscalYear=…` (GET, query-string, and a **global** route — not POST + per-id like the other actions); (3) `tax-reports attach-receipt <id> <file> <json>` → `POST /api/v1/tax-reports/<id>/payment-receipts` (multipart); (4) `tax-report-payment-links update <id>` is **PATCH** (not PUT, not POST). The `attach-receipt` multipart contract mirrors the local CLI byte-for-byte: file field `file` with Content-Type chosen by extension (`.pdf` → `application/pdf`, else `image/png` — same hardcoded sniff as `readReceiptUploadFile` in [src/cli/commands/tax-reports.ts](/Users/denis/src/warehouse-hub/business-api/src/cli/commands/tax-reports.ts)); additional form fields are `kind` and `source` as plain strings and `link` as a JSON-stringified blob (server parses it back via `parseMultipartJson(request.body.link, "link")` in [src/routes/tax-reports.ts](/Users/denis/src/warehouse-hub/business-api/src/routes/tax-reports.ts)). `tax-reports list` intentionally omits the server-supported flags `--period-start`, `--period-end`, `--status`, `--query` because the local `wrobo-biz` CLI does not expose them — strict parity over wrapper-only widening here.
+- **Data Cache** (Task 7): `data-cache` (`list`, `create <slug> --name … --key-type …`, `get <slug>`, `lookup <slug> <key> --strategy …`, `upsert <slug> <key> --value <json>`, `import <slug> --file <path>`; alias `data-caches`). All six subcommands are fully HTTP-wired — none are host-only. The CSV path inside `data-cache import` runs **client-side**: the wrapper parses the file with a Python port of `parseCsvEntries` in [src/cli/commands/data-cache.ts](/Users/denis/src/warehouse-hub/business-api/src/cli/commands/data-cache.ts) (`--key-col` required for CSV; optional `--value-col` switches between "row-into-`{value}`-cell" and "row-into-object-with-header-keys"), then POSTs the parsed entries to `/api/v1/data-caches/<slug>/import`. JSON imports accept both `{entries: [...]}` and a bare `[...]` array, matching the local CLI's two-shape contract. The `lookup` subcommand's `--max-staleness-days` flag maps to the server query/body field `maxStalenessWindow`.
 
-Remaining scope (`data-cache`) is reserved and rejects with a `scope_not_implemented` Markdown error until its follow-up task lands — see [docs/plans/cli-wrapper-api-transport-tasks.plan.md](/Users/denis/src/warehouse-hub/docs/plans/cli-wrapper-api-transport-tasks.plan.md).
+The wrobo-biz-api umbrella is closed — every local scope is wired in this build.
 
 ### Filter handling — divergence from local `wrobo-biz`
 
@@ -93,7 +94,7 @@ Configuration:
 - `WROBO_API_CA_BUNDLE` — path to a custom CA bundle for self-signed certs (validated on startup; a missing path raises `ca_bundle_not_found`).
 - Per-call global flags: `--base-url`, `--token`, `--json` (raw JSON error envelope on stderr instead of Markdown), `--verbose`, `--help`.
 
-Auth resolution order (matches `auth-session.ts:173–215` of the local CLI): `--token` → `WROBO_API_TOKEN` env → `~/.config/wrobo-api/session.json` (created mode 0600 atomically via `O_CREAT|O_EXCL`-style open) → fail with `unauthorized` (exit 2). The session file path is deliberately different from the local CLI's `~/.config/wrobo/session.json` so both wrappers can coexist on the same host. Header injection follows the token prefix per [middleware/auth.ts](/Users/denis/src/warehouse-hub/business-api/src/middleware/auth.ts): `sess_*` → `Cookie: wh_session=...`, `wpat_*` → `Authorization: Bearer ...`, anything else → `x-api-key`.
+Auth resolution order (matches `auth-session.ts:173–215` of the local CLI): `--token` → `WROBO_API_TOKEN` env → `~/.config/wrobo-api/session.json` (written via `os.open(path, O_WRONLY|O_CREAT|O_TRUNC, 0o600)` + defensive `fchmod(0o600)` so the token never lands on disk with the umask-default mode, even when re-login overwrites an existing file) → fail with `unauthorized` (exit 2). The session file path is deliberately different from the local CLI's `~/.config/wrobo/session.json` so both wrappers can coexist on the same host. Header injection follows the token prefix per [middleware/auth.ts](/Users/denis/src/warehouse-hub/business-api/src/middleware/auth.ts): `sess_*` → `Cookie: wh_session=...`, `wpat_*` → `Authorization: Bearer ...`, anything else → `x-api-key`.
 
 ```bash
 export WROBO_API_BASE_URL=https://hub.example.com
@@ -136,6 +137,50 @@ SqliteError: FOREIGN KEY constraint failed
 FOREIGN KEY constraint failed
 ~~~
 
+### `wrobo-biz-api` quick start
+
+The wrapper is a single-file Python 3 executable plus a stdlib-only package — no install step, no virtualenv. Run it directly from the repo (or symlink it into `/usr/local/bin`):
+
+```bash
+/path/to/business-api/bin/wrobo-biz-api --help
+```
+
+Configuration precedence for both base URL and credential is **flag > env > session file**:
+
+| Source        | Base URL                       | Credential                                                  |
+| ------------- | ------------------------------ | ----------------------------------------------------------- |
+| CLI flag      | `--base-url <url>`             | `--token <token>`                                           |
+| Environment   | `WROBO_API_BASE_URL`           | `WROBO_API_TOKEN`                                           |
+| Session file  | `baseUrl` field                | `sessionToken` field                                        |
+
+The session file lives at `~/.config/wrobo-api/session.json`, is written with mode `0600` by `auth login`, and is deleted by `auth logout`. The header injected on each request follows the token prefix: `wpat_*` → `Authorization: Bearer <token>`, `sess_*` → `Cookie: wh_session=<token>`, anything else → `x-api-key: <token>`. Output is pretty-printed JSON on stdout for success; errors render as the documented Markdown block on stderr unless `--json` is passed (in which case stderr gets `{"error": {...}}`).
+
+Host-only commands the wrapper refuses with exit `2` and a Markdown `host_only_command` error:
+
+- `serve` — the API server process must be launched directly on the host that owns the SQLite database.
+- `db init`, `db migrate`, `db ...` — database lifecycle runs in-process and has no HTTP equivalent.
+
+There are **no** subcommand-level host-only rejections inside the wired scopes — every advertised subcommand (including all six `data-cache` subcommands) speaks to a real HTTP route.
+
+Common flows:
+
+```bash
+# One-time login (writes the session file at mode 0600)
+wrobo-biz-api auth login --base-url https://hub.example.com --email owner@example.com
+
+# Inspect who you are and which workspace you are talking to
+wrobo-biz-api auth whoami --json
+wrobo-biz-api workspace get
+wrobo-biz-api company-card get
+
+# Issue a PAT for an agent or CI runner, then use it explicitly
+wrobo-biz-api tokens create --name claude-desktop --actor-type agent --scopes write
+WROBO_API_TOKEN=wpat_xxxxxxx wrobo-biz-api tax-reports list --country-code ES
+
+# Clear the cached credential
+wrobo-biz-api auth logout
+```
+
 ## Authentication, Tokens, and Workspace
 
 Sign in as a workspace user and inspect the active session:
@@ -143,6 +188,13 @@ Sign in as a workspace user and inspect the active session:
 ```bash
 wrobo-biz auth login --email owner@example.com --password owner-password
 wrobo-biz auth whoami --json
+```
+
+Remotely, against a deployed instance:
+
+```bash
+wrobo-biz-api auth login --base-url https://hub.example.com --email owner@example.com
+wrobo-biz-api auth whoami --json
 ```
 
 Create, list, and revoke Personal Access Tokens for CLI, MCP, and agent use:
@@ -153,11 +205,24 @@ wrobo-biz tokens list --json
 wrobo-biz tokens revoke pat_000000000000
 ```
 
+The same flow works against a remote business-api once you are signed in:
+
+```bash
+wrobo-biz-api tokens create --name ci-runner --actor-type agent --scopes write
+wrobo-biz-api tokens list --json
+```
+
 Read or update the singleton workspace:
 
 ```bash
 wrobo-biz workspace get --json
 wrobo-biz workspace set --name "Northwind Robotics"
+```
+
+Or remotely (handy when the only thing an operator needs to confirm is that they are pointed at the right deployment):
+
+```bash
+wrobo-biz-api workspace get --json
 ```
 
 ## Database and Company Card

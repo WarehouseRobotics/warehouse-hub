@@ -34,6 +34,7 @@ from .scopes.crm import (
     handle_projects,
     handle_tasks,
 )
+from .scopes.data_cache import handle_data_cache
 from .scopes.documents import handle_documents
 from .scopes.host_only import PENDING_SCOPES, handle_host_only, handle_pending
 from .scopes.identity import (
@@ -75,6 +76,7 @@ SCOPE_HANDLERS: Dict[str, Callable[..., Any]] = {
     "tax-reports": handle_tax_reports,
     "tax-report-payment-links": handle_tax_report_payment_links,
     "tax-carryforwards": handle_tax_carryforwards,
+    "data-cache": handle_data_cache,
 }
 
 # Aliases honored locally (mirror src/cli/registry.ts where these are defined).
@@ -83,6 +85,7 @@ SCOPE_ALIASES = {
     "user": "users",
     "company": "company-card",
     "comment": "comments",
+    "data-caches": "data-cache",
     # accounting (src/cli/commands/accounting.ts)
     "purchase-invoices": "expenses",
     "expense-invoices": "expenses",

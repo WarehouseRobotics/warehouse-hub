@@ -106,14 +106,20 @@ Scopes implemented in this build:
   tax-carryforwards
                 list [--country-code --tax-kind --kind --status
                        --origin-fiscal-year --include-superseded]
+  data-cache    list | create <slug> --name <text> --key-type <type>
+                  [--description --value-schema --fetcher-config --ttl-days]
+                | get <slug>
+                | lookup <slug> <key> --strategy <strategy>
+                  [--max-staleness-days --fetch-timeout-ms]
+                | upsert <slug> <key> --value <json> [--expires-at <iso>]
+                | import <slug> --file <path>
+                  [--key-col <name> --value-col <name>]
+                (alias: data-caches)
                 * = wrapper-only extension (forwarded to the server route but
                     not exposed by the local `wrobo-biz` CLI)
 
 Host-only scopes (rejected with exit 2):
   serve, db init, db migrate, db ...
-
-Other scopes (data-cache) will be added in
-subsequent tasks of the wrobo-biz-api umbrella.
 
 Exit codes:
   0  success
