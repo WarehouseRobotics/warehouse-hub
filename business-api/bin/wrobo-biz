@@ -1,61 +1,29 @@
-#!/usr/bin/env node
-import { spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+#!/usr/bin/env python3
+"""wrobo-biz-api: Remote HTTP CLI wrapper for the Warehouse Hub Business API.
 
-const TRUTHY_ENV_VALUES = new Set(["1", "t", "true", "yes", "on"]);
+Thin entry point that bootstraps ``sys.path`` so the sibling
+``wrobo_biz_api/`` package is importable when this file is executed
+directly from ``business-api/bin/`` regardless of the caller's cwd.
 
-function isTruthyEnvValue(value) {
-  return typeof value === "string" && TRUTHY_ENV_VALUES.has(value.trim().toLowerCase());
-}
+All command logic lives in the package; this shim only forwards argv.
+"""
 
-function getCliArgs() {
-  return process.argv.slice(2).filter((arg) => arg !== "--verbose");
-}
+from __future__ import annotations
 
-function isVerboseEnabled() {
-  return process.argv.slice(2).includes("--verbose");
-}
+import os
+import sys
 
-function runCliInContainer() {
-  const scriptDir = dirname(fileURLToPath(import.meta.url));
-  const projectDir = resolve(scriptDir, "..");
-  const containerScriptPath = resolve(projectDir, "container.sh");
-  const cliArgs = getCliArgs();
-  const verboseEnabled = isVerboseEnabled();
 
-  const result = spawnSync(
-    containerScriptPath,
-    [
-      "exec",
-      "env",
-      "WROBO_BUSINESS_API_CONTAINER_ENABLED=",
-      "WROBO_BUSINESS_API_CLI_MODE=true",
-      `WROBO_BUSINESS_API_CLI_VERBOSE=${verboseEnabled ? "true" : "false"}`,
-      "npm",
-      "run",
-      "cli",
-      "--",
-      "--in-docker",
-      ...cliArgs,
-    ],
-    {
-      cwd: projectDir,
-      stdio: "inherit",
-    },
-  );
+def _bootstrap() -> None:
+    here = os.path.dirname(os.path.realpath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
 
-  if (result.error) {
-    throw result.error;
-  }
 
-  process.exit(result.status ?? 1);
-}
+_bootstrap()
 
-if (isTruthyEnvValue(process.env.WROBO_BUSINESS_API_CONTAINER_ENABLED)) {
-  runCliInContainer();
-} else {
-  process.env.WROBO_BUSINESS_API_CLI_MODE = "true";
-  process.env.WROBO_BUSINESS_API_CLI_VERBOSE = isVerboseEnabled() ? "true" : "false";
-  await import("../dist/src/cli.js");
-}
+from wrobo_biz_api import main  # noqa: E402  (import after sys.path fix-up)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

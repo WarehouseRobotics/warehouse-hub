@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const TRUTHY_ENV_VALUES = new Set(["1", "t", "true", "yes", "on"]);
+
+function isTruthyEnvValue(value) {
+  return typeof value === "string" && TRUTHY_ENV_VALUES.has(value.trim().toLowerCase());
+}
+
+function getCliArgs() {
+  return process.argv.slice(2).filter((arg) => arg !== "--verbose");
+}
+
+function isVerboseEnabled() {
+  return process.argv.slice(2).includes("--verbose");
+}
+
+function runCliInContainer() {
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
+  const projectDir = resolve(scriptDir, "..");
+  const containerScriptPath = resolve(projectDir, "container.sh");
+  const cliArgs = getCliArgs();
+  const verboseEnabled = isVerboseEnabled();
+
+  const result = spawnSync(
+    containerScriptPath,
+    [
+      "exec",
+      "env",
+      "WROBO_BUSINESS_API_CONTAINER_ENABLED=",
+      "WROBO_BUSINESS_API_CLI_MODE=true",
+      `WROBO_BUSINESS_API_CLI_VERBOSE=${verboseEnabled ? "true" : "false"}`,
+      "npm",
+      "run",
+      "cli",
+      "--",
+      "--in-docker",
+      ...cliArgs,
+    ],
+    {
+      cwd: projectDir,
+      stdio: "inherit",
+    },
+  );
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  process.exit(result.status ?? 1);
+}
+
+if (isTruthyEnvValue(process.env.WROBO_BUSINESS_API_CONTAINER_ENABLED)) {
+  runCliInContainer();
+} else {
+  process.env.WROBO_BUSINESS_API_CLI_MODE = "true";
+  process.env.WROBO_BUSINESS_API_CLI_VERBOSE = isVerboseEnabled() ? "true" : "false";
+  await import("../dist/src/cli.js");
+}

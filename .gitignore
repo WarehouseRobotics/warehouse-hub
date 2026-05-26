@@ -6,3 +6,5 @@ node_modules
 business-api/eng.traineddata
 packages/business-schemas/dist/
 .claude/settings.local.json
+business-api/bin/wrobo_biz_api/__pycache__/*
+business-api/bin/wrobo_biz_api/scopes/*

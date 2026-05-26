@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, List, Optional
 from .config import EXIT_HTTP_OR_NETWORK, EXIT_OK, EXIT_USAGE
 from .errors import CliError, HttpError
 from .flags import extract_global_options
-from .help_text import print_help
+from .help_text import print_help, print_scope_help
 from .output import print_json, render_markdown_error, write_error_stderr
 from .scopes.accounting import (
     handle_expenses,
@@ -100,16 +100,38 @@ SCOPE_ALIASES = {
 
 
 def dispatch(argv: List[str]) -> int:
-    if not argv or argv[0] in ("help", "--help", "-h"):
+    if not argv:
         print_help()
         return EXIT_OK
+
+    command_for_error = " ".join(argv)
 
     try:
         globals_, remaining = extract_global_options(argv)
     except CliError as err:
-        return _report_error(" ".join(argv), err, json_output=False)
+        return _report_error(command_for_error, err, json_output=False)
 
-    if globals_.help_requested or not remaining:
+    if remaining and remaining[0] in ("help", "-h"):
+        if len(remaining) > 1:
+            try:
+                print_scope_help(remaining[1])
+                return EXIT_OK
+            except CliError as err:
+                return _report_error(command_for_error, err, json_output=globals_.json_output)
+        print_help()
+        return EXIT_OK
+
+    if globals_.help_requested:
+        if remaining:
+            try:
+                print_scope_help(remaining[0])
+                return EXIT_OK
+            except CliError as err:
+                return _report_error(command_for_error, err, json_output=globals_.json_output)
+        print_help()
+        return EXIT_OK
+
+    if not remaining:
         print_help()
         return EXIT_OK
 
@@ -118,8 +140,6 @@ def dispatch(argv: List[str]) -> int:
     scope = SCOPE_ALIASES.get(scope_raw, scope_raw)
     subcommand = rest[0] if rest else None
     subcommand_rest = rest[1:] if rest else []
-
-    command_for_error = " ".join(argv)
 
     try:
         if scope == "serve":
