@@ -10,7 +10,7 @@ see_also:
 
 # Business API CLI Examples
 
-The `business-api` CLI is typically run inside the Docker development container:
+The `business-api` CLI is typically run inside the Docker development container when the hub is installed locally
 
 
 ```bash
@@ -20,7 +20,7 @@ cd business-api
 
 ## Convenience wrapper
 
-The `business-api/bin/wrobo-biz` is normally installed to /usr/bin and should be available system-wide. With this wrapper the calls tranform to something like this:
+The `business-api/bin/wrobo-biz` is normally installed to /usr/bin and should be available system-wide. The comes in two versions, one for local Docker setup, another for remote API operations. Both have identical argument interface eshapes. With this wrapper the calls tranform to something like this:
 
 ```bash
 wrobo-biz invoices list
