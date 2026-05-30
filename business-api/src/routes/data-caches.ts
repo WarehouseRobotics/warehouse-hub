@@ -4,6 +4,7 @@ import {
   dataCacheBulkImportSchema,
   dataCacheEntriesQuerySchema,
   dataCacheEntryUpsertSchema,
+  dataCacheFetchSubmissionSchema,
   dataCacheInputSchema,
   dataCacheLookupSchema,
 } from "../schemas/data-caches.js";
@@ -16,6 +17,7 @@ import {
   listCacheEntries,
   listCaches,
   lookup,
+  submitFetchedEntry,
   upsertEntry,
 } from "../services/data-caches.js";
 
@@ -91,6 +93,31 @@ dataCachesRouter.post("/:slug/entries", requireScope("write"), validateBody(data
   };
   response.status(201).json(entry);
 });
+
+dataCachesRouter.post(
+  "/:slug/fetch-submissions",
+  requireScope("write"),
+  validateBody(dataCacheFetchSubmissionSchema),
+  (request, response) => {
+    const entry = submitFetchedEntry(
+      getRouteParam(request.params.slug),
+      request.body.key,
+      request.body.value,
+      request.body.expiresAt,
+    );
+    response.locals.audit = {
+      action: "data_cache_fetch_submission.upsert",
+      objectType: "data_cache_entry",
+      objectId: entry.id,
+      metadata: {
+        cacheSlug: getRouteParam(request.params.slug),
+        key: entry.key,
+        source: "fetcher",
+      },
+    };
+    response.status(201).json(entry);
+  },
+);
 
 dataCachesRouter.post("/:slug/import", requireScope("write"), validateBody(dataCacheBulkImportSchema), (request, response) => {
   const slug = getRouteParam(request.params.slug);

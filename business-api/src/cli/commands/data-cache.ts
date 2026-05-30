@@ -106,7 +106,7 @@ export const commandDefinitions: CliCommandDefinition[] = [
     scope: "data-cache",
     aliases: ["data-caches"],
     help: {
-      description: "Manage persistent reference-data caches and lookup missing values via OpenClaw agents.",
+      description: "Manage persistent reference-data caches and return generic agent instructions for missing values.",
       commands: [
         "list",
         "create <slug> --name <display-name> --key-type <type> [--description <text>] [--value-schema <json>] [--fetcher-config <json>] [--ttl-days <days>]",

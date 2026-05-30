@@ -5,10 +5,18 @@ metadata:
   {
     "openclaw":
       {
-        "requires": { "bins": ["docker"], "env": ["HUB_URL"], "config": [] }
+        "requires": { "bins": ["docker"], "env": ["WROBO_PYTHON3_PATH", "WROBO_BUSINESS_API_PATH", "WROBO_API_BASE_URL", "WROBO_API_TOKEN"], "config": [] }
       },
   }
 ---
+
+## Default Command Pattern
+
+General pattern (wrobo-biz is linked to /usr/bin which is in PATH):
+
+```bash
+$WROBO_PYTHON3_PATH $WROBO_BUSINESS_API_PATH/bin/wrobo-biz <command> <subcommand> ...
+```
 
 # Booking Manage Skill
 
@@ -451,12 +459,12 @@ Dashboard URL formats:
 
 ```yaml
 resource_url_format:
-  bookings: $HUB_URL/bookings/<id>
-  contacts: $HUB_URL/contacts/<id>
-  projects: $HUB_URL/projects/<id>
-  deals: $HUB_URL/deals/<id>
-  tasks: $HUB_URL/tasks/<id>
-  sales_invoices: $HUB_URL/sales-invoices/<id>
+  bookings: $WROBO_API_BASE_URL/bookings/<id>
+  contacts: $WROBO_API_BASE_URL/contacts/<id>
+  projects: $WROBO_API_BASE_URL/projects/<id>
+  deals: $WROBO_API_BASE_URL/deals/<id>
+  tasks: $WROBO_API_BASE_URL/tasks/<id>
+  sales_invoices: $WROBO_API_BASE_URL/sales-invoices/<id>
 ```
 
 ---

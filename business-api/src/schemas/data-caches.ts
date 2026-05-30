@@ -41,6 +41,8 @@ export const dataCacheEntryUpsertSchema = z.object({
   expiresAt: z.string().datetime().optional(),
 });
 
+export const dataCacheFetchSubmissionSchema = dataCacheEntryUpsertSchema;
+
 export const dataCacheBulkImportSchema = z.object({
   entries: z.array(dataCacheEntryUpsertSchema).min(1),
 });
@@ -82,6 +84,7 @@ export type DataCacheInput = {
   defaultTtlDays?: number;
 };
 export type DataCacheEntryUpsertInput = z.infer<typeof dataCacheEntryUpsertSchema>;
+export type DataCacheFetchSubmissionInput = z.infer<typeof dataCacheFetchSubmissionSchema>;
 export type DataCacheBulkImportInput = z.infer<typeof dataCacheBulkImportSchema>;
 export type DataCacheLookupInput = z.infer<typeof dataCacheLookupSchema>;
 export type DataCacheEntriesQuery = z.infer<typeof dataCacheEntriesQuerySchema>;

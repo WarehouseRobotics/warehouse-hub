@@ -5,10 +5,11 @@ metadata:
   {
     "openclaw":
       {
-        "requires": { "bins": ["docker"], "env": ["HUB_TMP_DIR", "HUB_URL"], "config": [] }
+        "requires": { "bins": ["docker"], "env": ["HUB_TMP_DIR", "WROBO_PYTHON3_PATH", "WROBO_BUSINESS_API_PATH", "WROBO_API_BASE_URL", "WROBO_API_TOKEN"], "config": [] }
       },
   }
 ---
+
 
 # Bank Tracking Skill
 
@@ -24,10 +25,10 @@ Use this skill when a user or another agent needs to:
 Primary CLI modality:
 
 ```bash
-wrobo-biz <command> <subcommand> ...
+$WROBO_PYTHON3_PATH $WROBO_BUSINESS_API_PATH/bin/wrobo-biz <command> <subcommand> ...
 ```
 
-Alternative modality when debugging inside the repo:
+Alternative modality when debugging inside the repo with local Docker running:
 
 ```bash
 cd /Users/denis/src/warehouse-hub/business-api
@@ -351,11 +352,11 @@ Use dashboard links when useful:
 
 ```yaml
 resource_url_format:
-  bank_accounts: $HUB_URL/banking/<bankAccountId>
-  documents: $HUB_URL/documents/<documentId>
-  expenses: $HUB_URL/expenses/<id>
-  payrolls: $HUB_URL/payrolls/<id>
-  sales_invoices: $HUB_URL/sales-invoices/<id>
+  bank_accounts: $WROBO_API_BASE_URL/banking/<bankAccountId>
+  documents: $WROBO_API_BASE_URL/documents/<documentId>
+  expenses: $WROBO_API_BASE_URL/expenses/<id>
+  payrolls: $WROBO_API_BASE_URL/payrolls/<id>
+  sales_invoices: $WROBO_API_BASE_URL/sales-invoices/<id>
 ```
 
 ---

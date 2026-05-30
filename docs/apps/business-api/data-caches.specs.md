@@ -1,11 +1,11 @@
 # Data Caches — Specification
 
-A **data cache** is a named, persistently-stored reference dataset backed by SQLite. Unlike in-memory caches, data cache entries survive restarts and are queryable by the business API, CLI, and agent tools. Each cache has a configurable key type, a value JSON schema, and an optional fetcher that can retrieve missing values on demand by delegating to an openclaw agent.
+A **data cache** is a named, persistently-stored reference dataset backed by SQLite. Unlike in-memory caches, data cache entries survive restarts and are queryable by the business API, CLI, and agent tools. Each cache has a configurable key type, a value JSON schema, and an optional fetcher instruction workflow for missing values.
 
 ## Use Cases
 
-- **Currency exchange rates** — `key_type: date`, keys like `"2024-03-15"` for the pair `USD/EUR`. On a cache miss, the fetcher asks the accounting agent to look up the rate, stores the result, and returns it.
-- **Material prices (BOM)** — `key_type: string`, keys are supplier SKUs. Updated weekly via a bulk CSV import. When a price is missing the fetcher can query the agent with a prompt that includes the supplier data URL.
+- **Currency exchange rates** — `key_type: date`, keys like `"2024-03-15"` for the pair `USD/EUR`. On a cache miss, lookup can return an instruction prompt that a calling agent uses to fetch and submit the rate.
+- **Material prices (BOM)** — `key_type: string`, keys are supplier SKUs. Updated weekly via a bulk CSV import. When a price is missing the fetcher prompt can include the supplier data URL and submission instructions.
 
 ---
 
@@ -95,7 +95,7 @@ All writes to `data_cache_entries.value` are validated against the owning cache'
 
 ## Fetcher Config
 
-`fetcher_config` is a JSON object stored on the cache. When present, the service can invoke the openclaw agent to retrieve a missing value.
+`fetcher_config` is a JSON object stored on the cache. When present, lookup can return a `needs_fetch` instruction for the calling agent.
 
 ### Required Field
 
@@ -114,7 +114,7 @@ Any additional fields in `fetcher_config` are available as `{{ config.<field> }}
 | `{{ key }}` | The lookup key being fetched (e.g. `"2024-03-15"` or `"SKU-001"`) |
 | `{{ config.<field> }}` | Any other field from `fetcher_config` |
 
-After interpolating the prompt, the fetcher appends the cache's value schema as a fenced code block:
+After interpolating the prompt, lookup appends the cache's value schema and API submission instructions:
 
 ```
 JSON response schema:
@@ -145,41 +145,62 @@ JSON response schema:
 
 ---
 
-## Fetcher Execution
+## Generic Agent Fetch Workflow
 
-The fetcher sends the constructed prompt to an openclaw agent via the **openclaw-control API**. This HTTP facade (see `openclaw-control-api/main.py`) wraps the `wrobohub-openclaw-cli` binary and allows the business-api process to invoke agent turns from within the container.
+Lookup does not call an external agent directly. It returns a `needs_fetch` payload when a fresh value is missing and `fetcher_config` is present. The caller should use the returned `instructionPrompt`, fetch the value with whatever local or remote tools it has, submit the JSON object to the returned submission endpoint, then retry the lookup.
 
-### Request
-
-```
-POST http://${OPENCLAW_CONTROL_API_HOST}:${OPENCLAW_CONTROL_API_PORT}/openclaw/cli
-Authorization: Bearer ${OPENCLAW_GATEWAY_TOKEN}
-Content-Type: application/json
-
-["agent", "--agent", "${OPENCLAW_DATA_FETCHER_AGENT}", "--message", "<interpolated prompt>", "--deliver"]
-```
-
-### Response
-
-The control API returns:
+### `needs_fetch` Response
 
 ```json
-{ "exit_code": 0, "stdout": "<agent reply text>", "stderr": "" }
+{
+  "key": "2026-04-26",
+  "source": "needs_fetch",
+  "instructionPrompt": "Look up the EUR/USD exchange rate for 2026-04-26...\n\nJSON response schema:\n```json\n...\n```\n\nPOST /api/v1/data-caches/currency-rates/fetch-submissions...",
+  "valueSchema": {
+    "type": "object",
+    "properties": {
+      "rate": { "type": "string" }
+    },
+    "required": ["rate"]
+  },
+  "submission": {
+    "method": "POST",
+    "path": "/api/v1/data-caches/currency-rates/fetch-submissions",
+    "bodyExample": {
+      "key": "2026-04-26",
+      "value": {}
+    }
+  },
+  "retry": {
+    "method": "POST",
+    "path": "/api/v1/data-caches/currency-rates/lookup",
+    "body": {
+      "key": "2026-04-26",
+      "strategy": "fetch_on_miss"
+    }
+  }
+}
 ```
 
-### JSON Extraction from Agent Reply
+### Submission Request
 
-The service extracts the JSON value from `stdout` using the following ordered steps:
+```http
+POST /api/v1/data-caches/:slug/fetch-submissions
+Content-Type: application/json
+Authorization: Bearer <business-api-token>
+```
 
-1. Search for a fenced ` ```json ... ``` ` block in the response; parse its content.
-2. If no fenced block is found, attempt to parse the entire `stdout` as a JSON string.
-3. If parsing fails, the fetch is considered unsuccessful.
+```json
+{
+  "key": "2026-04-26",
+  "value": {
+    "rate": "1.0823"
+  },
+  "expiresAt": "2026-04-27T00:00:00.000Z"
+}
+```
 
-The extracted JSON is validated against the cache's `value_schema`. On validation failure, the fetch is considered unsuccessful (not stored).
-
-### Fetch Timeout
-
-Configurable per `lookup()` call via `fetchTimeoutMs` (default: `30000` ms). On timeout, the fetch is considered unsuccessful and fallback logic applies.
+The submitted `value` is validated against `value_schema` and stored with `source: "fetcher"`. `fetchTimeoutMs` remains accepted on lookup requests for compatibility, but it is ignored.
 
 ---
 
@@ -200,7 +221,7 @@ For `string` key types, the `staleness_window` strategy degrades to `fetch_on_mi
 
 ## Lookup Strategies
 
-Every `lookup()` call specifies a strategy. The strategy controls whether and when the fetcher is invoked, and how fallback to previously known values works.
+Every `lookup()` call specifies a strategy. The strategy controls whether a missing fresh value returns a `needs_fetch` instruction and how fallback to previously known values works.
 
 ### `fallback_only`
 
@@ -213,27 +234,25 @@ Simplest strategy — no fetcher invocation.
 
 ### `fetch_on_miss`
 
-Invokes the fetcher exactly once on a cache miss.
+Returns an agent instruction on a cache miss when `fetcher_config` exists.
 
 1. Query for exact `(cache_id, entry_key)` match.
 2. If found and not expired → return with `source: "exact"`.
-3. If not found → invoke fetcher.
-4. If fetcher succeeds → store entry, return with `source: "fetched"`.
-5. For ordered key types: fall back to nearest stored entry → return with `source: "fallback"`.
-6. Return `null` if no fallback available.
+3. If not found and `fetcher_config` exists → return `source: "needs_fetch"` with submission and retry instructions.
+4. If no `fetcher_config` exists, for ordered key types: fall back to nearest stored entry → return with `source: "fallback"`.
+5. Return `null` if no fallback available.
 
 ### `staleness_window`
 
-Most complete strategy. Accepts a `maxStalenessWindow` parameter (in days) that bounds how far a fallback value can be from the requested key before the fetcher is triggered.
+Most complete strategy. Accepts a `maxStalenessWindow` parameter (in days) that bounds how far a fallback value can be from the requested key before a fetch instruction is returned.
 
 1. Query for exact `(cache_id, entry_key)` match.
 2. If found and not expired → return with `source: "exact"`.
 3. If not found → query for the nearest stored entry within `maxStalenessWindow` distance from the requested key.
 4. If a within-window entry exists → return with `source: "fallback"`, `isStale: true`, `staleDays: <distance>`.
-5. If no within-window entry → invoke fetcher.
-6. If fetcher succeeds → store entry, return with `source: "fetched"`.
-7. As a last resort, fall back to the nearest stored entry regardless of distance → return with `source: "fallback"`, `isStale: true`.
-8. Return `null` if no entries exist at all.
+5. If no within-window entry and `fetcher_config` exists → return `source: "needs_fetch"` with submission and retry instructions.
+6. If no `fetcher_config` exists, fall back to the nearest stored entry regardless of distance → return with `source: "fallback"`, `isStale: true`.
+7. Return `null` if no entries exist at all.
 
 > **Note:** For `string` key types, `staleness_window` degrades to `fetch_on_miss` — steps 3–4 are skipped and the last-resort fallback in step 7 is also skipped.
 
@@ -262,17 +281,36 @@ interface FetcherConfig {
 interface LookupOptions {
   strategy: 'fallback_only' | 'fetch_on_miss' | 'staleness_window'
   maxStalenessWindow?: number       // days; required for staleness_window
-  fetchTimeoutMs?: number           // default: 30000
+  fetchTimeoutMs?: number           // accepted for compatibility; ignored
 }
 
-interface LookupResult {
+interface FoundLookupResult {
   key: string
   value: JsonObject
-  source: 'exact' | 'fetched' | 'fallback'
+  source: 'exact' | 'fallback'
   fetchedAt: string
   isStale: boolean
   staleDays?: number                // only set when source === 'fallback'
 }
+
+interface NeedsFetchLookupResult {
+  key: string
+  source: 'needs_fetch'
+  instructionPrompt: string
+  valueSchema: JsonObject
+  submission: {
+    method: 'POST'
+    path: string
+    bodyExample: { key: string; value: JsonObject }
+  }
+  retry: {
+    method: 'POST'
+    path: string
+    body: { key: string; strategy: LookupOptions['strategy']; maxStalenessWindow?: number }
+  }
+}
+
+type LookupResult = FoundLookupResult | NeedsFetchLookupResult
 
 class DataCacheService {
   // Cache definitions
@@ -282,6 +320,7 @@ class DataCacheService {
 
   // Entries
   upsertEntry(cacheSlug: string, key: string, value: JsonObject, source?: 'manual' | 'import'): Promise<DataCacheEntry>
+  submitFetchedEntry(cacheSlug: string, key: string, value: JsonObject, expiresAt?: string): Promise<DataCacheEntry>
   bulkImport(cacheSlug: string, entries: { key: string; value: JsonObject }[]): Promise<{ inserted: number; updated: number }>
 
   // Lookup
@@ -303,6 +342,7 @@ All routes are under the `/api/v1/` prefix.
 | `GET` | `/data-caches/:slug/entries` | List entries — query params: `?key=&limit=` |
 | `POST` | `/data-caches/:slug/lookup` | Lookup with strategy — body: `{ key, strategy, maxStalenessWindow?, fetchTimeoutMs? }` |
 | `POST` | `/data-caches/:slug/entries` | Upsert a single entry — body: `{ key, value }` |
+| `POST` | `/data-caches/:slug/fetch-submissions` | Submit an agent-fetched value — body: `{ key, value, expiresAt? }` |
 | `POST` | `/data-caches/:slug/import` | Bulk import — body: `{ entries: [{ key, value }] }` |
 
 ---
@@ -346,12 +386,7 @@ data-cache import <slug> --file ./prices.csv \
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `OPENCLAW_CONTROL_API_HOST` | Hostname for the openclaw-control-api server (default: `127.0.0.1`) |
-| `OPENCLAW_CONTROL_API_PORT` | Port for the openclaw-control-api server (default: `8181`) |
-| `OPENCLAW_DATA_FETCHER_AGENT` | Agent name/id to use for data fetch requests |
-| `OPENCLAW_GATEWAY_TOKEN` | Bearer token for authenticating with the control API |
+No data-cache-specific agent environment variables are required. Callers use the normal Business API base URL and authentication token when submitting fetched values.
 
 ---
 
@@ -387,8 +422,8 @@ The expenses list and aggregate routes can optionally accept a `normalizeCurrenc
 1. **Migration** — `data_caches` + `data_cache_entries` tables, unique constraint, proximity indexes.
 2. **Drizzle schema** — two schema files added to `src/db/schema/`, exported from `index.ts`.
 3. **`DataCacheService`** — `createCache`, `upsertEntry`, `bulkImport`, and `lookup` with all three strategies.
-4. **Fetcher** — prompt interpolation, control-API HTTP call, JSON extraction from agent reply, schema validation.
-5. **CLI** — `data-cache` command scope.
-6. **API routes** — thin Express layer over the service.
+4. **Fetcher instructions** — prompt interpolation, JSON Schema block, submission endpoint, and retry endpoint.
+5. **API routes** — thin Express layer over the service, including fetch submissions.
+6. **CLI** — `data-cache` command scope.
 7. **`convertCurrency` utility** — thin wrapper for the currency normalisation use case.
 8. **Expense normalisation** — optional `normalizeCurrency` param on list/aggregate expense endpoints.

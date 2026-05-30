@@ -1,12 +1,10 @@
 import AjvModule from "ajv/dist/2020.js"; // because of NodeNext in tsconfig.json
 import { and, desc, eq } from "drizzle-orm";
 
-import { config } from "../config.js";
 import { getDatabase, getOrm } from "../db/connection.js";
 import { dataCacheEntries, dataCaches } from "../db/schema/index.js";
 import { AppError } from "../lib/errors.js";
 import { createPrefixedId } from "../lib/ids.js";
-import { logger } from "../lib/logger.js";
 import {
   defaultDataCacheValueSchema,
   type DataCacheInput,
@@ -17,8 +15,6 @@ import {
 
 const Ajv = AjvModule.default ?? AjvModule;
 const ajv = new Ajv({ allErrors: true });
-const DEFAULT_FETCH_TIMEOUT_MS = 30000;
-const JSON_BLOCK_PATTERN = /```json\s*([\s\S]*?)```/i;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 type EntrySource = "fetcher" | "manual" | "import";
@@ -33,14 +29,40 @@ type LookupOptions = {
   fetchTimeoutMs?: number;
 };
 
-type LookupResult = {
+type FoundLookupResult = {
   key: string;
   value: JsonObject;
-  source: "exact" | "fetched" | "fallback";
+  source: "exact" | "fallback";
   fetchedAt: string;
   isStale: boolean;
   staleDays?: number;
 };
+
+type NeedsFetchLookupResult = {
+  key: string;
+  source: "needs_fetch";
+  instructionPrompt: string;
+  valueSchema: JsonObject;
+  submission: {
+    method: "POST";
+    path: string;
+    bodyExample: {
+      key: string;
+      value: JsonObject;
+    };
+  };
+  retry: {
+    method: "POST";
+    path: string;
+    body: {
+      key: string;
+      strategy: LookupStrategy;
+      maxStalenessWindow?: number;
+    };
+  };
+};
+
+type LookupResult = FoundLookupResult | NeedsFetchLookupResult;
 
 type ParsedDataCache = ReturnType<typeof mapCache>;
 type ParsedDataCacheEntry = ReturnType<typeof mapEntry>;
@@ -255,7 +277,7 @@ function getNearestEntry(cache: ParsedDataCache, key: string, maxDistance?: numb
   return entry;
 }
 
-function buildFallbackResult(cache: ParsedDataCache, requestedKey: string, entry: ParsedDataCacheEntry): LookupResult {
+function buildFallbackResult(cache: ParsedDataCache, requestedKey: string, entry: ParsedDataCacheEntry): FoundLookupResult {
   const staleDays = calculateStaleDistance(cache.keyType, requestedKey, entry.key);
 
   return {
@@ -287,124 +309,54 @@ function buildPrompt(fetcherConfig: FetcherConfig, key: string, valueSchema: Jso
   return `${interpolated}\n\nJSON response schema:\n\`\`\`json\n${JSON.stringify(valueSchema, null, 2)}\n\`\`\``;
 }
 
-function extractJsonObject(stdout: string): JsonObject | null {
-  const fenced = JSON_BLOCK_PATTERN.exec(stdout);
-  const candidates = fenced ? [fenced[1], stdout] : [stdout];
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate.trim()) as unknown;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as JsonObject;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
-}
-
-async function fetchMissingValue(
+function buildNeedsFetchResult(
   cache: ParsedDataCache,
   key: string,
-  fetchTimeoutMs: number,
-): Promise<ParsedDataCacheEntry | null> {
-  const fetcherAgent = process.env.OPENCLAW_DATA_FETCHER_AGENT ?? config.OPENCLAW_DATA_FETCHER_AGENT;
-  const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN ?? config.OPENCLAW_GATEWAY_TOKEN;
-  const controlApiHost = process.env.OPENCLAW_CONTROL_API_HOST ?? config.OPENCLAW_CONTROL_API_HOST;
-  const controlApiPort = process.env.OPENCLAW_CONTROL_API_PORT ?? String(config.OPENCLAW_CONTROL_API_PORT);
+  opts: LookupOptions,
+): NeedsFetchLookupResult {
+  const submissionPath = `/api/v1/data-caches/${encodeURIComponent(cache.slug)}/fetch-submissions`;
+  const lookupPath = `/api/v1/data-caches/${encodeURIComponent(cache.slug)}/lookup`;
+  const retryBody = {
+    key,
+    strategy: opts.strategy,
+    ...(opts.maxStalenessWindow === undefined ? {} : { maxStalenessWindow: opts.maxStalenessWindow }),
+  };
+  const fetchPrompt = buildPrompt(cache.fetcherConfig as FetcherConfig, key, cache.valueSchema);
+  const instructionPrompt = `${fetchPrompt}
 
-  if (!cache.fetcherConfig) {
-    return null;
-  }
+When you have the value, submit it to the Warehouse Business API using the caller's existing Business API authentication.
 
-  if (!fetcherAgent || !gatewayToken) {
-    logger.warn("Data cache fetcher is configured but OpenClaw environment is incomplete", {      
-      cacheSlug: cache.slug,
-    });
+POST ${submissionPath}
+\`\`\`json
+${JSON.stringify({ key, value: {} }, null, 2)}
+\`\`\`
 
-    // Explain what's missing:
-    logger.warn("Data cache fetcher is configured but OpenClaw environment is incomplete", {
-      cacheSlug: cache.slug,
-      fetcherAgent,
-      gatewayToken: gatewayToken ? "present" : "MISSING",
-      controlApiHost,
-      controlApiPort,
-    });
-    return null;
-  }
+The value property must be a JSON object matching the schema above. After a successful submission, retry the lookup:
 
-  const prompt = buildPrompt(cache.fetcherConfig as FetcherConfig, key, cache.valueSchema);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs);
+POST ${lookupPath}
+\`\`\`json
+${JSON.stringify(retryBody, null, 2)}
+\`\`\``;
 
-  try {
-    const response = await fetch(
-      `http://${controlApiHost}:${controlApiPort}/openclaw/cli`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${gatewayToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify([
-          "agent",
-          "--agent",
-          fetcherAgent,
-          "--message",
-          prompt
-        ]),
-        signal: controller.signal,
+  return {
+    key,
+    source: "needs_fetch",
+    instructionPrompt,
+    valueSchema: cache.valueSchema,
+    submission: {
+      method: "POST",
+      path: submissionPath,
+      bodyExample: {
+        key,
+        value: {},
       },
-    );
-
-    if (!response.ok) {
-      logger.warn("Data cache fetcher request failed", {
-        cacheSlug: cache.slug,
-        status: response.status,
-      });
-      return null;
-    }
-
-    const payload = (await response.json()) as { exit_code?: number; stdout?: string; stderr?: string };
-    if (payload.exit_code !== 0 || typeof payload.stdout !== "string") {
-      logger.warn("Data cache fetcher returned a non-success result", {
-        cacheSlug: cache.slug,
-        exitCode: payload.exit_code,
-        stderr: payload.stderr,
-      });
-      return null;
-    }
-
-    const parsedValue = extractJsonObject(payload.stdout);
-    if (!parsedValue) {
-      logger.warn("Data cache fetcher did not return valid JSON", {
-        cacheSlug: cache.slug,
-        stdout: payload.stdout,
-      });
-      return null;
-    }
-
-    validateEntryValue(cache.valueSchema, parsedValue);
-    return upsertEntry(cache.slug, key, parsedValue, "fetcher");
-  } catch (error) {
-    if (error instanceof AppError) {
-      logger.warn("Fetched data cache value failed validation", {
-        cacheSlug: cache.slug,
-        error,
-      });
-      return null;
-    }
-
-    logger.warn("Data cache fetcher failed", {
-      cacheSlug: cache.slug,
-      error,
-    });
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
+    },
+    retry: {
+      method: "POST",
+      path: lookupPath,
+      body: retryBody,
+    },
+  };
 }
 
 export function createCache(input: DataCacheInput) {
@@ -518,6 +470,10 @@ export function upsertEntry(cacheSlug: string, key: string, value: JsonObject, s
   return mapEntry(created!);
 }
 
+export function submitFetchedEntry(cacheSlug: string, key: string, value: JsonObject, expiresAt?: string) {
+  return upsertEntry(cacheSlug, key, value, "fetcher", expiresAt);
+}
+
 export function bulkImport(cacheSlug: string, entries: Array<{ key: string; value: JsonObject; expiresAt?: string }>) {
   let inserted = 0;
   let updated = 0;
@@ -560,7 +516,6 @@ export async function lookup(cacheSlug: string, key: string, opts: LookupOptions
     };
   }
 
-  const fetchTimeoutMs = opts.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
   const orderedKeyType = cache.keyType !== "string";
 
   if (opts.strategy === "fallback_only") {
@@ -578,15 +533,8 @@ export async function lookup(cacheSlug: string, key: string, opts: LookupOptions
     }
   }
 
-  const fetched = await fetchMissingValue(cache, key, fetchTimeoutMs);
-  if (fetched) {
-    return {
-      key: fetched.key,
-      value: fetched.value,
-      source: "fetched",
-      fetchedAt: fetched.fetchedAt,
-      isStale: false,
-    };
+  if (cache.fetcherConfig) {
+    return buildNeedsFetchResult(cache, key, opts);
   }
 
   if (orderedKeyType) {

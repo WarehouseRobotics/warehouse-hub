@@ -6,7 +6,6 @@ frozen: false
 see_also:
   - docs/apps/business-api/services.md
   - docs/apps/business-api/cli.md
-  - docs/openclaw/http-api.md
 ---
 
 # Data Caches
@@ -18,7 +17,7 @@ Use them for values that:
 * should survive restarts
 * need exact or nearest-key lookup
 * may be imported manually
-* may be fetched on demand through an OpenClaw agent
+* may return generic agent instructions when a value is missing
 
 Examples:
 
@@ -147,29 +146,40 @@ fallback_only:
 
 fetch_on_miss:
   - "return exact value when present and fresh"
-  - "otherwise try the fetcher once when configured"
-  - "if fetch succeeds, store and return the fetched entry"
-  - "if fetch fails, return nearest fallback for ordered key types"
-  - "for string keys return null when nothing is fetched"
+  - "otherwise return a needs_fetch instruction when fetcher_config is present"
+  - "if no fetcher_config is present, return nearest fallback for ordered key types"
+  - "for string keys return null when no instruction can be generated"
 
 staleness_window:
   - "return exact value when present and fresh"
   - "for ordered key types, return nearest fallback when distance is within maxStalenessWindow"
-  - "otherwise try the fetcher once when configured"
-  - "if fetch fails, return nearest fallback for ordered key types"
+  - "otherwise return a needs_fetch instruction when fetcher_config is present"
+  - "if no fetcher_config is present, return nearest fallback for ordered key types"
   - "for string keys degrade to fetch_on_miss"
 ```
 
-Lookup result shape:
+Found lookup result shape:
 
 ```yaml
 fields:
   key: "resolved entry key"
   value: "entry JSON object"
-  source: "exact | fetched | fallback"
+  source: "exact | fallback"
   fetchedAt: "ISO timestamp"
   isStale: "boolean"
   staleDays: "number, only for fallback on ordered key types"
+```
+
+Instruction lookup result shape:
+
+```yaml
+fields:
+  key: "requested entry key"
+  source: "needs_fetch"
+  instructionPrompt: "agent-facing prompt with fetch instructions, JSON Schema, submission endpoint, and retry endpoint"
+  valueSchema: "cache JSON Schema"
+  submission: "POST /api/v1/data-caches/:slug/fetch-submissions with { key, value, expiresAt? }"
+  retry: "POST /api/v1/data-caches/:slug/lookup with the original lookup body"
 ```
 
 Freshness rules:
@@ -178,7 +188,7 @@ Freshness rules:
 * otherwise `default_ttl_days` is applied from the cache definition
 * when neither is set, stored values are treated as non-expiring
 
-## Fetcher Integration
+## Generic Agent Fetch Workflow
 
 Fetcher support is optional and configured per cache through `fetcher_config`.
 
@@ -192,45 +202,27 @@ Runtime behavior:
 
 * interpolate the prompt
 * append the cache JSON Schema as a fenced `json` block
-* call the OpenClaw control API over HTTP
-* parse a JSON object from the agent reply
-* validate it against `value_schema`
-* store it as a `fetcher` entry on success
+* append the API-relative fetch submission endpoint and retry lookup request
+* return the instruction as a `needs_fetch` lookup result
+* let the calling agent fetch the value with any available local or remote tools
+* accept the fetched value through `POST /api/v1/data-caches/:slug/fetch-submissions`
+* validate it against `value_schema` and store it as a `fetcher` entry
 
-Environment variables:
-
-```yaml
-OPENCLAW_CONTROL_API_HOST: "default 127.0.0.1"
-OPENCLAW_CONTROL_API_PORT: "default 8181"
-OPENCLAW_DATA_FETCHER_AGENT: "required only for fetch-enabled lookups"
-OPENCLAW_GATEWAY_TOKEN: "required only for fetch-enabled lookups"
-```
-
-Control API request shape:
+Submission request shape:
 
 ```json
-[
-  "agent",
-  "--agent",
-  "<OPENCLAW_DATA_FETCHER_AGENT>",
-  "--message",
-  "<interpolated prompt>",
-  "--deliver",
-  "--json"
-]
+{
+  "key": "2026-04-26",
+  "value": {
+    "rate": "1.0823"
+  },
+  "expiresAt": "2026-04-27T00:00:00.000Z"
+}
 ```
 
-JSON extraction order:
+The generated endpoint paths are API-relative. Callers prepend their configured Business API base URL and use their existing Business API authentication.
 
-```yaml
-steps:
-  - "first fenced ```json ... ``` block"
-  - "otherwise parse full stdout as JSON"
-```
-
-The `--json` flag is included so the OpenClaw CLI returns structured output without extra wrapper text when supported.
-
-Fetch failures are non-fatal to lookup flow. The service logs the issue and continues with fallback behavior when possible.
+`fetchTimeoutMs` remains accepted on lookup requests for compatibility, but it is ignored because the Business API no longer waits on an external agent.
 
 ## HTTP API
 
@@ -250,6 +242,7 @@ routes:
   - "GET /api/v1/data-caches/:slug/entries"
   - "POST /api/v1/data-caches/:slug/lookup"
   - "POST /api/v1/data-caches/:slug/entries"
+  - "POST /api/v1/data-caches/:slug/fetch-submissions"
   - "POST /api/v1/data-caches/:slug/import"
 ```
 
@@ -257,8 +250,9 @@ Route notes:
 
 * `GET /entries` supports `key` and `limit`
 * `POST /entries` is a manual upsert
+* `POST /fetch-submissions` is the preferred endpoint for agent-filled values and stores entries with `source: "fetcher"`
 * `POST /import` accepts `{ entries: [{ key, value, expiresAt? }] }`
-* `POST /lookup` accepts `key`, `strategy`, and optional `maxStalenessWindow` and `fetchTimeoutMs`
+* `POST /lookup` accepts `key`, `strategy`, and optional `maxStalenessWindow` and compatibility-only `fetchTimeoutMs`
 
 ## CLI
 
@@ -298,7 +292,8 @@ Implemented in this session:
 * persistent cache definitions and entries
 * runtime JSON Schema validation
 * exact lookup, nearest fallback, staleness windows
-* optional OpenClaw-backed fetch on miss
+* optional generic agent instruction on miss
+* agent fetch-submission endpoint
 * HTTP API
 * CLI support
 * integration tests for service, route, and CLI paths
@@ -306,5 +301,5 @@ Implemented in this session:
 Not implemented yet:
 
 * direct currency normalization integration into expenses, payrolls, or invoices
-* dashboard UI for browsing or editing caches
+* dashboard UI for guiding humans through `needs_fetch` prompts
 * cache deletion endpoints

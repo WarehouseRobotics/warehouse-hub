@@ -5,14 +5,14 @@ metadata:
   {
     "openclaw":
       {
-        "requires": { "bins": ["docker"], "env": [], "config": [] }
+        "requires": { "bins": ["docker"], "env": ["WROBO_PYTHON3_PATH", "WROBO_BUSINESS_API_PATH", "WROBO_API_BASE_URL", "WROBO_API_TOKEN"], "config": [] }
       },
   }
 ---
 
 # Business API CLI Skill
 
-Use the Warehouse Hub Business API CLI `wrobo-biz` command when an Openclaw agent needs deterministic business operations against local hub data: company card setup, contacts, deals, documents, expenses, sales invoices, bank accounts, bank transactions, projects, and tasks.
+Use the Warehouse Hub Business API CLI `wrobo-biz` command when an Openclaw agent needs deterministic business operations against local hub data: company card setup, contacts, deals, documents, expenses, sales invoices, bank accounts, bank transactions, projects, tasks, and persistent data caches.
 
 This CLI is the preferred path for structured CRUD-style work that should not depend on an LLM.
 
@@ -21,7 +21,7 @@ This CLI is the preferred path for structured CRUD-style work that should not de
 General pattern (wrobo-biz is linked to /usr/bin which is in PATH):
 
 ```bash
-wrobo-biz <command> <subcommand> ...
+$WROBO_PYTHON3_PATH $WROBO_BUSINESS_API_PATH/bin/wrobo-biz <command> <subcommand> ...
 ```
 
 For command discovery and examples, the CLI now has layered help:
@@ -35,6 +35,7 @@ wrobo-biz help bank-accounts
 wrobo-biz help bank-transactions
 wrobo-biz help payrolls
 wrobo-biz help invoices
+wrobo-biz help data-cache
 ```
 
 The "help" command, scope name and action names do not use the "--" prefix, while command arguments always are prefixed with "--" (example: "... --after 2025-01-30")
@@ -60,6 +61,9 @@ wrobo-biz sales-invoices list --after 2025-01-30
 
 # For payrolls
 wrobo-biz payrolls list --after 2025-01-30
+
+# For reference-data caches
+wrobo-biz data-cache list
 ```
 
 For more filters consult scope help with `wrobo-biz help <scope>`.
@@ -110,6 +114,8 @@ Top-level commands:
 - `sales-invoices <subcommand>`
 - `projects <subcommand>`
 - `tasks <subcommand>`
+- `data-cache <subcommand>`
+- `data-caches <subcommand>` alias for `data-cache`
 
 Supported subcommands by scope:
 
@@ -157,6 +163,12 @@ Supported subcommands by scope:
 - `tasks get <id-or-slug>`
 - `tasks list`
 - `tasks update <id-or-slug> '<json-patch>'`
+- `data-cache list`
+- `data-cache create <slug> --name <display-name> --key-type <string|date|datetime|numeric> [--description <text>] [--value-schema <json>] [--fetcher-config <json>] [--ttl-days <days>]`
+- `data-cache get <slug>`
+- `data-cache lookup <slug> <key> --strategy <fallback_only|fetch_on_miss|staleness_window> [--max-staleness-days <days>]`
+- `data-cache upsert <slug> <key> --value '<json>' [--expires-at <iso-datetime>]`
+- `data-cache import <slug> --file <path> [--key-col <name>] [--value-col <name>]`
 
 ## Safe Usage Rules
 
@@ -168,6 +180,7 @@ Supported subcommands by scope:
 - Treat `<id-or-slug>` literally: many `get` and `update` commands accept either the internal ID or slug.
 - For file ingestion, confirm the source path exists before calling `documents upload` or `documents ingest`.
 - For downloads, choose an explicit output path and expect the command to write a file.
+- For `data-cache lookup`, handle `source: "needs_fetch"` as an instruction to fetch the value, submit it to the returned endpoint, then retry the lookup.
 
 ## List Filters
 
@@ -243,6 +256,22 @@ wrobo-biz sales-invoices list --similar "warehouse onboarding consulting" --afte
 ```
 
 Prefer exact `get` commands when you already have an ID or slug.
+
+### 5. Use Data Caches For Persistent Reference Values
+
+Use `data-cache` for durable reference data such as exchange rates, supplier material prices, benchmark values, or other key/value facts that should survive restarts.
+
+```bash
+wrobo-biz data-cache create currency-rates-eur-usd --name "Currency Rates EUR/USD" --key-type date --value-schema '{"type":"object","properties":{"rate":{"type":"string"},"base":{"type":"string"},"target":{"type":"string"}},"required":["rate","base","target"]}' --fetcher-config '{"prompt":"Look up the EUR/USD exchange rate for {{ key }}. Reply with JSON only."}' --ttl-days 1
+```
+
+Lookup strategies:
+
+- `fallback_only`: use exact or nearest stored values only; never asks for a fresh fetch.
+- `fetch_on_miss`: return exact values, otherwise return a `needs_fetch` instruction when the cache has `fetcherConfig`.
+- `staleness_window`: use a nearby stored value within `--max-staleness-days`, otherwise return `needs_fetch` when configured.
+
+When lookup returns `source: "needs_fetch"`, read the returned `instructionPrompt`, fetch the missing value using your available tools, submit the JSON object to the returned `submission.path` with normal Business API auth, then rerun the returned retry request.
 
 ## Common Examples
 
@@ -322,6 +351,44 @@ Download a stored document:
 
 ```bash
 wrobo-biz documents download doc_000050 /tmp/vendor-invoice.pdf
+```
+
+### Data Caches
+
+Inspect the data-cache scope help:
+
+```bash
+wrobo-biz help data-cache
+```
+
+Create a cache for dated exchange rates:
+
+```bash
+wrobo-biz data-cache create currency-rates-eur-usd --name "Currency Rates EUR/USD" --key-type date --value-schema '{"type":"object","properties":{"rate":{"type":"string"},"base":{"type":"string"},"target":{"type":"string"}},"required":["rate","base","target"]}' --fetcher-config '{"prompt":"Look up the EUR/USD exchange rate for {{ key }}. Return a JSON object matching the schema."}' --ttl-days 1
+```
+
+Manually upsert a value:
+
+```bash
+wrobo-biz data-cache upsert currency-rates-eur-usd 2026-04-26 --value '{"rate":"1.0831","base":"EUR","target":"USD"}'
+```
+
+Lookup with a staleness window:
+
+```bash
+wrobo-biz data-cache lookup currency-rates-eur-usd 2026-04-27 --strategy staleness_window --max-staleness-days 7
+```
+
+Import JSON entries:
+
+```bash
+wrobo-biz data-cache import currency-rates-eur-usd --file ./rates.json
+```
+
+Import CSV rows by key column:
+
+```bash
+wrobo-biz data-cache import materials --file ./materials.csv --key-col SKU --value-col Price
 ```
 
 ## Agent Decision Guide

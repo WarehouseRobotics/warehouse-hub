@@ -5,7 +5,7 @@ metadata:
   {
     "openclaw":
       {
-        "requires": { "bins": ["docker"], "env": ["HUB_TMP_DIR", "HUB_URL"], "config": [] }
+        "requires": { "bins": ["docker"], "env": ["HUB_TMP_DIR", "HUB_URL", "WROBO_PYTHON3_PATH", "WROBO_BUSINESS_API_PATH", "WROBO_API_BASE_URL", "WROBO_API_TOKEN"], "config": [] }
       },
   }
 ---
@@ -39,6 +39,14 @@ So we'll use kind 'expenses' for bills from suppliers, "sales-invoices" for our 
 If the kind of the document isn't clear from user's input, **look at the provided image or the pdf to deduct the document kind.**
 
 ---
+
+## Default Command Pattern
+
+General pattern (wrobo-biz is linked to /usr/bin which is in PATH):
+
+```bash
+$WROBO_PYTHON3_PATH $WROBO_BUSINESS_API_PATH/bin/wrobo-biz <command> <subcommand> ...
+```
 
 ## Inbound: Recording an Expense Invoice
 

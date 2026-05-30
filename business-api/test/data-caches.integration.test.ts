@@ -111,31 +111,8 @@ describe("data-cache service flows", () => {
     );
   });
 
-  it("fetches missing values through OpenClaw and stores the fetched result", async () => {
-    const { createCache, lookup, listCacheEntries } = await import("../src/services/data-caches.js");
-
-    process.env.OPENCLAW_DATA_FETCHER_AGENT = "accounting";
-    process.env.OPENCLAW_GATEWAY_TOKEN = "token-123";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url, init) => {
-        expect(String(init?.headers && (init.headers as Record<string, string>).authorization)).toBe("Bearer token-123");
-        const body = JSON.parse(String(init?.body)) as string[];
-        expect(body[0]).toBe("agent");
-        expect(body[2]).toBe("accounting");
-        expect(body[4]).toContain("2026-04-26");
-        expect(body[4]).toContain("JSON response schema:");
-
-        return new Response(
-          JSON.stringify({
-            exit_code: 0,
-            stdout: '```json\n{"rate":"1.0831","base":"EUR","target":"USD"}\n```',
-            stderr: "",
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }),
-    );
+  it("returns an agent instruction for missing fetch-enabled values and accepts fetched submissions", async () => {
+    const { createCache, lookup, listCacheEntries, submitFetchedEntry } = await import("../src/services/data-caches.js");
 
     createCache({
       slug: "currency-rates-eur-usd",
@@ -165,7 +142,35 @@ describe("data-cache service flows", () => {
     expect(result).toEqual(
       expect.objectContaining({
         key: "2026-04-26",
-        source: "fetched",
+        source: "needs_fetch",
+        valueSchema: expect.objectContaining({ required: ["rate", "base", "target"] }),
+        submission: expect.objectContaining({
+          method: "POST",
+          path: "/api/v1/data-caches/currency-rates-eur-usd/fetch-submissions",
+        }),
+        retry: expect.objectContaining({
+          method: "POST",
+          path: "/api/v1/data-caches/currency-rates-eur-usd/lookup",
+        }),
+      }),
+    );
+    expect(result?.source === "needs_fetch" ? result.instructionPrompt : "").toContain("JSON response schema:");
+    expect(result?.source === "needs_fetch" ? result.instructionPrompt : "").toContain("/fetch-submissions");
+
+    submitFetchedEntry("currency-rates-eur-usd", "2026-04-26", {
+      rate: "1.0831",
+      base: "EUR",
+      target: "USD",
+    });
+
+    const retryResult = await lookup("currency-rates-eur-usd", "2026-04-26", {
+      strategy: "fetch_on_miss",
+    });
+
+    expect(retryResult).toEqual(
+      expect.objectContaining({
+        key: "2026-04-26",
+        source: "exact",
         isStale: false,
         value: {
           rate: "1.0831",
@@ -176,6 +181,7 @@ describe("data-cache service flows", () => {
     );
 
     expect(listCacheEntries("currency-rates-eur-usd")).toHaveLength(1);
+    expect(listCacheEntries("currency-rates-eur-usd")[0].source).toBe("fetcher");
   });
 
   it("uses staleness windows for ordered key types and degrades to fetch-on-miss for string keys", async () => {
@@ -198,7 +204,7 @@ describe("data-cache service flows", () => {
       maxStalenessWindow: 3,
     });
     expect(withinWindow?.source).toBe("fallback");
-    expect(withinWindow?.staleDays).toBe(2);
+    expect(withinWindow?.source === "fallback" ? withinWindow.staleDays : undefined).toBe(2);
 
     createCache({
       slug: "materials",
@@ -214,29 +220,18 @@ describe("data-cache service flows", () => {
       },
     });
 
-    process.env.OPENCLAW_DATA_FETCHER_AGENT = "accounting";
-    process.env.OPENCLAW_GATEWAY_TOKEN = "token-123";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        return new Response(
-          JSON.stringify({
-            exit_code: 0,
-            stdout: '{"price":"11.50"}',
-            stderr: "",
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }),
-    );
-
-    const fetched = await lookup("materials", "SKU-001", {
+    const fetchInstruction = await lookup("materials", "SKU-001", {
       strategy: "staleness_window",
       maxStalenessWindow: 7,
     });
 
-    expect(fetched?.source).toBe("fetched");
-    expect(fetched?.key).toBe("SKU-001");
+    expect(fetchInstruction?.source).toBe("needs_fetch");
+    expect(fetchInstruction?.key).toBe("SKU-001");
+
+    const fallbackOnly = await lookup("materials", "SKU-002", {
+      strategy: "fallback_only",
+    });
+    expect(fallbackOnly).toBeNull();
   });
 });
 
@@ -330,6 +325,111 @@ describe("data-cache HTTP routes", () => {
       }),
     );
   });
+
+  it("returns fetch instructions and accepts fetched submissions through the API", async () => {
+    const createResponse = await fetch(`${baseUrl}/api/v1/data-caches`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        slug: "currency-rates",
+        displayName: "Currency Rates",
+        keyType: "date",
+        valueSchema: {
+          type: "object",
+          properties: {
+            rate: { type: "string" },
+          },
+          required: ["rate"],
+        },
+        fetcherConfig: {
+          prompt: "Find the EUR/USD exchange rate for {{ key }}.",
+        },
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+
+    const lookupResponse = await fetch(`${baseUrl}/api/v1/data-caches/currency-rates/lookup`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        key: "2026-04-26",
+        strategy: "fetch_on_miss",
+      }),
+    });
+
+    expect(lookupResponse.status).toBe(200);
+    expect((await lookupResponse.json()) as unknown).toEqual(
+      expect.objectContaining({
+        key: "2026-04-26",
+        source: "needs_fetch",
+        submission: expect.objectContaining({
+          path: "/api/v1/data-caches/currency-rates/fetch-submissions",
+        }),
+      }),
+    );
+
+    const invalidSubmission = await fetch(`${baseUrl}/api/v1/data-caches/currency-rates/fetch-submissions`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        key: "2026-04-26",
+        value: {
+          value: "1.0800",
+        },
+      }),
+    });
+    expect(invalidSubmission.status).toBe(400);
+
+    const validSubmission = await fetch(`${baseUrl}/api/v1/data-caches/currency-rates/fetch-submissions`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        key: "2026-04-26",
+        value: {
+          rate: "1.0800",
+        },
+      }),
+    });
+    expect(validSubmission.status).toBe(201);
+    expect((await validSubmission.json()) as unknown).toEqual(
+      expect.objectContaining({
+        key: "2026-04-26",
+        source: "fetcher",
+      }),
+    );
+
+    const retryResponse = await fetch(`${baseUrl}/api/v1/data-caches/currency-rates/lookup`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        key: "2026-04-26",
+        strategy: "fetch_on_miss",
+      }),
+    });
+    expect(retryResponse.status).toBe(200);
+    expect((await retryResponse.json()) as unknown).toEqual(
+      expect.objectContaining({
+        key: "2026-04-26",
+        source: "exact",
+      }),
+    );
+  });
 });
 
 describe("data-cache CLI", () => {
@@ -395,6 +495,40 @@ describe("data-cache CLI", () => {
       expect.objectContaining({
         source: "exact",
         key: "2026-04-26",
+      }),
+    );
+
+    runCli([
+      "data-cache",
+      "create",
+      "missing-rates",
+      "--name",
+      "Missing Rates",
+      "--key-type",
+      "date",
+      "--value-schema",
+      '{"type":"object","properties":{"rate":{"type":"string"}},"required":["rate"]}',
+      "--fetcher-config",
+      '{"prompt":"Find the EUR/USD exchange rate for {{ key }}."}',
+    ]);
+
+    const needsFetchResult = JSON.parse(
+      runCli([
+        "data-cache",
+        "lookup",
+        "missing-rates",
+        "2026-04-27",
+        "--strategy",
+        "fetch_on_miss",
+      ]),
+    ) as { source: string; key: string; submission: { path: string } };
+    expect(needsFetchResult).toEqual(
+      expect.objectContaining({
+        source: "needs_fetch",
+        key: "2026-04-27",
+        submission: expect.objectContaining({
+          path: "/api/v1/data-caches/missing-rates/fetch-submissions",
+        }),
       }),
     );
 
