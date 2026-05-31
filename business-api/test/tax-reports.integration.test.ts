@@ -620,6 +620,82 @@ describe("tax report service flows", () => {
     ]);
   });
 
+  it("soft deletes report-owned artifacts while preserving source and evidence documents", async () => {
+    const company = await createCompanyCard();
+    const document = await uploadTaxDocument("deletable declaration");
+    const receipt = await uploadTaxReceipt("preserved payment receipt");
+    const {
+      createTaxReport,
+      createTaxReportPaymentLink,
+      listTaxCarryforwards,
+      listTaxReportPaymentLinks,
+      listTaxReports,
+      softDeleteTaxReport,
+    } = await import("../src/services/tax-reports.js");
+    const { getDocumentMeta } = await import("../src/services/documents.js");
+    const { getOrm } = await import("../src/db/connection.js");
+    const { taxCarryforwards, taxReportPaymentLinks, taxReports } =
+      await import("../src/db/schema/index.js");
+
+    const report = createTaxReport(
+      baseTaxReportInput(company.companyId, document.documentId),
+    );
+    const paymentLink = createTaxReportPaymentLink({
+      taxReportId: report.taxReport.taxReportId,
+      documentId: receipt.documentId,
+      amount: "10.00",
+      currency: "EUR",
+      paidAt: "2026-04-20",
+      paymentReference: "AEAT-303-Q1-DELETE",
+      status: "suggested",
+      confidence: "high",
+    });
+
+    expect(listTaxCarryforwards({ includeSuperseded: true })).toEqual([
+      expect.objectContaining({ originTaxReportId: report.taxReport.taxReportId }),
+    ]);
+    expect(listTaxReportPaymentLinks()).toEqual([
+      expect.objectContaining({
+        taxReportPaymentLinkId: paymentLink.taxReportPaymentLinkId,
+      }),
+    ]);
+
+    softDeleteTaxReport(report.taxReport.taxReportId);
+
+    expect(await listTaxReports()).toEqual([]);
+    expect(listTaxCarryforwards({ includeSuperseded: true })).toEqual([]);
+    expect(listTaxReportPaymentLinks()).toEqual([]);
+    expect(getDocumentMeta(document.documentId).documentId).toBe(document.documentId);
+    expect(getDocumentMeta(receipt.documentId).documentId).toBe(receipt.documentId);
+
+    const reportRow = getOrm()
+      .select()
+      .from(taxReports)
+      .where(eq(taxReports.id, report.taxReport.taxReportId))
+      .get();
+    const carryforwardRow = getOrm()
+      .select()
+      .from(taxCarryforwards)
+      .where(
+        eq(taxCarryforwards.originTaxReportId, report.taxReport.taxReportId),
+      )
+      .get();
+    const paymentLinkRow = getOrm()
+      .select()
+      .from(taxReportPaymentLinks)
+      .where(
+        eq(
+          taxReportPaymentLinks.id,
+          paymentLink.taxReportPaymentLinkId,
+        ),
+      )
+      .get();
+
+    expect(reportRow?.deletedAt).toBeTruthy();
+    expect(carryforwardRow?.deletedAt).toBe(reportRow?.deletedAt);
+    expect(paymentLinkRow?.deletedAt).toBe(reportRow?.deletedAt);
+  });
+
   it("builds the latest Spanish VAT position without summing stale period carryforwards", async () => {
     const company = await createCompanyCard();
     const q1Document = await uploadTaxDocument("q1 vat position");

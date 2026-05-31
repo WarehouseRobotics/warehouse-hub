@@ -1181,12 +1181,21 @@ export function listTaxReportPaymentLinks(
   if (filters.status) {
     conditions.push(eq(taxReportPaymentLinks.status, filters.status));
   }
+  const activeTaxReportIds = new Set(
+    getOrm()
+      .select({ id: taxReports.id })
+      .from(taxReports)
+      .where(isNull(taxReports.deletedAt))
+      .all()
+      .map((record) => record.id),
+  );
 
   return getOrm()
     .select()
     .from(taxReportPaymentLinks)
     .where(and(...conditions))
     .all()
+    .filter((record) => activeTaxReportIds.has(record.taxReportId))
     .map(mapTaxReportPaymentLink)
     .sort((left, right) => {
       return (
@@ -1811,12 +1820,21 @@ export function listTaxCarryforwards(filters: TaxCarryforwardListFilters = {}) {
   } else if (!filters.includeSuperseded) {
     conditions.push(eq(taxCarryforwards.status, "active"));
   }
+  const activeTaxReportIds = new Set(
+    getOrm()
+      .select({ id: taxReports.id })
+      .from(taxReports)
+      .where(isNull(taxReports.deletedAt))
+      .all()
+      .map((record) => record.id),
+  );
 
   return getOrm()
     .select()
     .from(taxCarryforwards)
     .where(and(...conditions))
     .all()
+    .filter((record) => activeTaxReportIds.has(record.originTaxReportId))
     .map(mapTaxCarryforward)
     .sort((left, right) => {
       return (
@@ -1829,12 +1847,44 @@ export function listTaxCarryforwards(filters: TaxCarryforwardListFilters = {}) {
 
 export function softDeleteTaxReport(idOrSlug: string) {
   const existing = requireTaxReportRecord(idOrSlug);
-  getOrm()
-    .update(taxReports)
-    .set({
-      deletedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    })
-    .where(eq(taxReports.id, existing.id))
-    .run();
+  const now = new Date().toISOString();
+
+  getDatabase().transaction(() => {
+    getOrm()
+      .update(taxReports)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(taxReports.id, existing.id))
+      .run();
+
+    getOrm()
+      .update(taxCarryforwards)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          isNull(taxCarryforwards.deletedAt),
+          eq(taxCarryforwards.originTaxReportId, existing.id),
+        ),
+      )
+      .run();
+
+    getOrm()
+      .update(taxReportPaymentLinks)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          isNull(taxReportPaymentLinks.deletedAt),
+          eq(taxReportPaymentLinks.taxReportId, existing.id),
+        ),
+      )
+      .run();
+  })();
 }

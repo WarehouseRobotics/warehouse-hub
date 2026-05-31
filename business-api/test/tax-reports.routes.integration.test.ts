@@ -199,6 +199,27 @@ describe("tax report HTTP routes", () => {
       }),
     );
 
+    const paymentLinkResponse = await fetch(
+      `${baseUrl}/api/v1/tax-report-payment-links`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-api-key",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          taxReportId: created.taxReport.taxReportId,
+          amount: "10.00",
+          currency: "EUR",
+          paidAt: "2026-04-20",
+          paymentReference: "AEAT-303-Q1-DELETE",
+          status: "suggested",
+          confidence: "high",
+        }),
+      },
+    );
+    expect(paymentLinkResponse.status).toBe(201);
+
     const deleteResponse = await fetch(
       `${baseUrl}/api/v1/tax-reports/${created.taxReport.taxReportId}`,
       {
@@ -220,6 +241,28 @@ describe("tax report HTTP routes", () => {
     );
     expect(deletedListResponse.status).toBe(200);
     expect((await deletedListResponse.json()) as unknown[]).toEqual([]);
+
+    const deletedCarryforwardsResponse = await fetch(
+      `${baseUrl}/api/v1/tax-carryforwards?includeSuperseded=true`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(deletedCarryforwardsResponse.status).toBe(200);
+    expect((await deletedCarryforwardsResponse.json()) as unknown[]).toEqual([]);
+
+    const deletedPaymentLinksResponse = await fetch(
+      `${baseUrl}/api/v1/tax-report-payment-links`,
+      {
+        headers: {
+          authorization: "Bearer test-api-key",
+        },
+      },
+    );
+    expect(deletedPaymentLinksResponse.status).toBe(200);
+    expect((await deletedPaymentLinksResponse.json()) as unknown[]).toEqual([]);
   });
 
   it("returns the Spanish tax-position summary through the HTTP API", async () => {
