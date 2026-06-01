@@ -135,35 +135,6 @@ wrobo-biz documents ingest my-sales-invoice.pdf \
 
 ---
 
-## Handling Files from Agent Channels (Slack, etc.)
-
-The business-api CLI runs inside a Docker container. The container mounts the host directory `$HUB_DIR/data` at `/workspace/business-api/data/` inside the container. File paths passed to `documents ingest` must be container-visible paths. We normally copy such files to the $HUB_TMP_DIR dir. The `documents ingest` ingest command then treats it as **the default path**.
-
-**Staging directory for incoming files:**
-
-```yaml
-file_staging:
-  host_path: $HUB_TMP_DIR
-  container_path: (default path, no need to specify)
-  use_for: all files received from Slack, email, or other agents before ingestion
-```
-
-Steps when a file arrives from an agent channel:
-
-1. Save the file to `$HUB_TMP_DIR/<filename>` on the host.
-2. Pass the `<filename>` to `documents ingest`.
-3. Use a `source` value that reflects the origin: `"slack_upload"`, `"email_forward"`, `"manual_upload"`.
-
-```bash
-# File saved from Slack → $HUB_TMP_DIR/invoice_april.pdf on the host
-wrobo-biz documents ingest invoice_april.pdf \
-  '{"kind":"expense_invoice","source":"slack_upload"}'
-```
-
-If the file has not been saved to the staging directory yet, do that first before calling `documents ingest`.
-
----
-
 ## Duplicate Prevention
 
 Before creating any record manually, check whether it already exists:
