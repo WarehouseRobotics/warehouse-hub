@@ -5,7 +5,7 @@ WORKDIR /workspace/business-api
 # Install runtime utilities used by local ingestion/OCR.
 #RUN apk add git make poppler-utils tesseract-ocr
 #RUN apk add git make poppler-utils tesseract-ocr musl musl-dev
-RUN apt-get update && apt-get install -y git make poppler-utils tesseract-ocr libtesseract-dev musl musl-dev
+RUN apt-get update && apt-get install -y git make poppler-utils tesseract-ocr libtesseract-dev musl musl-dev python3
 RUN rm -rf /var/lib/apt/lists/*
 
 COPY business-api/package*.json ./

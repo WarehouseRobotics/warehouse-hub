@@ -50,6 +50,24 @@ TAX_CARRYFORWARD_LIST_FILTERS = {
 }
 
 
+def _metadata_to_multipart_fields(meta: Dict[str, Any]) -> Dict[str, str]:
+    fields: Dict[str, str] = {}
+    for key, value in meta.items():
+        if key in ("overrides", "link"):
+            fields[key] = json.dumps(value, ensure_ascii=False)
+        elif value is None:
+            continue
+        elif isinstance(value, (str, int, float, bool)):
+            fields[key] = str(value).lower() if isinstance(value, bool) else str(value)
+        else:
+            fields[key] = json.dumps(value, ensure_ascii=False)
+    return fields
+
+
+def _upload_mime_type(file_path: str) -> str:
+    return "application/pdf" if file_path.lower().endswith(".pdf") else "image/png"
+
+
 def handle_tax_reports(
     subcommand: Optional[str],
     rest: List[str],
@@ -84,6 +102,29 @@ def handle_tax_reports(
             f"/api/v1/tax-reports/{urllib.parse.quote(report_id, safe='')}",
             base_url=base_url,
             token=token,
+        )
+
+    if subcommand == "ingest":
+        parsed = parse_flexible_flag_args(rest, boolean_keys={"json"})
+        if len(parsed.positionals) < 1:
+            raise CliError("Missing file path")
+        if len(parsed.positionals) < 2:
+            raise CliError("Missing tax report ingestion metadata JSON argument")
+        file_path = parsed.positionals[0]
+        meta = parse_json_positional(
+            parsed.positionals[1], "tax report ingestion metadata"
+        )
+        if not isinstance(meta, dict):
+            raise CliError("tax report ingestion metadata must be a JSON object")
+
+        return upload_multipart(
+            "POST",
+            "/api/v1/tax-reports/ingest",
+            base_url=base_url,
+            token=token,
+            file_path=file_path,
+            fields=_metadata_to_multipart_fields(meta),
+            mime_type=_upload_mime_type(file_path),
         )
 
     if subcommand == "spain-position":
@@ -135,28 +176,14 @@ def handle_tax_reports(
         if not isinstance(meta, dict):
             raise CliError("tax payment receipt metadata must be a JSON object")
 
-        fields: Dict[str, str] = {}
-        for key, value in meta.items():
-            if key == "link":
-                fields["link"] = json.dumps(value, ensure_ascii=False)
-            elif value is None:
-                continue
-            elif isinstance(value, (str, int, float, bool)):
-                fields[key] = str(value).lower() if isinstance(value, bool) else str(value)
-            else:
-                fields[key] = json.dumps(value, ensure_ascii=False)
-
-        mime_type = (
-            "application/pdf" if file_path.lower().endswith(".pdf") else "image/png"
-        )
         return upload_multipart(
             "POST",
             f"/api/v1/tax-reports/{urllib.parse.quote(report_id, safe='')}/payment-receipts",
             base_url=base_url,
             token=token,
             file_path=file_path,
-            fields=fields,
-            mime_type=mime_type,
+            fields=_metadata_to_multipart_fields(meta),
+            mime_type=_upload_mime_type(file_path),
         )
 
     raise CliError(f"Unknown tax-reports subcommand: {subcommand or '(none)'}")

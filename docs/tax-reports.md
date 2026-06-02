@@ -518,6 +518,7 @@ Default behavior should return active carryforwards only.
 Implemented tax report commands:
 
 ```bash
+wrobo-biz tax-reports ingest ./tax/modelo-303-q4.pdf '{"kind":"tax_declaration","companyCardId":"comp_000123","countryCode":"ES","source":"accountant_upload","overrides":{"periodLabel":"2026-Q4"}}'
 wrobo-biz tax-reports list --country-code ES --fiscal-year 2026
 wrobo-biz tax-reports get tr_000123
 wrobo-biz tax-reports suggest-payments tr_000123
@@ -529,6 +530,8 @@ wrobo-biz tax-carryforwards list --country-code ES --status active
 ```
 
 CLI output is JSON by default and includes stable IDs needed by agents.
+
+`tax-reports ingest` is implemented in the remote `wrobo-biz` HTTP wrapper and uploads the file path from the host running the wrapper directly to `POST /api/v1/tax-reports/ingest`. It does not stage files into a Docker container tmp directory, and the raw in-container TypeScript CLI remains limited to report inspection and payment evidence workflows.
 
 ## Country Module Design
 

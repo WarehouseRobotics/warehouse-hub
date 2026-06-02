@@ -98,7 +98,8 @@ Scopes implemented in this build:
                 | list [--contact-id --kind]
                 Flag-driven create flags:
                   --contact-id --kind --start --end --reason --notes
-  tax-reports   get <id> | spain-position --company-card-id <id> --fiscal-year <year>
+  tax-reports   ingest <file> <json> | get <id>
+                | spain-position --company-card-id <id> --fiscal-year <year>
                 | suggest-payments <id>
                 | attach-receipt <id> <file> <json>
                 | list [--country-code --tax-kind --form-code --fiscal-year
@@ -377,6 +378,7 @@ SCOPE_HELP: Dict[str, ScopeHelp] = {
     "tax-reports": ScopeHelp(
         description="Inspect tax reports and manage tax payment evidence.",
         commands=[
+            "ingest <file-path> <json-meta>",
             "get <id-or-slug>",
             "list [--country-code <code>] [--tax-kind <kind>] [--form-code <code>] [--fiscal-year <year>] [--payment-status <status>] [--similar <text>] [--limit <n>]",
             "spain-position --company-card-id <id-or-slug> --fiscal-year <year>",
@@ -384,6 +386,7 @@ SCOPE_HELP: Dict[str, ScopeHelp] = {
             "attach-receipt <id-or-slug> <file-path> <json>",
         ],
         examples=[
+            'tax-reports ingest ./tax/modelo-303-q4.pdf \'{"kind":"tax_declaration","companyCardId":"comp_000123","countryCode":"ES","source":"accountant_upload"}\'',
             "tax-reports list --country-code ES --fiscal-year 2026",
             "tax-reports spain-position --company-card-id comp_000123 --fiscal-year 2026",
             "tax-reports suggest-payments tr_000123",
