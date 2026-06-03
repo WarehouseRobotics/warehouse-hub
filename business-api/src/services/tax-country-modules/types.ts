@@ -5,6 +5,7 @@ import type {
   TaxReportFactCreateInput,
   TaxReportIngestInput,
 } from "@warehouse-hub/business-schemas";
+import type { StructuredTaxReport } from "../../schemas/structured-tax-report.js";
 
 export type NormalizedTaxReportDraft = Omit<
   TaxReportCreateRequest,
@@ -16,6 +17,7 @@ export type TaxCountryDetectionInput = {
   countryCode?: string;
   formCode?: string;
   ocrText: string;
+  structuredData?: StructuredTaxReport;
 };
 
 export type TaxCountryDetectionResult = {
@@ -27,6 +29,7 @@ export type TaxCountryDetectionResult = {
 
 export type TaxCountryParseInput = {
   ocrText: string;
+  structuredData?: StructuredTaxReport;
   metadata: TaxReportIngestInput;
   companyTaxId?: string | null;
 };

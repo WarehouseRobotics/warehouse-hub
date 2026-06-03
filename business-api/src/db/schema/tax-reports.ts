@@ -64,10 +64,9 @@ export const taxReports = sqliteTable(
     periodIdx: index("tax_reports_period_idx").on(table.periodEnd, table.periodStart),
     formIdx: index("tax_reports_form_idx").on(table.countryCode, table.formCode),
     correctionIdx: index("tax_reports_correction_idx").on(table.correctionOfTaxReportId),
-    fingerprintUniqueIdx: uniqueIndex("tax_reports_company_fingerprint_unique_idx").on(
-      table.companyCardId,
-      table.fingerprint,
-    ),
+    fingerprintUniqueIdx: uniqueIndex("tax_reports_company_fingerprint_unique_idx")
+      .on(table.companyCardId, table.fingerprint)
+      .where(sql`${table.deletedAt} IS NULL`),
   }),
 );
 

@@ -119,6 +119,40 @@ Resultado cero
 `;
 }
 
+function modelo200PrefixedStructuredValuesText(reference = "202420067210083L") {
+  return `
+INFORMACIÓN DE LA PRESENTACIÓN DE LA DECLARACIÓN
+Modelo 200
+Presentación realizada el: 21-07-2025 a las 10:32:02
+Expediente/Referencia (nº registro asignado): ${reference}
+Número de justificante: 2005683250690
+Ejercicio: 2024
+NIF: B02672152
+Casilla 00500: 00500:-4.688,48
+Casilla 00501: [00501] -4.638,22
+Casilla 00550: 00550:218.51
+Casilla 00547: [00547] 218,51
+Detalle de la compensación de bases imponibles negativas
+Compensación de base año 2022 00896 20.087,97 00897 218,51 00898 19.869,46
+Compensación de base año 2023 00009 19.593,97 00010 00020 19.593,97
+Total 00670 39.681,94 00547 218,51 00671 39.463,43
+Resultado cero
+`;
+}
+
+function modelo200InvalidMoneyText(reference = "202420067210084L") {
+  return `
+INFORMACIÓN DE LA PRESENTACIÓN DE LA DECLARACIÓN
+Modelo 200
+Expediente/Referencia (nº registro asignado): ${reference}
+Número de justificante: 2005683250690
+Ejercicio: 2024
+NIF: B02672152
+Casilla 00550: invalid-money
+Resultado cero
+`;
+}
+
 describe("tax report ingestion service", () => {
   beforeEach(async () => {
     await resetTestState();
@@ -147,8 +181,8 @@ describe("tax report ingestion service", () => {
         resultAmount: "-180.00",
         extractedData: expect.objectContaining({
           casillas: expect.objectContaining({
-            "07": "12000,00",
-            "71": "-180,00",
+            "07": "12000.00",
+            "71": "-180.00",
           }),
           normalizedBy: "ES",
           appliedOverrides: [],
@@ -159,6 +193,7 @@ describe("tax report ingestion service", () => {
       expect.objectContaining({
         kind: "tax_declaration",
         ocrStatus: "completed",
+        ocrEngine: "structured-stub-ocr",
         linkedEntityType: "tax_report",
         linkedEntityId: ingested.taxReport.taxReportId,
       }),
@@ -286,8 +321,8 @@ describe("tax report ingestion service", () => {
         profitOrLoss: "5000.00",
         extractedData: expect.objectContaining({
           casillas: expect.objectContaining({
-            "03": "5000,00",
-            "19": "-75,00",
+            "03": "5000.00",
+            "19": "-75.00",
           }),
           normalizedBy: "ES",
           appliedOverrides: [],
@@ -298,6 +333,7 @@ describe("tax report ingestion service", () => {
       expect.objectContaining({
         kind: "tax_declaration",
         ocrStatus: "completed",
+        ocrEngine: "structured-stub-ocr",
         linkedEntityType: "tax_report",
         linkedEntityId: ingested.taxReport.taxReportId,
       }),
@@ -370,9 +406,9 @@ describe("tax report ingestion service", () => {
         profitOrLoss: "0.00",
         extractedData: expect.objectContaining({
           casillas: expect.objectContaining({
-            "00500": "-4.688,48",
-            "00547": "218,51",
-            "00550": "218,51",
+            "00500": "-4688.48",
+            "00547": "218.51",
+            "00550": "218.51",
           }),
           modelo200NegativeBaseDetail: [
             expect.objectContaining({
@@ -413,6 +449,8 @@ describe("tax report ingestion service", () => {
     expect(ingested.carryforwards).toEqual([
       expect.objectContaining({
         kind: "tax_loss",
+        originFiscalYear: 2022,
+        originPeriodLabel: "2022",
         originalAmount: "20087.97",
         usedAmount: "218.51",
         remainingAmount: "19869.46",
@@ -420,6 +458,8 @@ describe("tax report ingestion service", () => {
       }),
       expect.objectContaining({
         kind: "tax_loss",
+        originFiscalYear: 2023,
+        originPeriodLabel: "2023",
         originalAmount: "19593.97",
         usedAmount: "0.00",
         remainingAmount: "19593.97",
@@ -428,6 +468,128 @@ describe("tax report ingestion service", () => {
     ]);
     expect(getDocumentMeta(ingested.document.documentId).ocrText).toContain(
       "Modelo 200",
+    );
+    expect(getDocumentMeta(ingested.document.documentId).ocrEngine).toBe(
+      "structured-stub-ocr",
+    );
+  });
+
+  it("ingests Modelo 200 structured fields with duplicated casilla prefixes", async () => {
+    const company = await createCompanyCard();
+    const { ingestTaxReport } =
+      await import("../src/services/tax-report-ingestion.js");
+
+    const ingested = await ingestTaxReport(
+      uploadFile(
+        modelo200PrefixedStructuredValuesText(),
+        "modelo-200-prefixed-2024.pdf",
+      ),
+      {
+        kind: "tax_declaration",
+        companyCardId: company.companyId,
+        countryCode: "ES",
+        source: "accountant_upload",
+      },
+    );
+
+    expect(ingested.taxReport).toEqual(
+      expect.objectContaining({
+        countryCode: "ES",
+        taxKind: "corporate_income",
+        formCode: "200",
+        fiscalYear: 2024,
+        periodLabel: "2024",
+        taxableBase: "0.00",
+        profitOrLoss: "0.00",
+      }),
+    );
+    expect(ingested.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldCode: "00500",
+          normalizedValue: "-4688.48",
+        }),
+        expect.objectContaining({
+          fieldCode: "00501",
+          normalizedValue: "-4638.22",
+        }),
+        expect.objectContaining({
+          fieldCode: "00547",
+          normalizedValue: "218.51",
+        }),
+        expect.objectContaining({
+          fieldCode: "00550",
+          normalizedValue: "218.51",
+        }),
+      ]),
+    );
+    expect(ingested.carryforwards).toEqual([
+      expect.objectContaining({
+        kind: "tax_loss",
+        originFiscalYear: 2022,
+        originPeriodLabel: "2022",
+        originalAmount: "20087.97",
+        usedAmount: "218.51",
+        remainingAmount: "19869.46",
+      }),
+      expect.objectContaining({
+        kind: "tax_loss",
+        originFiscalYear: 2023,
+        originPeriodLabel: "2023",
+        originalAmount: "19593.97",
+        usedAmount: "0.00",
+        remainingAmount: "19593.97",
+      }),
+    ]);
+  });
+
+  it("keeps structured OCR evidence on documents when tax normalization fails", async () => {
+    const company = await createCompanyCard();
+    const { getDocumentMeta } = await import("../src/services/documents.js");
+    const { ingestTaxReport } =
+      await import("../src/services/tax-report-ingestion.js");
+
+    let error: unknown;
+    try {
+      await ingestTaxReport(
+        uploadFile(modelo200InvalidMoneyText(), "modelo-200-invalid.pdf"),
+        {
+          kind: "tax_declaration",
+          companyCardId: company.companyId,
+          countryCode: "ES",
+          source: "accountant_upload",
+        },
+      );
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toEqual(
+      expect.objectContaining({
+        code: "invalid_money_value",
+        details: expect.objectContaining({
+          documentId: expect.stringMatching(/^doc_/),
+        }),
+      }),
+    );
+
+    const documentId = (error as AppError).details as { documentId: string };
+    const failedDocument = getDocumentMeta(documentId.documentId);
+    expect(failedDocument).toEqual(
+      expect.objectContaining({
+        ocrStatus: "failed",
+        ocrEngine: "structured-stub-ocr",
+      }),
+    );
+    expect(failedDocument.ocrText).toContain("Modelo 200");
+    expect(failedDocument.extractedData).toEqual(
+      expect.objectContaining({
+        formCode: "200",
+        fields: expect.arrayContaining([
+          expect.objectContaining({ fieldCode: "00550" }),
+        ]),
+      }),
     );
   });
 

@@ -37,7 +37,7 @@ Implemented v1 should cover:
 
 * uploading and ingesting tax declaration PDFs or images
 * uploading tax payment receipts and authority notices as evidence
-* OCR and extracted metadata storage through the existing document ingestion pattern
+* structured OCR and extracted metadata storage through the existing document ingestion pattern
 * deterministic tax report fingerprinting for idempotent retries
 * tax report create/list/get/search APIs
 * normalized form facts for authority field codes and labels
@@ -277,8 +277,8 @@ Pipeline:
 1. Validate multipart payload and JSON metadata.
 2. Store the original file as `document.kind = "tax_declaration"` unless the caller supplies `tax_payment_receipt` or `tax_authority_notice`.
 3. Set document OCR state to `processing`.
-4. OCR image or PDF using the existing document ingestion engine.
-5. Select the parser country module from explicit metadata first, otherwise from OCR signals.
+4. OCR image or PDF using the structured OCR provider configured at `llms.structured_ocr`.
+5. Select the parser country module from explicit metadata first, otherwise from structured OCR signals.
 6. Extract country, tax kind, form code, period, taxpayer tax ID, authority submission/reference number, result amounts, field facts, and carry-forward candidates.
 7. Apply explicit overrides last, field by field.
 8. Compute the report fingerprint.
@@ -546,6 +546,8 @@ type TaxCountryModule = {
   buildCarryforwards(input: NormalizedTaxReportDraft): TaxCarryforwardDraft[];
 };
 ```
+
+`TaxCountryDetectionInput` and `TaxCountryParseInput` include the rendered OCR text plus optional structured OCR payload. Country modules should prefer structured OCR fields when present and keep text parsing as a fallback for parser resilience and fixtures.
 
 Shared code may handle upload, OCR orchestration, persistence, embeddings, idempotency, search, and payment linking. Country modules own:
 

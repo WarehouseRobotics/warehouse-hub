@@ -1,7 +1,8 @@
 import { AppError } from "../lib/errors.js";
 import { createStoredDocument, getDocumentMeta, updateDocumentProcessing } from "./documents.js";
-import { extractDocumentText } from "./document-ocr.js";
+import { renderDocumentPages } from "./document-ocr.js";
 import { requireCompanyCardRecord } from "./shared.js";
+import { extractStructuredTaxReportFromPages } from "./structured-ocr.js";
 import { createTaxReport, getTaxReport } from "./tax-reports.js";
 import { selectTaxCountryModule } from "./tax-country-modules/index.js";
 import type {
@@ -217,17 +218,25 @@ export async function ingestTaxReport(
     extractedData: null,
   });
 
+  let ocrResult:
+    | Awaited<ReturnType<typeof extractStructuredTaxReportFromPages>>
+    | null = null;
+
   try {
-    const ocrResult = await extractDocumentText(file);
+    ocrResult = await extractStructuredTaxReportFromPages(
+      renderDocumentPages(file),
+    );
     const module = selectTaxCountryModule({
       kind: input.kind,
       countryCode: input.overrides?.countryCode ?? input.countryCode,
       formCode: input.overrides?.formCode ?? input.formCode,
       ocrText: ocrResult.text,
+      structuredData: ocrResult.data,
     });
     const parsed = mergeParseOverrides(
       module.parse({
         ocrText: ocrResult.text,
+        structuredData: ocrResult.data,
         metadata: input,
         companyTaxId: company.taxId,
       }),
@@ -294,6 +303,9 @@ export async function ingestTaxReport(
     const failedDocument = updateDocumentProcessing(document.documentId, {
       ocrStatus: "failed",
       ocrError: message,
+      ocrText: ocrResult?.text,
+      ocrEngine: ocrResult?.engine,
+      extractedData: ocrResult?.data,
     });
 
     if (error instanceof AppError) {

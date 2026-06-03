@@ -507,6 +507,63 @@ describe("tax report service flows", () => {
     );
   });
 
+  it("uses an active-only unique index for tax report fingerprints", async () => {
+    const { getDatabase } = await import("../src/db/connection.js");
+    const indexRow = getDatabase()
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
+      )
+      .get("tax_reports_company_fingerprint_unique_idx") as
+      | { sql: string }
+      | undefined;
+
+    expect(indexRow?.sql.replace(/\s+/g, " ").toLowerCase()).toContain(
+      "where deleted_at is null",
+    );
+  });
+
+  it("allows reingesting the same tax report after soft delete", async () => {
+    const company = await createCompanyCard();
+    const firstDocument = await uploadTaxDocument("first declaration");
+    const secondDocument = await uploadTaxDocument("reingested declaration");
+    const { getOrm } = await import("../src/db/connection.js");
+    const { taxReports } = await import("../src/db/schema/index.js");
+    const { createTaxReport, listTaxReports, softDeleteTaxReport } =
+      await import("../src/services/tax-reports.js");
+
+    const first = createTaxReport(
+      baseTaxReportInput(company.companyId, firstDocument.documentId),
+    );
+    softDeleteTaxReport(first.taxReport.taxReportId);
+    const second = createTaxReport(
+      baseTaxReportInput(company.companyId, secondDocument.documentId),
+    );
+
+    expect(second.duplicate).toBe(false);
+    expect(second.taxReport.taxReportId).not.toBe(first.taxReport.taxReportId);
+    expect(await listTaxReports()).toEqual([
+      expect.objectContaining({ taxReportId: second.taxReport.taxReportId }),
+    ]);
+
+    const rows = getOrm()
+      .select()
+      .from(taxReports)
+      .where(eq(taxReports.companyCardId, company.companyId))
+      .all()
+      .filter((row) =>
+        [
+          first.taxReport.taxReportId,
+          second.taxReport.taxReportId,
+        ].includes(row.id),
+      );
+    expect(rows).toHaveLength(2);
+    const firstRow = rows.find((row) => row.id === first.taxReport.taxReportId);
+    const secondRow = rows.find((row) => row.id === second.taxReport.taxReportId);
+    expect(firstRow?.fingerprint).toBe(secondRow?.fingerprint);
+    expect(firstRow?.deletedAt).toBeTruthy();
+    expect(secondRow?.deletedAt).toBeNull();
+  });
+
   it("creates corrective reports and supersedes old active carryforwards", async () => {
     const company = await createCompanyCard();
     const firstDocument = await uploadTaxDocument("original declaration");

@@ -202,6 +202,129 @@ function parseDateValue(value: string | undefined): string | undefined {
   return match ? `${match[3]}-${match[2]}-${match[1]}` : undefined;
 }
 
+function stripStructuredMoneyPrefix(
+  value: string,
+  fieldCode?: string,
+): string {
+  let stripped = value.trim();
+  if (!stripped) {
+    return stripped;
+  }
+
+  if (fieldCode) {
+    const escapedCode = fieldCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    stripped = stripped.replace(
+      new RegExp(`^\\s*\\[?\\s*${escapedCode}\\s*\\]?\\s*[:=]?\\s*`),
+      "",
+    );
+  }
+
+  return stripped
+    .replace(/^\s*\[\s*\d{3,5}\s*\]\s*[:=]?\s*/, "")
+    .replace(/^\s*\d{3,5}\s*[:=]\s*/, "")
+    .replace(/^\s*\d{3,5}\s+(?=-?\d)/, "")
+    .trim();
+}
+
+function structuredMoneyValue(
+  value: string | null | undefined,
+  fieldCode?: string,
+): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return stripStructuredMoneyPrefix(value, fieldCode);
+}
+
+function parseStructuredPeriod(input: TaxCountryParseInput) {
+  const structured = input.structuredData;
+  if (
+    structured?.fiscalYear &&
+    structured.periodGranularity &&
+    structured.periodLabel &&
+    structured.periodStart &&
+    structured.periodEnd
+  ) {
+    return {
+      fiscalYear: structured.fiscalYear,
+      periodGranularity: structured.periodGranularity,
+      periodLabel: structured.periodLabel,
+      periodStart: structured.periodStart,
+      periodEnd: structured.periodEnd,
+    };
+  }
+
+  return null;
+}
+
+function structuredCasillas(input: TaxCountryParseInput): Map<string, string> {
+  const casillas = new Map<string, string>();
+  for (const field of input.structuredData?.fields ?? []) {
+    if (field.fieldSystem !== "casilla") {
+      continue;
+    }
+
+    const fieldCode = field.fieldCode.trim();
+    if (fieldCode) {
+      const rawValue =
+        field.valueType === "money"
+          ? (structuredMoneyValue(field.normalizedValue, fieldCode) ??
+            structuredMoneyValue(field.rawValue, fieldCode))
+          : stripStructuredMoneyPrefix(field.rawValue, fieldCode);
+      if (rawValue) {
+        casillas.set(fieldCode, rawValue);
+      }
+    }
+  }
+
+  return casillas;
+}
+
+function mergeCasillas(
+  textCasillas: Map<string, string>,
+  structuredFields: Map<string, string>,
+): Map<string, string> {
+  const merged = new Map(textCasillas);
+  for (const [fieldCode, rawValue] of structuredFields.entries()) {
+    merged.set(fieldCode, rawValue);
+  }
+  return merged;
+}
+
+function parseStructuredModelo200NegativeBaseDetail(
+  input: TaxCountryParseInput,
+): Modelo200NegativeBaseDetailParseResult {
+  const rows: Modelo200NegativeBaseDetailRow[] = [];
+  for (const detail of input.structuredData?.carryforwardDetails ?? []) {
+    if (
+      !detail.originFiscalYear ||
+      !detail.pendingAtStartOrGenerated ||
+      !detail.pendingForFuture
+    ) {
+      continue;
+    }
+
+    rows.push({
+      originFiscalYear: detail.originFiscalYear,
+      pendingAtStartOrGenerated: normalizeMoneyString(
+        structuredMoneyValue(detail.pendingAtStartOrGenerated) ??
+          detail.pendingAtStartOrGenerated,
+      ),
+      appliedThisReturn: normalizeMoneyString(
+        structuredMoneyValue(detail.appliedThisReturn) ??
+          "0.00",
+      ),
+      pendingForFuture: normalizeMoneyString(
+        structuredMoneyValue(detail.pendingForFuture) ??
+          detail.pendingForFuture,
+      ),
+    });
+  }
+
+  return { rows, warnings: [] };
+}
+
 function parseFiscalYear(text: string): number | undefined {
   const year = firstMatch(text, [
     /(?:fiscal\s+year|tax\s+year|ejercicio|ano|año)\s*[:=\-]\s*(20\d{2})/im,
@@ -781,6 +904,15 @@ export const spainTaxCountryModule: TaxCountryModule = {
       };
     }
 
+    if (normalizeCountryCode(input.structuredData?.countryCode ?? undefined) === "ES") {
+      return {
+        matched: true,
+        countryCode: "ES",
+        confidence: input.structuredData?.confidence ?? "high",
+        reason: "spanish_tax_structured_ocr_signal",
+      };
+    }
+
     if (
       /\b(?:AEAT|Agencia Tributaria|Modelo\s+303|Modelo\s+390|Modelo\s+130|Modelo\s+200)\b/i.test(
         input.ocrText,
@@ -799,10 +931,12 @@ export const spainTaxCountryModule: TaxCountryModule = {
 
   parse(input: TaxCountryParseInput) {
     const text = input.ocrText;
+    const structured = input.structuredData;
     const overrides = input.metadata.overrides;
     const formCode =
       normalizeFormCode(overrides?.formCode) ??
       normalizeFormCode(input.metadata.formCode) ??
+      normalizeFormCode(structured?.formCode ?? undefined) ??
       normalizeFormCode(
         firstMatch(text, [/modelo\s*[_\s-]*(303|390|130|200)/im]),
       );
@@ -825,39 +959,52 @@ export const spainTaxCountryModule: TaxCountryModule = {
       );
     }
 
-    const casillas = parseCasillas(text, formCode);
+    const casillas = mergeCasillas(
+      parseCasillas(text, formCode),
+      structuredCasillas(input),
+    );
     const formConfig = configForForm(formCode);
-    const warnings: string[] = [];
+    const warnings: string[] = [...(structured?.warnings ?? [])];
     const fiscalYear =
       overrides?.fiscalYear ??
       input.metadata.fiscalYear ??
+      structured?.fiscalYear ??
       parseFiscalYear(text);
-    const parsedPeriod =
-      formCode === "200"
+    const explicitPeriodLabel = overrides?.periodLabel ?? input.metadata.periodLabel;
+    const structuredPeriod = explicitPeriodLabel ? null : parseStructuredPeriod(input);
+    const parsedPeriod = structuredPeriod
+      ? structuredPeriod
+      : formCode === "200"
         ? parseAnnualPeriod(
             text,
             fiscalYear,
-            overrides?.periodLabel ?? input.metadata.periodLabel,
+            explicitPeriodLabel,
           )
         : parsePeriod(
             text,
             fiscalYear,
-            overrides?.periodLabel ?? input.metadata.periodLabel,
+            explicitPeriodLabel,
           );
+    const structuredModelo200NegativeBaseDetail =
+      parseStructuredModelo200NegativeBaseDetail(input);
     const modelo200NegativeBaseDetailParse =
       formCode === "200"
-        ? parseModelo200NegativeBaseDetail(text)
+        ? structuredModelo200NegativeBaseDetail.rows.length > 0
+          ? structuredModelo200NegativeBaseDetail
+          : parseModelo200NegativeBaseDetail(text)
         : { rows: [], warnings: [] };
     const modelo200NegativeBaseDetail = modelo200NegativeBaseDetailParse.rows;
     const taxableBase =
-      formCode === "303"
-        ? (optionalMoney(
+      optionalMoney(structuredMoneyValue(structured?.taxableBase)) ??
+      (formCode === "303"
+        ? optionalMoney(
             firstMatch(text, [/taxable\s+base\s*[:=\-]\s*(-?\d[\d.,]*)/im]),
-          ) ?? optionalMoney(casillas.get("07")))
+          ) ?? optionalMoney(casillas.get("07"))
         : formCode === "200"
           ? inferModelo200TaxableBase(casillas)
-          : null;
+          : null);
     const resultAmount =
+      optionalMoney(structuredMoneyValue(structured?.resultAmount)) ??
       optionalMoney(casillas.get(formConfig.resultFieldCode)) ??
       optionalMoney(
         firstMatch(text, [
@@ -869,6 +1016,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
       );
     const result =
       overrides?.result ??
+      structured?.result ??
       (formCode === "130"
         ? inferModelo130Result(resultAmount)
         : formCode === "200"
@@ -876,6 +1024,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
           : inferResult(resultAmount, text, casillas));
     const authoritySubmissionId =
       overrides?.authoritySubmissionId ??
+      structured?.authoritySubmissionId ??
       firstMatch(text, [
         /(?:submission|presentacion|presentación)\s*(?:id|number|numero|número)?\s*[:=\-]\s*([A-Z0-9._/-]+)/im,
         /Expediente\/Referencia[^\n:]*:\s*([A-Z0-9._/-]+)/im,
@@ -884,6 +1033,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
       null;
     const authorityReceiptNumber =
       overrides?.authorityReceiptNumber ??
+      structured?.authorityReceiptNumber ??
       firstMatch(text, [
         /(?:receipt|justificante|nrc)\s*(?:number|numero|número)?\s*[:=\-]\s*([A-Z0-9._/-]+)/im,
         /N[uú]mero\s+de\s+justificante\s*:\s*([A-Z0-9._/-]+)/im,
@@ -942,6 +1092,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
       periodEnd: parsedPeriod.periodEnd,
       taxpayerTaxId:
         overrides?.taxpayerTaxId ??
+        structured?.taxpayerTaxId ??
         parseTaxpayerTaxId(text) ??
         input.companyTaxId ??
         null,
@@ -949,6 +1100,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
       authorityReceiptNumber,
       filedAt:
         overrides?.filedAt ??
+        structured?.filedAt ??
         firstMatch(text, [
           /(?:filed\s+at|fecha\s+presentacion|fecha\s+presentación)\s*[:=\-]\s*([^\n]+)/im,
           /Presentaci[oó]n\s+realizada\s+el\s*:\s*([^\n]+)/im,
@@ -956,6 +1108,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
         null,
       dueDate:
         overrides?.dueDate ??
+        structured?.dueDate ??
         parseDateValue(
           firstMatch(text, [
             /(?:due\s+date|fecha\s+limite|fecha\s+límite)\s*[:=\-]\s*([^\n]+)/im,
@@ -964,6 +1117,7 @@ export const spainTaxCountryModule: TaxCountryModule = {
         null,
       paymentDueDate:
         overrides?.paymentDueDate ??
+        structured?.paymentDueDate ??
         parseDateValue(
           firstMatch(text, [
             /(?:payment\s+due\s+date|fecha\s+de\s+pago)\s*[:=\-]\s*([^\n]+)/im,
@@ -971,23 +1125,32 @@ export const spainTaxCountryModule: TaxCountryModule = {
         ) ??
         null,
       result,
-      paymentStatus: overrides?.paymentStatus ?? paymentStatusForResult(result),
-      currency: overrides?.currency ?? "EUR",
+      paymentStatus:
+        overrides?.paymentStatus ??
+        structured?.paymentStatus ??
+        paymentStatusForResult(result),
+      currency: overrides?.currency ?? structured?.currency ?? "EUR",
       taxableBase,
-      taxDue,
-      taxDeductible,
+      taxDue:
+        optionalMoney(structuredMoneyValue(structured?.taxDue)) ?? taxDue,
+      taxDeductible:
+        optionalMoney(structuredMoneyValue(structured?.taxDeductible)) ??
+        taxDeductible,
       resultAmount: resultAmount ?? null,
       retainedAmount:
-        formCode === "130" ? (optionalMoney(casillas.get("06")) ?? null) : null,
+        optionalMoney(structuredMoneyValue(structured?.retainedAmount)) ??
+        (formCode === "130" ? (optionalMoney(casillas.get("06")) ?? null) : null),
       profitOrLoss:
-        formCode === "130"
+        optionalMoney(structuredMoneyValue(structured?.profitOrLoss)) ??
+        (formCode === "130"
           ? (optionalMoney(casillas.get("03")) ?? null)
           : formCode === "200"
             ? (taxableBase ?? optionalMoney(casillas.get("00500")) ?? null)
-            : null,
+            : null),
       facts,
       warnings,
       confidence:
+        structured?.confidence === "low" ||
         warnings.includes("period_ambiguous") ||
         warnings.includes("missing_authority_reference") ||
         warnings.includes("model_200_negative_base_detail_amount_missing")
@@ -1102,6 +1265,8 @@ export const spainTaxCountryModule: TaxCountryModule = {
 
           return {
             kind: "tax_loss",
+            originFiscalYear: row.originFiscalYear,
+            originPeriodLabel: `${row.originFiscalYear}`,
             currency: input.currency,
             originalAmount: normalizeMoneyString(row.pendingAtStartOrGenerated),
             usedAmount: normalizeMoneyString(row.appliedThisReturn),

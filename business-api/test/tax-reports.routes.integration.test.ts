@@ -570,7 +570,7 @@ Casilla 71: 250,00
     expect(
       (await response.json()) as {
         taxReport: { formCode: string; result: string };
-        document: { ocrStatus: string; linkedEntityType: string };
+        document: { ocrStatus: string; ocrEngine: string | null; linkedEntityType: string };
         facts: Array<{ fieldCode: string }>;
       },
     ).toEqual(
@@ -581,9 +581,53 @@ Casilla 71: 250,00
         }),
         document: expect.objectContaining({
           ocrStatus: "completed",
+          ocrEngine: "structured-stub-ocr",
           linkedEntityType: "tax_report",
         }),
         facts: [expect.objectContaining({ fieldCode: "71" })],
+      }),
+    );
+  });
+
+  it("marks tax report ingest documents failed when structured OCR fails", async () => {
+    const company = await createCompanyCard();
+    const formData = new FormData();
+    formData.set("kind", "tax_declaration");
+    formData.set("companyCardId", company.companyId);
+    formData.set("countryCode", "ES");
+    formData.set(
+      "file",
+      new File(
+        [Buffer.from("OCR_ERROR: structured tax extraction failed")],
+        "modelo-303-bad.pdf",
+        { type: "application/pdf" },
+      ),
+    );
+
+    const response = await fetch(`${baseUrl}/api/v1/tax-reports/ingest`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+      body: formData,
+    });
+
+    expect(response.status).toBe(422);
+    const payload = (await response.json()) as {
+      error: { code: string; documentId: string };
+    };
+    expect(payload.error).toEqual(
+      expect.objectContaining({
+        code: "structured_ocr_failed",
+        documentId: expect.stringMatching(/^doc_/),
+      }),
+    );
+
+    const { getDocumentMeta } = await import("../src/services/documents.js");
+    expect(getDocumentMeta(payload.error.documentId)).toEqual(
+      expect.objectContaining({
+        ocrStatus: "failed",
+        linkedEntityType: null,
       }),
     );
   });

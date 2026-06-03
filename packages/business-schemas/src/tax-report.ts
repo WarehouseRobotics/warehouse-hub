@@ -302,6 +302,8 @@ export const taxCarryforwardInputSchema = taxCarryforwardSchema
     deletedAt: true,
   })
   .extend({
+    originFiscalYear: z.number().int().optional(),
+    originPeriodLabel: z.string().min(1).optional(),
     status: taxCarryforwardStatusSchema.default("active"),
   })
   .strict();
@@ -322,6 +324,8 @@ export const taxCarryforwardCreateInputSchema = taxCarryforwardSchema
     deletedAt: true,
   })
   .extend({
+    originFiscalYear: z.number().int().optional(),
+    originPeriodLabel: z.string().min(1).optional(),
     status: taxCarryforwardStatusSchema.default("active"),
   })
   .strict();

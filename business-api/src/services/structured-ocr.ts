@@ -13,6 +13,11 @@ import {
   structuredPayrollSchema,
   type StructuredPayroll,
 } from "../schemas/structured-payroll.js";
+import {
+  structuredTaxReportJsonSchema,
+  structuredTaxReportSchema,
+  type StructuredTaxReport,
+} from "../schemas/structured-tax-report.js";
 import { logger } from "../lib/logger.js";
 import { logMessagesToStreamLogger } from "../logging/thread-logger.js";
 
@@ -84,7 +89,37 @@ function normalizeAmount(value: string | undefined): string | undefined {
     return undefined;
   }
 
-  const compact = value.replace(/[^0-9,.-]/g, "").replace(/,(?=\d{2}$)/, ".");
+  const withoutFieldCode = value
+    .trim()
+    .replace(/^\s*\[?\s*\d{3,5}\s*\]?\s*[:=]\s*/, "")
+    .replace(/^\s*\d{3,5}\s+(?=-?\d)/, "");
+  const compact = withoutFieldCode
+    .replace(/[^0-9,.-]/g, "")
+    .trim();
+  if (!compact) {
+    return undefined;
+  }
+
+  const hasComma = compact.includes(",");
+  const hasDot = compact.includes(".");
+  if (hasComma && hasDot) {
+    return compact.lastIndexOf(".") > compact.lastIndexOf(",")
+      ? compact.replace(/,/g, "")
+      : compact.replace(/\./g, "").replace(/,/g, ".");
+  }
+  if (hasComma) {
+    const parts = compact.split(",");
+    return parts.length === 2 && parts[1] && parts[1].length <= 2
+      ? `${parts[0]}.${parts[1]}`
+      : compact.replace(/,/g, "");
+  }
+  if (hasDot) {
+    const parts = compact.split(".");
+    if (parts.length > 2) {
+      const decimal = parts.pop() ?? "";
+      return `${parts.join("")}.${decimal}`;
+    }
+  }
   return compact || undefined;
 }
 
@@ -247,6 +282,178 @@ function parseStubPayroll(text: string): StructuredPayroll {
   });
 }
 
+function parseStubTaxReportPeriod(
+  text: string,
+  fiscalYear: number | null,
+  formCode: string | null,
+) {
+  if (formCode === "200" && fiscalYear) {
+    return {
+      periodGranularity: "year" as const,
+      periodLabel: `${fiscalYear}`,
+      periodStart: `${fiscalYear}-01-01`,
+      periodEnd: `${fiscalYear}-12-31`,
+    };
+  }
+
+  const periodValue = firstMatch(text, [
+    /period(?:o)?\s*[:=\-]\s*([^\n]+)/im,
+    /\b(20\d{2}\s*[-/]\s*(?:q[1-4]|[1-4]t))\b/im,
+  ]);
+  if (!periodValue || !fiscalYear) {
+    return {
+      periodGranularity: null,
+      periodLabel: periodValue ?? null,
+      periodStart: null,
+      periodEnd: null,
+    };
+  }
+
+  const quarterMatch = periodValue.match(/\b(?:q([1-4])|([1-4])t|t([1-4]))\b/i);
+  if (quarterMatch) {
+    const quarter = Number.parseInt(quarterMatch[1] ?? quarterMatch[2] ?? quarterMatch[3], 10);
+    const starts = ["01-01", "04-01", "07-01", "10-01"];
+    const ends = ["03-31", "06-30", "09-30", "12-31"];
+    return {
+      periodGranularity: "quarter" as const,
+      periodLabel: `${fiscalYear}-Q${quarter}`,
+      periodStart: `${fiscalYear}-${starts[quarter - 1]}`,
+      periodEnd: `${fiscalYear}-${ends[quarter - 1]}`,
+    };
+  }
+
+  const monthMatch = periodValue.match(/\b(?:m(?:es)?\s*)?([1-9]|1[0-2])\b/i);
+  if (monthMatch) {
+    const month = Number.parseInt(monthMatch[1], 10);
+    const start = `${fiscalYear}-${month.toString().padStart(2, "0")}-01`;
+    const endDate = new Date(Date.UTC(fiscalYear, month, 0));
+    return {
+      periodGranularity: "month" as const,
+      periodLabel: `${fiscalYear}-${month.toString().padStart(2, "0")}`,
+      periodStart: start,
+      periodEnd: endDate.toISOString().slice(0, 10),
+    };
+  }
+
+  return {
+    periodGranularity: null,
+    periodLabel: periodValue,
+    periodStart: null,
+    periodEnd: null,
+  };
+}
+
+function parseStubTaxKind(formCode: string | null): StructuredTaxReport["taxKind"] {
+  if (formCode === "303") {
+    return "vat";
+  }
+  if (formCode === "130") {
+    return "personal_income";
+  }
+  if (formCode === "200") {
+    return "corporate_income";
+  }
+  return null;
+}
+
+function parseStubTaxReport(text: string): StructuredTaxReport {
+  const formCode =
+    firstMatch(text, [/modelo\s*[_\s-]*(303|390|130|200)/im]) ??
+    firstMatch(text, [/form(?: code)?\s*[:=\-]\s*([A-Z0-9._/-]+)/im]) ??
+    null;
+  const fiscalYearValue = firstMatch(text, [
+    /(?:fiscal\s+year|tax\s+year|ejercicio|ano|año)\s*[:=\-]\s*(20\d{2})/im,
+    /(?:fiscal\s+year|tax\s+year|ejercicio|ano|año)\s+(20\d{2})/im,
+  ]);
+  const fiscalYear = fiscalYearValue ? Number.parseInt(fiscalYearValue, 10) : null;
+  const period = parseStubTaxReportPeriod(text, fiscalYear, formCode);
+  const fieldMatches = Array.from(text.matchAll(/casilla\s+([A-Z0-9]+)\s*[:=\-]\s*([^\n]+)/gim));
+  const fields = fieldMatches.map((match) => ({
+    fieldCode: match[1].trim(),
+    fieldSystem: "casilla" as const,
+    label: null,
+    valueType: "money" as const,
+    rawValue: match[2].trim(),
+    normalizedValue: normalizeAmount(match[2]) ?? null,
+    currency: "EUR",
+    rate: null,
+    direction: null,
+    confidence: "medium" as const,
+  }));
+  const carryforwardDetails = text
+    .split("\n")
+    .filter((line) => /compensaci[oó]n de base a(?:ñ|n)o/i.test(line))
+    .map((line) => {
+      const year = firstMatch(line, [/a(?:ñ|n)o\s+(20\d{2})/i]);
+      const amounts = Array.from(
+        line.matchAll(/-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}|-?\d+\.\d{2}/g),
+      ).map((match) => normalizeAmount(match[0]) ?? match[0]);
+      const pendingAtStartOrGenerated = amounts[0] ?? null;
+      const appliedThisReturn = amounts.length >= 3 ? amounts[1] : "0.00";
+      const pendingForFuture = amounts.length >= 3 ? amounts[2] : (amounts[1] ?? null);
+      return {
+        kind: "tax_loss" as const,
+        originFiscalYear: year ? Number.parseInt(year, 10) : null,
+        pendingAtStartOrGenerated,
+        appliedThisReturn,
+        pendingForFuture,
+        originalAmount: pendingAtStartOrGenerated,
+        usedAmount: appliedThisReturn,
+        remainingAmount: pendingForFuture,
+        expiresAt: null,
+        notes: "Modelo 200 negative taxable base detail",
+      };
+    });
+
+  return structuredTaxReportSchema.parse({
+    schemaVersion: "tax_report.v1",
+    documentType: "tax_declaration",
+    countryCode: firstMatch(text, [/country(?: code)?\s*:\s*([A-Z]{2})/im]) ?? (/\b(?:AEAT|Agencia Tributaria|Modelo)\b/i.test(text) ? "ES" : null),
+    authorityName: /\bAEAT|Agencia Tributaria\b/i.test(text) ? "AEAT" : null,
+    formCode,
+    formName: formCode ? `Modelo ${formCode}` : null,
+    formVersion: null,
+    taxKind: parseStubTaxKind(formCode),
+    fiscalYear,
+    ...period,
+    taxpayerTaxId: firstMatch(text, [/\bNIF\s*[:=\-]\s*([A-Z0-9._/-]+)/im, /taxpayer tax id\s*[:=\-]\s*([A-Z0-9._/-]+)/im]) ?? null,
+    authoritySubmissionId:
+      firstMatch(text, [
+        /(?:submission|presentacion|presentación)\s*(?:id|number|numero|número)?\s*[:=\-]\s*([A-Z0-9._/-]+)/im,
+        /Expediente\/Referencia[^\n:]*:\s*([A-Z0-9._/-]+)/im,
+        /C[oó]digo\s+Seguro\s+de\s+Verificaci[oó]n\s*:\s*([A-Z0-9._/-]+)/im,
+      ]) ?? null,
+    authorityReceiptNumber:
+      firstMatch(text, [
+        /(?:receipt|justificante|nrc)\s*(?:number|numero|número)?\s*[:=\-]\s*([A-Z0-9._/-]+)/im,
+        /N[uú]mero\s+de\s+justificante\s*:\s*([A-Z0-9._/-]+)/im,
+      ]) ?? null,
+    filedAt:
+      firstMatch(text, [
+        /(?:filed\s+at|fecha\s+presentacion|fecha\s+presentación)\s*[:=\-]\s*([^\n]+)/im,
+        /Presentaci[oó]n\s+realizada\s+el\s*:\s*([^\n]+)/im,
+      ]) ?? null,
+    dueDate: parseDateValue(firstMatch(text, [/(?:due\s+date|fecha\s+limite|fecha\s+límite)\s*[:=\-]\s*([^\n]+)/im])) ?? null,
+    paymentDueDate:
+      parseDateValue(firstMatch(text, [/(?:payment\s+due\s+date|fecha\s+de\s+pago)\s*[:=\-]\s*([^\n]+)/im])) ?? null,
+    result: null,
+    paymentStatus: null,
+    currency: text.includes("EUR") || text.includes("€") || /\bModelo\b/i.test(text) ? "EUR" : null,
+    taxableBase: normalizeAmount(firstMatch(text, [/taxable\s+base\s*[:=\-]\s*([^\n]+)/im])) ?? null,
+    taxDue: normalizeAmount(firstMatch(text, [/tax\s+due\s*[:=\-]\s*([^\n]+)/im])) ?? null,
+    taxDeductible: normalizeAmount(firstMatch(text, [/tax\s+deductible\s*[:=\-]\s*([^\n]+)/im])) ?? null,
+    resultAmount: null,
+    retainedAmount: null,
+    profitOrLoss: null,
+    fields,
+    carryforwardDetails,
+    warnings: [],
+    confidence: "medium",
+    rawText: text.trim() || "tax declaration",
+    pageNotes: text.trim() ? text.split(/\n\s*\n/).map((chunk) => chunk.trim()).filter(Boolean) : null,
+  });
+}
+
 function getMessageContent(payload: z.infer<typeof chatCompletionResponseSchema>): string {
   const content = payload.choices[0]?.message.content;
   if (typeof content === "string") {
@@ -303,6 +510,67 @@ function renderStructuredPayrollText(payroll: StructuredPayroll): string {
   return parts.filter(Boolean).join("\n").trim();
 }
 
+function renderStructuredTaxReportText(taxReport: StructuredTaxReport): string {
+  const fieldLines = taxReport.fields.map((field) =>
+    field.fieldSystem === "casilla"
+      ? `Casilla ${field.fieldCode}: ${field.rawValue}`
+      : `${field.fieldSystem} ${field.fieldCode}: ${field.rawValue}`,
+  );
+  const carryforwardLines = taxReport.carryforwardDetails.map((row) =>
+    [
+      row.originFiscalYear ? `carryforward origin fiscal year: ${row.originFiscalYear}` : undefined,
+      row.pendingAtStartOrGenerated ? `pending at start or generated: ${row.pendingAtStartOrGenerated}` : undefined,
+      row.appliedThisReturn ? `applied this return: ${row.appliedThisReturn}` : undefined,
+      row.pendingForFuture ? `pending for future: ${row.pendingForFuture}` : undefined,
+      row.notes,
+    ].filter(Boolean).join("; "),
+  );
+  const parts = [
+    taxReport.rawText,
+    taxReport.authorityName,
+    taxReport.formCode ? `Modelo ${taxReport.formCode}` : undefined,
+    taxReport.formName,
+    taxReport.countryCode ? `country code: ${taxReport.countryCode}` : undefined,
+    taxReport.fiscalYear ? `Ejercicio: ${taxReport.fiscalYear}` : undefined,
+    taxReport.periodLabel ? `Periodo: ${taxReport.periodLabel}` : undefined,
+    taxReport.periodStart ? `period start: ${taxReport.periodStart}` : undefined,
+    taxReport.periodEnd ? `period end: ${taxReport.periodEnd}` : undefined,
+    taxReport.taxpayerTaxId ? `NIF: ${taxReport.taxpayerTaxId}` : undefined,
+    taxReport.authoritySubmissionId ? `Presentacion id: ${taxReport.authoritySubmissionId}` : undefined,
+    taxReport.authorityReceiptNumber ? `Numero de justificante: ${taxReport.authorityReceiptNumber}` : undefined,
+    taxReport.filedAt ? `filed at: ${taxReport.filedAt}` : undefined,
+    taxReport.resultAmount ? `result amount: ${taxReport.resultAmount}` : undefined,
+    taxReport.taxableBase ? `taxable base: ${taxReport.taxableBase}` : undefined,
+    taxReport.taxDue ? `tax due: ${taxReport.taxDue}` : undefined,
+    taxReport.taxDeductible ? `tax deductible: ${taxReport.taxDeductible}` : undefined,
+    ...fieldLines,
+    ...carryforwardLines,
+    ...(taxReport.pageNotes ?? []),
+  ];
+
+  return parts.filter(Boolean).join("\n").trim();
+}
+
+function parseStructuredStub<T>(schemaName: string, rawText: string): T {
+  if (schemaName === structuredPayrollJsonSchema.name) {
+    return parseStubPayroll(rawText) as T;
+  }
+  if (schemaName === structuredTaxReportJsonSchema.name) {
+    return parseStubTaxReport(rawText) as T;
+  }
+  return parseStubInvoice(rawText) as T;
+}
+
+function renderStructuredResult<T>(schemaName: string, data: T): string {
+  if (schemaName === structuredPayrollJsonSchema.name) {
+    return renderStructuredPayrollText(data as StructuredPayroll);
+  }
+  if (schemaName === structuredTaxReportJsonSchema.name) {
+    return renderStructuredTaxReportText(data as StructuredTaxReport);
+  }
+  return renderStructuredText(data as StructuredInvoice);
+}
+
 async function runStructuredExtraction<T>({
   pages,
   schemaName,
@@ -325,16 +593,11 @@ async function runStructuredExtraction<T>({
       });
     }
 
-    const parsed = validator.parse(
-      schemaName === structuredPayrollJsonSchema.name ? parseStubPayroll(rawText) : parseStubInvoice(rawText),
-    );
+    const parsed = validator.parse(parseStructuredStub(schemaName, rawText));
     return {
       data: parsed,
       engine: "structured-stub-ocr",
-      text:
-        schemaName === structuredPayrollJsonSchema.name
-          ? renderStructuredPayrollText(parsed as StructuredPayroll)
-          : renderStructuredText(parsed as StructuredInvoice),
+      text: renderStructuredResult(schemaName, parsed),
     };
   }
 
@@ -432,10 +695,7 @@ async function runStructuredExtraction<T>({
   return {
     data: validated,
     engine: `structured_ocr:${provider.model_name}`,
-    text:
-      schemaName === structuredPayrollJsonSchema.name
-        ? renderStructuredPayrollText(validated as StructuredPayroll)
-        : renderStructuredText(validated as StructuredInvoice),
+    text: renderStructuredResult(schemaName, validated),
   };
 }
 
@@ -462,6 +722,19 @@ export async function extractStructuredPayrollFromPages(
     validator: structuredPayrollSchema,
     prompt:
       "Parse these payroll slip scans into structured JSON. Extract employee and employer identity, payroll reference, payroll period, payment date, currency, gross and net salary, withheld taxes, employee and employer social contributions, other earnings and deductions, plus raw payroll lines with their original labels. The schema is meant to work across EU payroll slips, so keep ambiguous country-specific labels in rawLines instead of guessing.",
+  });
+}
+
+export async function extractStructuredTaxReportFromPages(
+  pages: StructuredOcrPage[],
+): Promise<StructuredOcrResult<StructuredTaxReport>> {
+  return runStructuredExtraction({
+    pages,
+    schemaName: structuredTaxReportJsonSchema.name,
+    schema: structuredTaxReportJsonSchema.schema,
+    validator: structuredTaxReportSchema,
+    prompt:
+      "Parse these filed tax declaration scans into structured JSON. Extract the tax authority, country, official form code/name/version, tax kind, fiscal year and period, taxpayer tax ID, authority submission and receipt references, filing and due dates, result/payment status hints, currency, main declared amounts, all visible authority field boxes/codes with their raw values, and carry-forward detail rows. Preserve official field codes exactly, including leading zeros. For each field, put the official box/casilla code only in fieldCode; rawValue must contain only the visible cell value, without repeating the field code. Do not calculate tax; only extract what is visible.",
   });
 }
 

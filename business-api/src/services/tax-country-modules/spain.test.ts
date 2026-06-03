@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { realAeatModelo303Text } from "../../../test/helpers/spain-fixtures.js";
 import { selectTaxCountryModule } from "./index.js";
 import { spainTaxCountryModule } from "./spain.js";
+import type { StructuredTaxReport } from "../../schemas/structured-tax-report.js";
 
 const payable303Text = `
 AEAT Modelo 303
@@ -71,6 +72,47 @@ function parseAndNormalize(text: string) {
   return {
     parsed,
     normalized: spainTaxCountryModule.normalize(parsed),
+  };
+}
+
+function structuredModelo200(
+  fields: StructuredTaxReport["fields"],
+): StructuredTaxReport {
+  return {
+    schemaVersion: "tax_report.v1",
+    documentType: "tax_declaration",
+    countryCode: "ES",
+    authorityName: "AEAT",
+    formCode: "200",
+    formName: "Modelo 200",
+    formVersion: null,
+    taxKind: "corporate_income",
+    fiscalYear: 2024,
+    periodGranularity: "year",
+    periodLabel: "2024",
+    periodStart: "2024-01-01",
+    periodEnd: "2024-12-31",
+    taxpayerTaxId: "B02672152",
+    authoritySubmissionId: "202420067210082L",
+    authorityReceiptNumber: "2005683250690",
+    filedAt: "21-07-2025 a las 10:32:02",
+    dueDate: null,
+    paymentDueDate: null,
+    result: "zero",
+    paymentStatus: "not_required",
+    currency: "EUR",
+    taxableBase: null,
+    taxDue: null,
+    taxDeductible: null,
+    resultAmount: null,
+    retainedAmount: null,
+    profitOrLoss: null,
+    fields,
+    carryforwardDetails: [],
+    warnings: [],
+    confidence: "high",
+    rawText: "AEAT Modelo 200\nResultado cero",
+    pageNotes: null,
   };
 }
 
@@ -631,6 +673,68 @@ Casilla 19: -75,00
         notes: expect.stringContaining("2023"),
       }),
     ]);
+  });
+
+  it("normalizes structured Modelo 200 casilla values with duplicated field-code prefixes", () => {
+    const parsed = spainTaxCountryModule.parse({
+      ocrText: "AEAT Modelo 200\nResultado cero",
+      structuredData: structuredModelo200([
+        {
+          fieldCode: "00550",
+          fieldSystem: "casilla",
+          label: "Base imponible antes de compensacion",
+          valueType: "money",
+          rawValue: "00550:218.51",
+          normalizedValue: "218.51",
+          currency: "EUR",
+          rate: null,
+          direction: "informational",
+          confidence: "high",
+        },
+        {
+          fieldCode: "00547",
+          fieldSystem: "casilla",
+          label: "Compensacion de bases imponibles negativas",
+          valueType: "money",
+          rawValue: "[00547] 218,51",
+          normalizedValue: null,
+          currency: "EUR",
+          rate: null,
+          direction: "credit",
+          confidence: "high",
+        },
+      ]),
+      metadata: {
+        kind: "tax_declaration",
+        companyCardId: "comp_test",
+        countryCode: "ES",
+      },
+      companyTaxId: null,
+    });
+    const normalized = spainTaxCountryModule.normalize(parsed);
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        fiscalYear: 2024,
+        periodLabel: "2024",
+        taxableBase: "0.00",
+        profitOrLoss: "0.00",
+      }),
+    );
+    expect(normalized.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldCode: "00550",
+          rawValue: "218.51",
+          normalizedValue: "218.51",
+        }),
+        expect.objectContaining({
+          fieldCode: "00547",
+          rawValue: "218,51",
+          normalizedValue: "218.51",
+        }),
+      ]),
+    );
   });
 
   it("extracts Modelo 200 layout result casilla 01586", () => {

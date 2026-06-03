@@ -339,6 +339,8 @@ function normalizeFactInput(data: TaxReportFactCreateInput) {
 function normalizeCarryforwardInput(data: TaxCarryforwardCreateInput) {
   return {
     kind: data.kind,
+    originFiscalYear: data.originFiscalYear,
+    originPeriodLabel: normalizeNullable(data.originPeriodLabel),
     currency: data.currency,
     originalAmount: normalizeMoneyString(data.originalAmount),
     usedAmount: normalizeMoneyString(data.usedAmount),
@@ -1072,8 +1074,8 @@ export function createTaxReport(data: TaxReportCreateRequest) {
           taxKind,
           kind: normalized.kind,
           originTaxReportId: id,
-          originFiscalYear: data.fiscalYear,
-          originPeriodLabel: data.periodLabel,
+          originFiscalYear: normalized.originFiscalYear ?? data.fiscalYear,
+          originPeriodLabel: normalized.originPeriodLabel ?? data.periodLabel,
           currency: normalized.currency,
           originalAmount: normalized.originalAmount,
           usedAmount: normalized.usedAmount,

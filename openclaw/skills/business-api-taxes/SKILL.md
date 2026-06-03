@@ -159,8 +159,8 @@ The ingest service:
 1. validates multipart metadata
 2. stores the original file as a `tax_declaration` document
 3. marks document OCR as `processing`
-4. runs the existing document OCR engine
-5. selects a country module from explicit metadata/overrides first, then OCR signals
+4. runs structured OCR through the `llms.structured_ocr` provider
+5. selects a country module from explicit metadata/overrides first, then structured OCR signals
 6. parses country, tax kind, form, period, taxpayer ID, authority references, amounts, facts, and carryforward candidates
 7. normalizes into the shared tax report contract
 8. applies overrides
@@ -398,6 +398,8 @@ Country modules own:
 - carryforward interpretation
 - country-specific warnings
 - parser fixtures and tests
+
+Module parse/detect inputs include rendered OCR text plus optional structured OCR payload. Prefer structured OCR fields when available, and keep text parsing as a fallback for resilience and parser tests.
 
 Shared services own:
 
