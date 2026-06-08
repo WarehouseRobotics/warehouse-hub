@@ -5,6 +5,12 @@ project_dir: business-api
 frozen: false
 see_also:
   - docs/architecture/Business API Architecture.md
+  - docs/apps/business-api/cli.md
+  - docs/apps/business-api/services.md
+  - docs/apps/business-api/bookings.md
+  - docs/apps/business-api/banking.md
+  - docs/tax-reports.md
+  - docs/mcp/Business API MCP.md
 ---
 
 # Warehouse Hub Business API Stack
@@ -15,42 +21,45 @@ The Business API stacks allows our AI agents to query and manage various busines
 
 ## Core Objects
 
+Items below tagged _(planned)_ are part of the intended object model but are **not** implemented in `business-api` yet. Everything else has a backing table and service. For the authoritative list of implemented tables and services, see [services.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/services.md).
+
 * Base Infrastructure
-    * entities
-        * person (users, employees, contacts, etc)
-        * company (admin company or companies, clients, suppliers, etc)
-        * entity tags: owned, contact, supplier, customer, etc.
-    * projects (belong entities)
+    * entities — implemented as a `contacts` registry plus a singleton owned `company_card`; there is no unified `entity` table
+        * person (users, employees, contacts, etc) — `contacts` with `type: person`
+        * company (clients, suppliers, etc) — `contacts` with `type: company`; the owned company is the separate `company_card`
+        * entity tags — implemented as contact `roles`: `owned`, `contact`, `customer`, `supplier`, `employee`, `both`
+    * projects (belong to entities)
     * task and subtask tickets (for basic task management)
     * document
 * Accounting
-    * documents
-        * contract / agreement
+    * documents (typed by `kind`, e.g. `expense_invoice`, `sales_invoice`, `payroll`, `bank_csv`, `tax_declaration`)
+        * contract / agreement _(planned)_
         * invoice
         * expense/bill
         * payroll slip
-        * payment
+        * payment _(planned as a first-class object; payment evidence today lives in bank transactions and tax-report payment links)_
     * sub-document objects
-        * taxes
-        * fees
-        * discounts
-    * tax period
-    * audit event
+        * taxes — stored as `taxLines` on expenses/invoices, not a standalone table
+        * fees _(planned)_
+        * discounts _(planned)_
+    * tax period — implemented more broadly as the tax-reports lifecycle (reports, facts, carryforwards, payment links); see [tax-reports.md](/Users/denis/src/warehouse-hub/docs/tax-reports.md)
+    * audit event — implemented as `audit_log`
+    * bank accounts, transactions, balance snapshots, and transaction matches — implemented; see [banking.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/banking.md)
 * CRM
-    * products and services (basic inventory nomenclature/pricelist)
+    * products and services (basic inventory nomenclature/pricelist) _(planned)_
     * contact (from base infra)
-    * prospective lead (company + persons + lead info)
-    * customer (like a project group for tracking sales per customer)
-        * notes/comments
-        * booking / appointment
+    * prospective lead (company + persons + lead info) _(planned)_
+    * customer (like a project group for tracking sales per customer) _(planned as a dedicated object; today modeled via contacts + deals + projects)_
+        * notes/comments — implemented as `comments` attachable to objects
+        * booking / appointment — implemented; see [bookings.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/bookings.md)
         * invoice
-        * sale (like a project per one particular sale)
-        * subscription (for recurring sales)
+        * sale (like a project per one particular sale) _(planned; deals cover the commercial record today)_
+        * subscription (for recurring sales) _(planned)_
         * task/subtasks (from base infra)
-        * contracts/deals
-    * interactions with leads and customers
-        * email/call
-        * meeting (as meeting notes)
+        * contracts/deals — `deals` implemented; standalone contract objects _(planned)_
+    * interactions with leads and customers _(planned)_
+        * email/call _(planned)_
+        * meeting (as meeting notes) _(planned)_
 
 
 Some objects are used across domains (invoices, legal entities etc.), some objects can be related inside and between domains, e.g. invoices are related to companies and persons and sales, contacts and documents are related to prospective leads and so on.
@@ -61,8 +70,8 @@ The owning tenant is either a user + company or a user (sole trader) entity.
 
 The accounting stack is this:
 
-* API (Express.js) and MCP server
-* CLI tool (API and MCP wrapper) to be used by internal agents
+* API (Express.js); an MCP server is _(planned)_ — see [Business API MCP.md](/Users/denis/src/warehouse-hub/docs/mcp/Business API MCP.md)
+* CLI tool (`wrobo-biz`, an HTTP API wrapper) to be used by internal agents — see [cli.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/cli.md)
 * UI client for the API (for basic accounting tasks)
 
 For the first implementation pass, the API should optimize for deterministic CRUD-style business operations that AI agents can call safely and repeatedly. The API and CLI examples below assume a REST base path of `/api/v1` and JSON responses with stable IDs.
@@ -115,12 +124,14 @@ The CRM MVP should cover:
 * basic deals/sales records
 * invoice generation from company card + contact + deal data
 
-Example contact roles for MVP:
+Contact roles (the `roles` array enum):
 
 * `customer`
 * `supplier`
 * `employee`
 * `both`
+* `owned`
+* `contact`
 
 ## Bookings Subset
 
@@ -508,11 +519,13 @@ Example response:
     "tax": "315.00",
     "gross": "1815.00"
   },
-  "pdfStatus": "pending"
+  "pdfDocumentId": null
 }
 ```
 
-Finalize or mark as sent:
+The PDF is rendered asynchronously; `pdfDocumentId` is populated once the document exists.
+
+_(planned)_ A dedicated send action with delivery options:
 
 `POST /api/v1/sales-invoices/sinv_000041/send`
 
@@ -523,25 +536,27 @@ Finalize or mark as sent:
 }
 ```
 
-Example response:
+This endpoint is **not implemented yet**. Today, lifecycle transitions (`draft` → `sent`/`finalized`/`overdue`/`paid`/`cancelled`) are made by patching the invoice:
+
+`PATCH /api/v1/sales-invoices/sinv_000041`
 
 ```json
 {
-  "salesInvoiceId": "sinv_000041",
-  "status": "sent",
-  "sentAt": "2026-04-02T08:10:00Z"
+  "status": "sent"
 }
 ```
 
 Retrieve the invoice later:
 
 * `GET /api/v1/sales-invoices/sinv_000041`
-* `GET /api/v1/sales-invoices/sinv_000041/pdf`
+* The rendered invoice PDF is referenced by `pdfDocumentId` and downloaded via the documents endpoint — `GET /api/v1/documents/{pdfDocumentId}/download`. There is no dedicated `/sales-invoices/:id/pdf` route; the `wrobo-biz sales-invoices pdf <id> <out>` CLI command performs the fetch-then-download in two calls (see [cli.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/cli.md)).
 
 
-### Accounting MCP
+### Accounting MCP _(planned)_
 
-MCP can expose the same operations with safer structured inputs for agents. Suggested tool examples:
+> **Status:** The MCP server is not implemented in `business-api` yet. The tools below are a design sketch of how the same operations would be exposed to agents with safer structured inputs. Until it lands, agents drive the API through the `wrobo-biz` CLI ([cli.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/cli.md)) or direct HTTP. See [Business API MCP.md](/Users/denis/src/warehouse-hub/docs/mcp/Business API MCP.md) for the MCP plan.
+
+Suggested tool examples:
 
 * `business.get_company_card`
 * `business.upsert_company_card`
@@ -559,101 +574,73 @@ MCP can expose the same operations with safer structured inputs for agents. Sugg
 
 ### Accounting CLI
 
-Suggested CLI style: one top-level binary such as `wrobo biz`, with noun-first subcommands and JSON output available by default for agents.
+The CLI is a single binary, `wrobo-biz`, with noun-first subcommands (`wrobo-biz <scope> <verb>`). It is an HTTP wrapper around the API and is the agent-facing entry point. Create/update commands are **JSON-payload-first** — the object is passed as a single JSON argument rather than as individual flags — while `list`/filter subcommands take `--` flags. Inside the repo container the same surface is reachable as `./container.sh exec npm run cli -- <scope> <verb>`.
+
+The examples below are an orientation only. The authoritative, full CLI reference — every scope, all filter flags, the `wrobo-biz` HTTP wrapper, auth, and remote configuration — lives in [cli.md](/Users/denis/src/warehouse-hub/docs/apps/business-api/cli.md).
 
 #### Company card
 
 ```bash
-wrobo biz company-card set \
-  --legal-name "Northwind Robotics SL" \
-  --display-name "Northwind Robotics" \
-  --tax-id "B12345678" \
-  --email "billing@northwind.example" \
-  --phone "+34 910 000 111" \
-  --country ES \
-  --city Madrid \
-  --postal-code 28014 \
-  --street1 "Calle de Alcala 42" \
-  --currency EUR \
-  --payment-terms-days 30 \
-  --json
-```
+wrobo-biz company-card set '{
+  "legalName": "Northwind Robotics SL",
+  "displayName": "Northwind Robotics",
+  "taxId": "B12345678",
+  "address": { "street1": "Calle de Alcala 42", "city": "Madrid", "postalCode": "28014", "countryCode": "ES" },
+  "invoiceDefaults": { "currency": "EUR", "paymentTermsDays": 30, "vatMode": "standard" }
+}'
 
-```bash
-wrobo biz company-card get --json
+wrobo-biz company-card get
 ```
 
 #### Contacts
 
 ```bash
-wrobo biz contacts create company \
-  --role customer \
-  --display-name "Acme Retail GmbH" \
-  --legal-name "Acme Retail GmbH" \
-  --tax-id "DE123456789" \
-  --email "ap@acme-retail.example" \
-  --city Berlin \
-  --country DE \
-  --json
-```
+wrobo-biz contacts create '{
+  "type": "company",
+  "status": "active",
+  "roles": ["customer"],
+  "displayName": "Acme Retail GmbH",
+  "legalName": "Acme Retail GmbH",
+  "taxId": "DE123456789",
+  "email": "ap@acme-retail.example"
+}'
 
-```bash
-wrobo biz contacts resolve company \
-  --role supplier \
-  --display-name "Papeleria Centro SL" \
-  --tax-id "B87654321" \
-  --email "facturas@papeleriacentro.example" \
-  --auto-create \
-  --json
-```
+wrobo-biz contacts resolve '{
+  "autoCreate": true,
+  "matchBy": ["taxId", "email", "canonicalName"],
+  "contact": { "type": "company", "roles": ["supplier"], "displayName": "Papeleria Centro SL", "taxId": "B87654321" }
+}'
 
-```bash
-wrobo biz contacts list --role supplier --query paper --json
+wrobo-biz contacts list --role supplier --query paper
 ```
 
 #### Expenses and documents
 
 ```bash
-wrobo biz documents upload \
-  --kind expense_invoice \
-  --source email_forward \
-  --file ./samples/invoices/invoice-2026-0042.pdf \
-  --json
-```
+wrobo-biz documents upload ./samples/invoices/invoice-2026-0042.pdf '{ "kind": "expense_invoice", "source": "email_forward" }'
 
-```bash
-wrobo biz expenses create \
-  --supplier-contact-id ct_000301 \
-  --document-id doc_000881 \
-  --invoice-number FC-2026-0042 \
-  --invoice-date 2026-03-25 \
-  --due-date 2026-04-24 \
-  --currency EUR \
-  --net 120.00 \
-  --tax 25.20 \
-  --gross 145.20 \
-  --category office_supplies \
-  --note "Printer paper and toner." \
-  --json
-```
+wrobo-biz expenses create '{
+  "supplierContactId": "ct_000301",
+  "documentId": "doc_000881",
+  "invoiceNumber": "FC-2026-0042",
+  "invoiceDate": "2026-03-25",
+  "dueDate": "2026-04-24",
+  "currency": "EUR",
+  "totals": { "net": "120.00", "tax": "25.20", "gross": "145.20" },
+  "category": "office_supplies",
+  "notes": "Printer paper and toner."
+}'
 
-```bash
-wrobo biz expenses get exp_000118 --json
-wrobo biz documents download doc_000881 --output ./tmp/expense-invoice.pdf
+wrobo-biz expenses get exp_000118
+wrobo-biz documents download doc_000881 ./tmp/expense-invoice.pdf
 ```
 
 #### Payrolls
 
 ```bash
-wrobo biz documents ingest \
-  --kind payroll \
-  --source accountant_upload \
-  --file ./data/tmp/test_nomina.pdf \
-  --json
-```
+wrobo-biz documents ingest ./data/tmp/test_nomina.pdf '{ "kind": "payroll", "source": "accountant_upload" }'
 
-```bash
-wrobo biz payrolls get pay_000041 --json
+wrobo-biz payrolls get pay_000041
 ```
 
 Payroll notes:
@@ -665,42 +652,39 @@ Payroll notes:
 #### Deals and sales invoices
 
 ```bash
-wrobo biz deals create \
-  --customer-contact-id ct_000245 \
-  --title "Warehouse audit and automation proposal" \
-  --stage won \
-  --currency EUR \
-  --expected-close-date 2026-04-02 \
-  --line-item "Warehouse operations audit|1|900.00|21.00" \
-  --line-item "Automation recommendations workshop|1|600.00|21.00" \
-  --json
+wrobo-biz deals create '{
+  "customerContactId": "ct_000245",
+  "title": "Warehouse audit and automation proposal",
+  "stage": "won",
+  "currency": "EUR",
+  "expectedCloseDate": "2026-04-02",
+  "lineItems": [
+    { "description": "Warehouse operations audit", "quantity": "1", "unitPrice": "900.00", "taxRate": "21.00" },
+    { "description": "Automation recommendations workshop", "quantity": "1", "unitPrice": "600.00", "taxRate": "21.00" }
+  ]
+}'
+
+wrobo-biz sales-invoices generate '{
+  "customerContactId": "ct_000245",
+  "dealId": "deal_000072",
+  "issueDate": "2026-04-02",
+  "serviceDate": "2026-03-31",
+  "paymentTermsDays": 30
+}'
+
+# Lifecycle transitions are PATCH-based; there is no `sales-invoices send` command (the send route is planned).
+wrobo-biz sales-invoices update sinv_000041 '{ "status": "sent" }'
+
+wrobo-biz sales-invoices get sinv_000041
+# Wrapper-only: fetches the invoice, then downloads the referenced pdfDocumentId document.
+wrobo-biz sales-invoices pdf sinv_000041 ./tmp/sales-invoice-2026-0041.pdf
 ```
 
-```bash
-wrobo biz sales-invoices generate \
-  --customer-contact-id ct_000245 \
-  --deal-id deal_000072 \
-  --issue-date 2026-04-02 \
-  --service-date 2026-03-31 \
-  --payment-terms-days 30 \
-  --json
-```
+#### CLI behavior
 
-```bash
-wrobo biz sales-invoices send sinv_000041 \
-  --channel email \
-  --to ap@acme-retail.example \
-  --json
-```
+* output is JSON on stdout; errors render as a Markdown block on stderr (or `--json` for a `{"error": {...}}` envelope)
+* commands never require interactive prompts — required fields come from the JSON payload or flags
+* stable exit codes: `0` success, `1` HTTP/network failure, `2` argument-shape / configuration / host-only failure
+* host-only commands (`serve`, `db *`) are rejected by the `wrobo-biz` HTTP wrapper
 
-```bash
-wrobo biz sales-invoices get sinv_000041 --json
-wrobo biz sales-invoices pdf sinv_000041 --output ./tmp/sales-invoice-2026-0041.pdf
-```
-
-#### Suggested CLI behavior
-
-* default to human-readable output for terminal users and `--json` for agent calls
-* never require interactive prompts when all required flags are present
-* return stable exit codes for not found, validation error and conflict
-* support `--idempotency-key` on mutating commands for agent retries
+> Not yet implemented: a `--idempotency-key` for safe agent retries on mutating commands. Treat retries as non-idempotent for now.
