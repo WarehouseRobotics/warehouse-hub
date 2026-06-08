@@ -98,5 +98,6 @@ Use the task-management skill for tracking project tasks. When performing tasks,
 - taskboards project: `warehouse-hub`
 - business-api board: `business-api`
 - dashboard frontend board: `dashboard`
+- landing page board: `landing` id=1v5sFtKedicLuzNy13O7K
 
 Keep up with the task boards: **check and update taskboard tasks often!**
