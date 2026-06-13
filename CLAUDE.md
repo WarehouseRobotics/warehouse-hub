@@ -27,7 +27,7 @@ The `docs` folder contains Markdown documentation for each platform component â€
 
 Shared Zod schemas for business object contracts (like invoices, expenses, contacts, tasks, etc.) are stored in the repo-level package at `packages/business-schemas`.
 
-Use this package when a business type schema must be shared between subprojects such as `business-api` and `dashboard`. Keep ORM-specific or backend-specific types inside the owning subproject. Note that due to functional requirements the dashboard app also uses it's own types in <dashboard/src/features/types.ts> that a close to business-schema types.
+Use this package when a business type schema must be shared between subprojects such as `business-api` and `dashboard`. Keep ORM-specific or backend-specific types inside the owning subproject. Note that due to functional requirements the dashboard app also uses it's own types in <dashboard/src/features/dashboard/types.ts> that a close to business-schema types.
 
 ## Coding Style Rules
 

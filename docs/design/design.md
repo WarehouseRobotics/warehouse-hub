@@ -199,7 +199,7 @@ Theme preference stored in a cookie via `src/lib/theme.ts`.
 
 ## Navigation Structure
 
-Sidebar groups and items are defined in `src/features/dashboard/config.ts → navGroups`. Only items in `ACTIVE_SECTIONS` (`"expenses"`, `"sales-invoices"`) are wired to navigation — all others render as `.stub`. Add new sections to `ACTIVE_SECTIONS` and wire a handler in `App.tsx` when implementing them.
+Sidebar groups and items are defined in `src/features/dashboard/config.ts → navGroups`. Only items in `ACTIVE_SECTIONS` are wired to navigation — currently `expenses`, `sales-invoices`, `payrolls`, `banking`, `tax-reports`, `documents`, `contacts`, `company`, `tasks`, `bookings`, `data-caches`, `team`, and `api-tokens`. The remaining stub items (`overview`, `pipeline`, `catalog`) render as `.stub`. Add new sections to `ACTIVE_SECTIONS` and wire a handler in `App.tsx` when implementing them.
 
 | Group | Items |
 |---|---|
