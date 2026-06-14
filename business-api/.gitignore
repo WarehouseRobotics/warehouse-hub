@@ -10,3 +10,5 @@ data/uploads/*
 uploads/*
 !uploads/.gitkeep
 bin/__pycache__/
+config/llms.local.yaml
+config/llms.yaml
