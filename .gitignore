@@ -9,3 +9,4 @@ packages/business-schemas/dist/
 business-api/bin/wrobo_biz_api/__pycache__/*
 business-api/bin/wrobo_biz_api/scopes/*
 .codex/
+openclaw/.env
